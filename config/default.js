@@ -67,6 +67,10 @@ module.exports = {
   },
 
   irc: {
+    log: {
+      channelsToFile: true,
+      path: './logs/irc'
+    },
     ctcpVersionPrefix: 'Discord Relay Chat',
     ctcpVersionUrl: 'https://discordrc.com',
     floodProtectWaitMs: 500,
