@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
 const config = require('config')
 const irc = require('irc-framework')
 const inq = require('inquirer')
@@ -56,6 +58,11 @@ async function main () {
   console.log(`${PREFIX} IRC bridge started.`)
   const pubClient = new Redis(config.redis.url)
   const specServers = {}
+  const ircLogPath = path.join(__dirname, config.irc.log.path)
+
+  if (!fs.existsSync(ircLogPath)) {
+    fs.mkdirSync(ircLogPath)
+  }
 
   redisClient.on('message', ipcMessageHandler.bind(null, {
     connectedIRC,
@@ -141,7 +148,29 @@ async function main () {
 
     const noticePubClient = new Redis(config.redis.url)
     connectedIRC.bots[host].on('message', (data) => {
+      data.__drcIrcRxTs = Number(new Date())
       data.__drcNetwork = host
+
+      if (config.irc.log.channelsToFile) {
+        const chanFileDir = path.join(ircLogPath, host)
+        const chanFilePath = path.join(chanFileDir, data.target)
+
+        fs.stat(chanFileDir, async (err, _stats) => {
+          if (err && err.code === 'ENOENT') {
+            try {
+              await fs.promises.mkdir(chanFileDir)
+            } catch (e) {
+              if (e.code !== 'EEXIST') {
+                throw e
+              }
+            }
+          }
+
+          const fh = await fs.promises.open(chanFilePath, 'a')
+          await fh.write(JSON.stringify(data) + '\n')
+          fh.close()
+        })
+      }
 
       if (data.target === spec.nick || data.type === 'notice') {
         noticePubClient.publish(PREFIX, JSON.stringify({
