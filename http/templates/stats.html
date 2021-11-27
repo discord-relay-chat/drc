@@ -1,0 +1,94 @@
+<html>
+  <title>Stats</title>
+  <head>
+    <style type="text/css">
+      body {
+        color: rgb(29, 251, 0);
+        background-color: #111;
+      }
+      table {
+        width: 320px;
+        font-family: monospace;
+      }
+      td {
+        padding: 1em;
+      }
+      .msg {
+        color: white;
+      }
+      .nick {
+        color: cyan;
+      }
+      .theadrow {
+        font-family: monospace;
+        background-color: rgb(19, 19, 73);
+      }
+      th {
+        padding: 0.4em;
+      }
+    </style>
+  </head>
+  <body>
+    <pre>{{{ lastCalcs.banner }}}</pre>
+
+    <h3>Uptimes</h3>
+
+    <table>
+      <tr class="theadrow">
+        <th>Service</th>
+        <th>Uptime</th>
+      </tr>
+      <tr>
+        <td>Discord bot</td>
+        <td>{{ lastCalcs.uptimeFormatted }}</td>
+      </tr>
+      <tr>
+        <td>IRC bridge</td>
+        <td>{{ irc.uptime }}</td>
+      </tr>
+      <tr>
+        <td>System</td>
+        <td>{{ lastCalcs.systemUptime }}</td>
+      </tr>
+    </table>
+    
+    <h3>Metrics</h3>
+
+    <table>
+      <tr>
+        <td>Memory available</td>
+        <td>{{ lastCalcs.memoryAvailablePercent }}%</td>
+      </tr>
+      <tr>
+        <td colspan="2">Load averages:</td>
+      </tr>
+      <tr>
+        <td colspan="2">
+          <table>
+            <tr class="theadrow">
+              <th>1m</th>
+              <th>5m</th>
+              <th>15m</th>
+            </tr>
+            <tr>
+              {{ #sinceLast.loadavg }}
+              <td>{{ . }}</td>
+              {{ /sinceLast.loadavg }}
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h3>IRC</h3>
+    
+    <pre>{{{ lastCalcs.channelsCountsStr }}}</pre>
+    
+    <br/><br/><br/>
+    This document was generated at <b>{{ captureTimestamp }}</b>
+    by <code>{{ NAME }}-v{{ VERSION }}</code><br/>&amp;
+    will self-destruct at <b>{{ documentExpiresAt }}</b>
+    <br/><br/>
+    (all times in {{ timezone }}).
+  </body>
+</html>

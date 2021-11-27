@@ -1,0 +1,6 @@
+local.json
+node_modules
+logs
+coverage
+**/*.swp
+.banners.cache
