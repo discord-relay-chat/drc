@@ -1,5 +1,6 @@
 
-const { PREFIX, matchNetwork } = require('../../util')
+const { PREFIX, matchNetwork, resolveNameForIRC } = require('../../util')
+const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js')
 
 // here we actually _want_ the unparsed `a` instead of argObj! so both are needed
 async function f (context, ...a) {
@@ -8,13 +9,25 @@ async function f (context, ...a) {
   }
 
   const { network } = matchNetwork(a[0])
+  const msgContent = a.slice(2).join(' ').replace(CHANNELS_PATTERN, (matchStr, channelId) => {
+    if (context.channelsById[channelId]) {
+      const chanSpec = context.channelsById[channelId]
+      const parentNetwork = context.channelsById[chanSpec.parent]
+      console.warn(`GOT CHANNEL ${chanSpec.name} in ${parentNetwork.name} for ${channelId}`)
+      return '#' + resolveNameForIRC(parentNetwork.name, chanSpec.name)
+    }
+
+    return matchStr
+  })
+
+  console.log(`msgTarget: ${a[1]} / msgContent: "${msgContent}"`)
 
   await context.redis.publish(PREFIX, JSON.stringify({
     type: 'discord:requestSay:irc',
     data: {
       network,
       target: a[1],
-      message: a.slice(2).join(' ')
+      message: msgContent
     }
   }))
 }

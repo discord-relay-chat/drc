@@ -19,7 +19,7 @@ module.exports = async (context, chan, msg) => {
   } = context
 
   const pubClient = new Redis(config.redis.url)
-  console.log('Redis msg!', chan, msg)
+  console.debug('Redis msg!', chan, msg)
 
   try {
     const parsed = JSON.parse(msg)

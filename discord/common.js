@@ -115,7 +115,7 @@ module.exports = {
     }
 
     const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1
-    return Object.entries(obj).map(([k, v]) => `\`${k.padStart(maxPropLen, ' ')}\`:\t**${vFmt(v)}**`).join('\n')
+    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`:\t**${vFmt(obj[k])}**`).join('\n')
   },
 
   generateListManagementUCExport (commandName, additionalCommands) {

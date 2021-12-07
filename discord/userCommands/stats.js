@@ -5,9 +5,16 @@ const os = require('os')
 const config = require('config')
 const { execSync } = require('child_process')
 const { MessageEmbed } = require('discord.js')
-const { PREFIX, channelsCountToStr, channelsCountProcessed, fmtDuration, parseRedisInfoSection } = require('../../util')
 const { servePage } = require('../common')
 const { banner } = require('../figletBanners')
+const {
+  PREFIX,
+  channelsCountToStr,
+  channelsCountProcessed,
+  fmtDuration,
+  parseRedisInfoSection,
+  sizeAtPath
+} = require('../../util')
 
 async function f (context) {
   const promise = new Promise((resolve, reject) => {
@@ -67,6 +74,8 @@ async function f (context) {
 
   const redisHours = Math.floor(stats.redis.server.uptime_in_seconds / 60 / 60)
 
+  const logsSizeInBytes = await sizeAtPath(config.app.log.path)
+
   stats.lastCalcs = {
     quitsCt,
     totalChatMsgs,
@@ -93,7 +102,9 @@ async function f (context) {
     redisHours,
     redisUptime: (stats.redis.server.uptime_in_days > 0 ? `${stats.redis.server.uptime_in_days} days ` : '') +
       (redisHours > 0 ? `${redisHours - (stats.redis.server.uptime_in_days * 24)} hour${redisHours > 1 ? 's' : ''} ` : '') +
-      `${Math.floor((stats.redis.server.uptime_in_seconds / 60) - Math.floor(stats.redis.server.uptime_in_seconds / 60 / 60) * 60)} minutes`
+      `${Math.floor((stats.redis.server.uptime_in_seconds / 60) - Math.floor(stats.redis.server.uptime_in_seconds / 60 / 60) * 60)} minutes`,
+    logsSizeInBytes,
+    logsSizeInMB: logsSizeInBytes / 1024 / 1024
   }
 
   console.debug('channelsCountProcessed', stats.lastCalcs.channelsCountProcessed)
@@ -121,7 +132,8 @@ async function f (context) {
         { name: 'IRC uptime', value: stats.irc.uptime, inline: true },
         { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true },
         { name: 'Memory available', value: stats.lastCalcs.memoryAvailablePercent + '%', inline: true },
-        { name: 'Load averages', value: stats.sinceLast.loadavg.join(', '), inline: true }
+        { name: 'Load averages', value: stats.sinceLast.loadavg.join(', '), inline: true },
+        { name: 'Log size', value: `${Number(stats.lastCalcs.logsSizeInMB).toLocaleString(undefined, { maximumFractionDigits: 2 })}MB`, inline: true }
       )
       .addFields(
         { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true },

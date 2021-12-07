@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const dfns = require('date-fns')
 const config = require('config')
 const shodan = require('shodan-client')
@@ -220,6 +221,24 @@ function parseRedisInfoSection (section) {
   }
 }
 
+async function sizeAtPath (searchPath) {
+  let a = 0
+  const curPathEles = await fs.promises.readdir(path.resolve(searchPath))
+
+  for (const curPathEle of curPathEles) {
+    const curPath = path.join(searchPath, curPathEle)
+    const curStat = await fs.promises.stat(curPath)
+
+    if (curStat.isDirectory()) {
+      a += await sizeAtPath(curPath)
+    } else if (curStat.isFile()) {
+      a += curStat.size
+    }
+  }
+
+  return a
+}
+
 module.exports = {
   ENV,
   NAME,
@@ -237,6 +256,7 @@ module.exports = {
   shodanApiInfo,
   matchNetwork,
   parseRedisInfoSection,
+  sizeAtPath,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

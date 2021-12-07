@@ -170,9 +170,9 @@ client.once('ready', async () => {
     }
   }
 
-  console.debug('READY STRUCTS')
-  console.debug('channelsById', channelsById)
-  console.debug('categoriesByName', categoriesByName)
+  console.log('READY STRUCTS')
+  console.log('channelsById', channelsById)
+  console.log('categoriesByName', categoriesByName)
   // console.debug('categories', channelsById)
 
   if (config.irc.quitMsgChanId) {
@@ -243,7 +243,9 @@ client.once('ready', async () => {
             registerChannelMessageHandler,
             discordAuthor: data.author,
             ignoreSquelched,
-            captureSpecs
+            captureSpecs,
+            channelsById,
+            categoriesByName
           }, ...args)
 
           console.log(`Exec'ed user command ${command} with args [${args.join(', ')}] --> `, result)
