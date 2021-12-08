@@ -1,7 +1,68 @@
+'use strict'
+
 const uuid = require('uuid')
 const config = require('config')
 const Redis = require('ioredis')
 const { PREFIX, matchNetwork } = require('../util')
+const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js')
+
+function generateListManagementUCExport (commandName, additionalCommands) {
+  const f = async function (context, ...a) {
+    const [netStub, cmd] = a
+
+    if (!netStub) {
+      return `Not enough arguments! Usage: \`${commandName} [networkStub] [command] (args...)\``
+    }
+
+    const { network } = matchNetwork(netStub)
+    const key = [PREFIX, commandName, network].join(':')
+
+    const argStr = () => {
+      if (a.length < 3) {
+        throw new Error(`Not enough args for ${cmd}!`)
+      }
+
+      return a.slice(2).join(' ')
+    }
+
+    switch (cmd) {
+      case 'add':
+        await context.redis.sadd(key, argStr())
+        break
+      case 'clear':
+        await context.redis.del(key)
+        break
+      case 'remove':
+        await context.redis.srem(key, argStr())
+        break
+    }
+
+    if (additionalCommands && additionalCommands[cmd]) {
+      return additionalCommands[cmd]({ key, network, ...context }, ...a)
+    }
+
+    const retList = (await context.redis.smembers(key)).sort()
+    const fmtName = commandName[0].toUpperCase() + commandName.slice(1)
+    retList.__drcFormatter = () => retList.length
+      ? `${fmtName} ` +
+      `list for \`${network}\` (${retList.length}): **${retList.join('**, **')}**`
+      : `${fmtName} list for \`${network}\` has no items.`
+
+    return retList
+  }
+
+  f.__drcHelp = () => {
+    return `!${commandName} network subcommand ...\n\n` +
+    'Where \'subcommand\' is one of: add, remove, clear.\n' +
+    '\'add\' & \'remove\' use the remaining arguments as the value; \'clear\' takes no arguments.\n\n' +
+    (additionalCommands
+      ? 'Additional subcommand:\n' +
+      Object.keys(additionalCommands).filter(x => x[0] !== '_').join(', ')
+      : '')
+  }
+
+  return f
+}
 
 module.exports = {
   async servePage (context, data, renderType, callback) {
@@ -38,6 +99,7 @@ module.exports = {
 
     return name
   },
+
   // this and ^servePage should be refactored together, they're very similar
   async serveMessages (context, data, callback) {
     const name = uuid.v4()
@@ -118,61 +180,27 @@ module.exports = {
     return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`:\t**${vFmt(obj[k])}**`).join('\n')
   },
 
-  generateListManagementUCExport (commandName, additionalCommands) {
-    const f = async function (context, ...a) {
-      const [netStub, cmd] = a
+  generateListManagementUCExport,
 
-      if (!netStub) {
-        return `Not enough arguments! Usage: \`${commandName} [networkStub] [command] (args...)\``
-      }
-
+  generatePerChanListManagementUCExport (commandName, additionalCommands) {
+    return function (context, ...a) {
+      const [netStub, channelIdSpec] = context.options._
       const { network } = matchNetwork(netStub)
-      const key = [PREFIX, commandName, network].join(':')
 
-      const argStr = () => {
-        if (a.length < 3) {
-          throw new Error(`Not enough args for ${cmd}!`)
-        }
-
-        return a.slice(2).join(' ')
+      if (!channelIdSpec.match(CHANNELS_PATTERN)) {
+        throw new Error(`Bad channel ID spec ${channelIdSpec}`)
       }
 
-      switch (cmd) {
-        case 'add':
-          await context.redis.sadd(key, argStr())
-          break
-        case 'clear':
-          await context.redis.del(key)
-          break
-        case 'remove':
-          await context.redis.srem(key, argStr())
-          break
-      }
+      const [_, channel] = [...channelIdSpec.matchAll(CHANNELS_PATTERN)][0] // eslint-disable-line no-unused-vars
 
-      if (additionalCommands && additionalCommands[cmd]) {
-        return additionalCommands[cmd]({ key, network, ...context }, ...a)
-      }
+      const key = [network, channel].join('_')
+      const cmdFunctor = generateListManagementUCExport(`${commandName}_${key}`, additionalCommands)
 
-      const retList = (await context.redis.smembers(key)).sort()
-      const fmtName = commandName[0].toUpperCase() + commandName.slice(1)
-      retList.__drcFormatter = () => retList.length
-        ? `${fmtName} ` +
-        `list for \`${network}\` (${retList.length}): **${retList.join('**, **')}**`
-        : `${fmtName} list for \`${network}\` has no items.`
-
-      return retList
+      context.options._[1] = context.options._[0]
+      a[1] = a[0]
+      context.options._.shift()
+      a.shift()
+      return cmdFunctor(context, ...a)
     }
-
-    f.__drcHelp = () => {
-      return `!${commandName} network subcommand ...\n\n` +
-      'Where \'subcommand\' is one of: add, remove, clear.\n' +
-      '\'add\' & \'remove\' use the remaining arguments as the value; \'clear\' takes no arguments.\n\n' +
-      (additionalCommands
-        ? 'Additional subcommand:\n' +
-        Object.keys(additionalCommands).filter(x => x[0] !== '_').join(', ')
-        : '')
-    }
-
-    return f
   }
 }

@@ -7,9 +7,6 @@ module.exports = async function (context, ...a) {
   const key = PREFIX + ':userConfig'
 
   switch (a[0]) {
-    case 'show':
-      return '```json\n' + JSON.stringify(config, null, 2) + '\n```'
-
     case 'get':
       return '\n' + formatKVs(_.get(config, a[1]))
 

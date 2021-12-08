@@ -314,12 +314,28 @@ module.exports = async (context, channel, msg) => {
         sendToBotChan('`IRC:WHOIS:NMAP` ran for ' + fmtDuration(new Date(parsed.data.started)))
       }
     } else if (type === 'irc' &&
-      (subType === 'topic' ||
-      (config.user.showParts && subType === 'part') ||
-      subType === 'kick' ||
-      (config.user.showJoins && subType === 'join'))) {
+      (subType === 'topic' || subType === 'join' || subType === 'part' || subType === 'kick')) {
       const discName = resolveNameForDiscord(parsed.data.__drcNetwork, parsed.data.channel)
+      const discId = channelsByName[parsed.data.__drcNetwork][discName]
       const chanSpec = categories[categoriesByName[parsed.data.__drcNetwork]].channels[channelsByName[parsed.data.__drcNetwork][discName]]
+
+      if (subType === 'join' || subType === 'part') {
+        const opts = [parsed.data.__drcNetwork, `<#${discId}>`]
+        const ctx = {
+          redis: new Redis(config.redis.url),
+          options: {
+            _: opts
+          }
+        }
+
+        const showPerChan = await userCommands('showPerChan')(ctx, ...opts)
+
+        if (showPerChan.indexOf(subType) === -1) {
+          if ((subType === 'join' && !config.user.showJoins) || (subType === 'part' && !config.user.showParts)) {
+            return
+          }
+        }
+      }
 
       if (!chanSpec) {
         console.debug(parsed, discName, chanSpec)

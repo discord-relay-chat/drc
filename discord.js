@@ -245,7 +245,8 @@ client.once('ready', async () => {
             ignoreSquelched,
             captureSpecs,
             channelsById,
-            categoriesByName
+            categoriesByName,
+            toChanId
           }, ...args)
 
           console.log(`Exec'ed user command ${command} with args [${args.join(', ')}] --> `, result)
