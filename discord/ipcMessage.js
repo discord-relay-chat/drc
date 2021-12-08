@@ -329,6 +329,7 @@ module.exports = async (context, channel, msg) => {
         }
 
         const showPerChan = await userCommands('showPerChan')(ctx, ...opts)
+        ctx.redis.disconnect()
 
         if (showPerChan.indexOf(subType) === -1) {
           if ((subType === 'join' && !config.user.showJoins) || (subType === 'part' && !config.user.showParts)) {
