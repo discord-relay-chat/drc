@@ -115,10 +115,16 @@ module.exports = async (context, channel, msg) => {
               if (e.type === 'privmsg' || e.type === 'action') {
                 let eHead = '<'
                 let eFoot = '>'
+                let eStyle = '**'
 
                 if (e.type === 'action') {
                   eHead = '* '
                   eFoot = ''
+                }
+
+                // it's us (when enable_echomessage === true)
+                if (config.irc.registered[e.__drcNetwork].user.nick === e.nick) {
+                  eStyle = '_'
                 }
 
                 const persistMsgWithAutoCapture = async (type) => {
@@ -179,7 +185,7 @@ module.exports = async (context, channel, msg) => {
                   }
                 }
 
-                msgChan.send(`${eHead}**${e.nick}**${eFoot} ${e.message}`)
+                msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${e.message}`)
                 stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1
 
                 if (captureSpecs[e.__drcNetwork]) {

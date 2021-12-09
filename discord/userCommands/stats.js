@@ -69,7 +69,16 @@ async function f (context) {
   stats.redis = {
     clients: parseRedisInfoSection(await context.redis.info('clients')).kvPairs,
     memory: parseRedisInfoSection(await context.redis.info('memory')).kvPairs,
-    server: parseRedisInfoSection(await context.redis.info('server')).kvPairs
+    server: parseRedisInfoSection(await context.redis.info('server')).kvPairs,
+    stats: parseRedisInfoSection(await context.redis.info('stats')).kvPairs,
+    commandstats: Object.entries(parseRedisInfoSection(await context.redis.info('commandstats')).kvPairs)
+      .reduce((a, [k, v]) => ({
+        [k]: v.split(',').reduce((b, y) => ({
+          [y.split('=')[0]]: y.split('=')[1],
+          ...b
+        }), {}),
+        ...a
+      }), {})
   }
 
   const redisHours = Math.floor(stats.redis.server.uptime_in_seconds / 60 / 60)
@@ -126,6 +135,9 @@ async function f (context) {
 
     console.debug('STATS', stats)
 
+    const ksMiss = Number(stats.redis.stats.keyspace_misses)
+    const ksHit = Number(stats.redis.stats.keyspace_hits)
+
     embed
       .addFields(
         { name: 'Bot uptime', value: stats.lastCalcs.uptimeFormatted, inline: true },
@@ -137,7 +149,9 @@ async function f (context) {
       )
       .addFields(
         { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true },
-        { name: 'Redis memory (peak)', value: stats.redis.memory.used_memory_peak_human.toString(), inline: true }
+        { name: 'Redis memory (used/rss/peak)', value: `${stats.redis.memory.used_memory_human.toString()} / ` + 
+          `${stats.redis.memory.used_memory_rss_human.toString()} / ${stats.redis.memory.used_memory_peak_human.toString()}`, inline: true },
+          { name: 'Redis CHR', value: Number(ksMiss / (ksMiss + ksHit)).toFixed(4).toString(), inline: true },
       )
       .addField('Lag', '(_milliseconds_)')
       .addFields(...stats.lastCalcs.lagAsEmbedFields)

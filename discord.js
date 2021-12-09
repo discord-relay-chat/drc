@@ -347,8 +347,6 @@ client.once('ready', async () => {
       if (replyNick) {
         console.log(`Replying to <${replyNick}> in ${data.channelId}`)
         data.content = `${replyNick}: ${data.content}`
-      } else {
-        console.error(`Expected to parse a replyNick from content! "${data.content}"`)
       }
 
       console.debug(`Emitting SAY with data.content: "${data.content}"`)
@@ -361,6 +359,10 @@ client.once('ready', async () => {
           message: data.content
         }
       }))
+
+      if (config.user.deleteDiscordWithEchoMessageOn && config.irc.registered[network.name].user.enable_echomessage) {
+        await data.delete()
+      }
     })
   }
 

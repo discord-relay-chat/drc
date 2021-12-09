@@ -23,6 +23,7 @@ function replace (obj, keys, replacement) {
 module.exports = {
   user: {
     autoCaptureOnMention: true,
+    deleteDiscordWithEchoMessageOn: true,
     joinsToBotChannel: false,
     markHilites: false,
     notifyOnNotices: false,
