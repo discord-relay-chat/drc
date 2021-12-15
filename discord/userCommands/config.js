@@ -1,66 +1,66 @@
-const _ = require('lodash')
-const config = require('config')
-const { PREFIX } = require('../../util')
-const { formatKVs } = require('../common')
+const _ = require('lodash');
+const config = require('config');
+const { PREFIX } = require('../../util');
+const { formatKVs } = require('../common');
 
 module.exports = async function (context, ...a) {
-  const key = PREFIX + ':userConfig'
+  const key = PREFIX + ':userConfig';
 
   switch (a[0]) {
     case 'get':
-      return '\n' + formatKVs(_.get(config, a[1]))
+      return '\n' + formatKVs(_.get(config, a[1]));
 
     case 'set':
     {
-      let setValue = a.slice(2).join(' ').toLocaleLowerCase()
-      const onWords = ['on', '1', 'true', 'yes']
-      const offWords = ['off', '0', 'false', 'no']
+      let setValue = a.slice(2).join(' ').toLocaleLowerCase();
+      const onWords = ['on', '1', 'true', 'yes'];
+      const offWords = ['off', '0', 'false', 'no'];
 
       if (onWords.includes(setValue)) {
-        setValue = true
+        setValue = true;
       } else if (offWords.includes(setValue)) {
-        setValue = false
+        setValue = false;
       }
 
-      _.set(config, a[1], setValue)
-      const ppathArr = a[1].split('.')
-      ppathArr.pop()
+      _.set(config, a[1], setValue);
+      const ppathArr = a[1].split('.');
+      ppathArr.pop();
 
       if (a[1].indexOf('user') === 0) {
-        await context.redis.set(key, JSON.stringify(config.user))
+        await context.redis.set(key, JSON.stringify(config.user));
       }
 
-      return '\n' + formatKVs(_.get(config, ppathArr.length ? ppathArr.join('.') : a[1]))
+      return '\n' + formatKVs(_.get(config, ppathArr.length ? ppathArr.join('.') : a[1]));
     }
 
     case 'load':
     {
       try {
-        const uStr = await context.redis.get(key)
+        const uStr = await context.redis.get(key);
 
         if (!uStr) {
-          return config.user
+          return config.user;
         }
 
-        const uCfg = JSON.parse(uStr)
+        const uCfg = JSON.parse(uStr);
 
         if (Object.keys(uCfg).length !== Object.keys(config.user).length ||
           Object.keys(config.user).reduce((a, k) => (a += Object.keys(uCfg).includes(k) ? 1 : 0), 0) !== Object.keys(config.user).length) {
-          throw new Error('bad config reload, keys mistmatch!!', uCfg, config.user)
+          throw new Error('bad config reload, keys mistmatch!!', uCfg, config.user);
         }
 
-        return (config.user = uCfg)
+        return (config.user = uCfg);
       } catch (e) {
         // if load fails, remove whatever's in redis, it's bad
-        await context.redis.del(key)
+        await context.redis.del(key);
 
         return {
           error: {
             message: `Failed to retrieve user config: ${e.message}`,
             stack: e.stack
           }
-        }
+        };
       }
     }
   }
-}
+};

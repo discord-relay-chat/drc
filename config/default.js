@@ -1,23 +1,23 @@
-'use strict'
+'use strict';
 
 /* References:
  * [1] https://github.com/kiwiirc/irc-framework/blob/master/docs/clientapi.md#constructor
  */
 
-const _ = require('lodash')
-const os = require('os')
+const _ = require('lodash');
+const os = require('os');
 
 function replace (obj, keys, replacement) {
-  const result = _.cloneDeep(obj)
+  const result = _.cloneDeep(obj);
   if (!Array.isArray(keys)) {
-    keys = [keys]
+    keys = [keys];
   }
   keys.forEach((key) => {
     if (_.has(result, key)) {
-      _.set(result, key, replacement)
+      _.set(result, key, replacement);
     }
-  })
-  return result
+  });
+  return result;
 }
 
 module.exports = {
@@ -145,6 +145,6 @@ module.exports = {
       'irc.registered',
       'redis.url',
       'shodan.apiKey'
-    ], '*')
+    ], '*');
   }
-}
+};

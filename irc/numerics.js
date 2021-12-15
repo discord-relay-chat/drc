@@ -1,17 +1,17 @@
 function lastParamsElementOrPassthru (s) {
   if (s.params) {
-    return s.params.slice(-1)
+    return s.params.slice(-1);
   }
 
-  return s
+  return s;
 }
 
 function concatLastTwoParamsElementOrPassthru (s) {
   if (s.params && s.params.length > 2) {
-    return s.params.slice(-2).join(' ')
+    return s.params.slice(-2).join(' ');
   }
 
-  return s
+  return s;
 }
 
 module.exports = {
@@ -59,4 +59,4 @@ module.exports = {
     name: 'RPL_GLOBALUSERS',
     parse: lastParamsElementOrPassthru
   }
-}
+};

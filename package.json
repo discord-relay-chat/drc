@@ -4,7 +4,7 @@
   "description": "Discord Relay Chat",
   "scripts": {
     "test": "jest",
-    "lint": "standard --fix --verbose"
+    "lint": "semistandard --fix --verbose"
   },
   "author": "",
   "license": "MIT",
@@ -24,9 +24,9 @@
   },
   "devDependencies": {
     "jest": "^27.3.1",
-    "standard": "^16.0.4"
+    "semistandard": "^16.0.1"
   },
-  "standard": {
+  "semistandard": {
     "ignore": [
       "test/*"
     ]

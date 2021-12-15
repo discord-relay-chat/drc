@@ -1,7 +1,7 @@
-const { generateListManagementUCExport, serveMessages } = require('../common')
+const { generateListManagementUCExport, serveMessages } = require('../common');
 
 async function clearSquelched (context, ...a) {
-  return context.redis.del([context.key, 'squelch'].join(':'))
+  return context.redis.del([context.key, 'squelch'].join(':'));
 }
 
 module.exports = generateListManagementUCExport('ignore', {
@@ -10,40 +10,40 @@ module.exports = generateListManagementUCExport('ignore', {
   numSquelched: async (context, ...a) => `Have ${(await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).length} sequelched messages on \`${context.network}\``,
 
   getSquelched: async (context, ...a) => {
-    const msgs = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse()
+    const msgs = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
 
     if (context.options && context.options.clear) {
-      await clearSquelched(context)
+      await clearSquelched(context);
     }
 
     context.sendToBotChan(`Have ${msgs.length} sequelched messages on ` +
-      `\`${context.network}\`${context.options.clear ? ' (cleared!)' : ''}:`)
+      `\`${context.network}\`${context.options.clear ? ' (cleared!)' : ''}:`);
 
     msgs.forEach((msg) => {
-      const e = msg.data
-      let eHead = '<'
-      let eFoot = '>'
+      const e = msg.data;
+      let eHead = '<';
+      let eFoot = '>';
 
       if (e.type === 'action') {
-        eHead = '* '
-        eFoot = ''
+        eHead = '* ';
+        eFoot = '';
       }
 
       context.sendToBotChan(`Sequelched in **${e.target}** on \`${e.__drcNetwork}\` ` +
         `at \`${new Date(msg.timestamp).toLocaleString()}\`:\n` +
-        `${eHead}**${e.nick}**${eFoot} ${e.message}`)
-    })
+        `${eHead}**${e.nick}**${eFoot} ${e.message}`);
+    });
   },
 
   digest: async (context, ...a) => {
-    const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse()
+    const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
 
-    await serveMessages(context, data)
+    await serveMessages(context, data);
 
     if (context.options.clear) {
-      clearSquelched(context)
+      clearSquelched(context);
     }
   },
 
   clearSquelched
-})
+});

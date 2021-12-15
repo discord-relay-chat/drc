@@ -1,3 +1,3 @@
-'use strict'
+'use strict';
 
-module.exports = require('../common').generatePerChanListManagementUCExport('showPerChan')
+module.exports = require('../common').generatePerChanListManagementUCExport('showPerChan');

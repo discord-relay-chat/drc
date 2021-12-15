@@ -1,35 +1,35 @@
-'use strict'
+'use strict';
 
-const fs = require('fs')
-const path = require('path')
-const config = require('config')
-const irc = require('irc-framework')
-const inq = require('inquirer')
-const Redis = require('ioredis')
-const redisClient = new Redis(config.redis.url)
-const { PREFIX, CTCPVersion } = require('./util')
-const ipcMessageHandler = require('./irc/ipcMessage')
+const fs = require('fs');
+const path = require('path');
+const config = require('config');
+const irc = require('irc-framework');
+const inq = require('inquirer');
+const Redis = require('ioredis');
+const redisClient = new Redis(config.redis.url);
+const { PREFIX, CTCPVersion } = require('./util');
+const ipcMessageHandler = require('./irc/ipcMessage');
 
-require('./logger')('irc')
+require('./logger')('irc');
 
 const connectedIRC = {
   bots: {},
   users: {}
-}
+};
 
-const msgHandlers = {}
+const msgHandlers = {};
 
 const stats = {
   upSince: new Date(),
   errors: 0,
   discordReconnects: 0,
   latency: {}
-}
+};
 
-let allowsBotReconnect = false
-const chanPrefixes = {}
+let allowsBotReconnect = false;
+const chanPrefixes = {};
 
-const categories = {}
+const categories = {};
 
 async function connectIRCClient (connSpec) {
   if (connSpec.account && !connSpec.account.password) {
@@ -37,31 +37,31 @@ async function connectIRCClient (connSpec) {
       type: 'password',
       name: 'password',
       message: `Enter nickserv password for ${connSpec.nick}@${connSpec.host}`
-    })
+    });
 
-    connSpec.account.password = password
+    connSpec.account.password = password;
   }
 
-  const ircClient = new irc.Client()
+  const ircClient = new irc.Client();
 
   const regPromise = new Promise((resolve, reject) => {
-    ircClient.on('registered', resolve.bind(null, ircClient))
-  })
+    ircClient.on('registered', resolve.bind(null, ircClient));
+  });
 
-  ircClient.on('debug', console.debug)
-  connSpec.version = CTCPVersion
-  ircClient.connect(connSpec)
-  return regPromise
+  ircClient.on('debug', console.debug);
+  connSpec.version = CTCPVersion;
+  ircClient.connect(connSpec);
+  return regPromise;
 }
 
 async function main () {
-  console.log(`${PREFIX} IRC bridge started.`)
-  const pubClient = new Redis(config.redis.url)
-  const specServers = {}
-  const ircLogPath = path.join(__dirname, config.irc.log.path)
+  console.log(`${PREFIX} IRC bridge started.`);
+  const pubClient = new Redis(config.redis.url);
+  const specServers = {};
+  const ircLogPath = path.join(__dirname, config.irc.log.path);
 
   if (!fs.existsSync(ircLogPath)) {
-    fs.mkdirSync(ircLogPath)
+    fs.mkdirSync(ircLogPath);
   }
 
   redisClient.on('message', ipcMessageHandler.bind(null, {
@@ -72,32 +72,32 @@ async function main () {
     chanPrefixes,
     stats,
     allowsBotReconnect: () => allowsBotReconnect
-  }))
+  }));
 
-  await redisClient.subscribe(PREFIX)
+  await redisClient.subscribe(PREFIX);
 
-  console.log('Connected to Redis.')
-  console.log(`Connecting ${Object.entries(config.irc.registered).length} IRC networks...`)
+  console.log('Connected to Redis.');
+  console.log(`Connecting ${Object.entries(config.irc.registered).length} IRC networks...`);
 
-  const readyData = []
+  const readyData = [];
   for (const [host, serverObj] of Object.entries(config.irc.registered)) {
-    const { port, user } = serverObj
+    const { port, user } = serverObj;
 
     if (!host || !port) {
-      throw new Error('bad server spec', serverObj)
+      throw new Error('bad server spec', serverObj);
     }
 
     if (connectedIRC.bots[host]) {
-      throw new Error('dupliate server spec', serverObj)
+      throw new Error('dupliate server spec', serverObj);
     }
 
     const spec = {
       host,
       port,
       ...user
-    }
+    };
 
-    console.log(`Connecting '${spec.nick}' to ${host}...`)
+    console.log(`Connecting '${spec.nick}' to ${host}...`);
     connectedIRC.bots[host] = await connectIRCClient(spec);
 
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
@@ -106,31 +106,31 @@ async function main () {
       'whois', 'whowas', 'motd', 'info', 'help']
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
-          console.debug('<IRC EVENT>', ev, data)
+          console.debug('<IRC EVENT>', ev, data);
           if (typeof data !== 'object') {
-            console.warn('non-object data!', data)
-            return
+            console.warn('non-object data!', data);
+            return;
           }
 
-          data.__drcNetwork = host
+          data.__drcNetwork = host;
 
           await pubClient.publish(PREFIX, JSON.stringify({
             type: 'irc:' + ev.replace(/\s+/g, '_'),
             data
-          }))
-        })
-      })
+          }));
+        });
+      });
 
     connectedIRC.bots[host].on('pong', (data) => {
-      console.debug('RAW PONG', data)
-      const nowNum = Number(new Date())
-      const splitElems = data.message.split('-')
+      console.debug('RAW PONG', data);
+      const nowNum = Number(new Date());
+      const splitElems = data.message.split('-');
 
       if (splitElems.length > 1) {
-        const num = Number(splitElems[1])
+        const num = Number(splitElems[1]);
         if (!Number.isNaN(num)) {
-          stats.latency[host] = nowNum - num
-          console.debug(`Got PONG for ${host} with ${splitElems}: latency = ${stats.latency[host]}ms`)
+          stats.latency[host] = nowNum - num;
+          console.debug(`Got PONG for ${host} with ${splitElems}: latency = ${stats.latency[host]}ms`);
 
           if (splitElems[0].indexOf('drc') === 0) {
             pubClient.publish(PREFIX, JSON.stringify({
@@ -140,87 +140,91 @@ async function main () {
                 latencyToIRC: stats.latency[host],
                 ...data
               }
-            }))
+            }));
           }
         }
       }
-    })
+    });
 
-    const noticePubClient = new Redis(config.redis.url)
+    const noticePubClient = new Redis(config.redis.url);
     connectedIRC.bots[host].on('message', (data) => {
-      data.__drcIrcRxTs = Number(new Date())
-      data.__drcNetwork = host
+      data.__drcIrcRxTs = Number(new Date());
+      data.__drcNetwork = host;
 
       if (config.irc.log.channelsToFile) {
-        const chanFileDir = path.join(ircLogPath, host)
-        const chanFilePath = path.join(chanFileDir, data.target)
+        const chanFileDir = path.join(ircLogPath, host);
+        const chanFilePath = path.join(chanFileDir, data.target);
 
         fs.stat(chanFileDir, async (err, _stats) => {
           if (err && err.code === 'ENOENT') {
             try {
-              await fs.promises.mkdir(chanFileDir)
+              await fs.promises.mkdir(chanFileDir);
             } catch (e) {
               if (e.code !== 'EEXIST') {
-                throw e
+                throw e;
               }
             }
           }
 
-          const fh = await fs.promises.open(chanFilePath, 'a')
-          await fh.write(JSON.stringify(data) + '\n')
-          fh.close()
-        })
+          const fh = await fs.promises.open(chanFilePath, 'a');
+          await fh.write(JSON.stringify(data) + '\n');
+          fh.close();
+        });
       }
 
       if (data.target === spec.nick || data.type === 'notice') {
         noticePubClient.publish(PREFIX, JSON.stringify({
           type: 'irc:notice',
           data
-        }))
-        return
+        }));
+        return;
       }
 
-      const handler = msgHandlers[host][data.target.toLowerCase()]
+      const handler = msgHandlers[host][data.target.toLowerCase()];
 
       if (!handler) {
-        return
+        return;
       }
 
-      const { resName, channel, chanPubClient } = handler
+      const { resName, channel, chanPubClient } = handler;
 
       if (!resName || !channel || !chanPubClient) {
-        throw new Error('bad handler', resName, channel)
+        throw new Error('bad handler', resName, channel);
       }
 
       chanPubClient.publish(channel, JSON.stringify({
         type: 'irc:message',
         data
-      }))
-    })
+      }));
+    });
 
-    console.log(`Connected registered IRC bot user ${spec.nick} to ${host}`)
-    readyData.push({ network: host, nickname: spec.nick })
+    console.log(`Connected registered IRC bot user ${spec.nick} to ${host}`);
+    readyData.push({
+      network: host,
+      nickname: spec.nick,
+      userModes: connectedIRC.bots[host].user.modes
+    });
   }
 
   process.on('SIGINT', async () => {
     for (const [hn, client] of Object.entries(connectedIRC.bots)) {
-      console.log(`quitting ${hn}`)
-      let res
-      const prom = new Promise((resolve, reject) => { res = resolve })
-      client.on('close', res)
-      client.quit('Quit.')
-      await prom
-      console.log(`closed ${hn}`)
+      console.log(`quitting ${hn}`);
+      let res;
+      const prom = new Promise((resolve, reject) => { res = resolve; });
+      client.on('close', res);
+      client.quit('Quit.');
+      await prom;
+      console.log(`closed ${hn}`);
     }
 
-    pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:exit' }))
-    console.log('Done!')
-    process.exit()
-  })
+    pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:exit' }));
+    console.log('Done!');
+    process.exit();
+  });
 
-  console.log('Ready!')
-  pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:ready', data: { readyData } }))
-  allowsBotReconnect = true
+  console.log('Ready!');
+  pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:ready', data: { readyData } }));
+  allowsBotReconnect = true;
 }
 
-main()
+main();
