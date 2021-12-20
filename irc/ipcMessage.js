@@ -158,14 +158,16 @@ module.exports = async (context, chan, msg) => {
       }
     };
 
-    if (parsed.type === 'discord:requestPing:irc') {
-      const e = parsed.data;
-      const botClient = connectedIRC.bots[e.network];
+    const e = parsed.data;
+    const botClient = e && (connectedIRC.bots[e.network] || connectedIRC.bots[e.__drcNetwork]);
+
+    if (parsed.type === 'irc:userMode:set') {
+      botClient.mode(config.irc.registered[e.network].nick, e.mode);
+      // pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:userMode', data: botClient.mode(config.irc.registered[e.network].nick) }));
+    } else if (parsed.type === 'discord:requestPing:irc') {
       console.debug(`Pinging ${e.network}...`);
       botClient.ping(['drc', Number(new Date()).toString()].join('-'));
     } else if (parsed.type === 'discord:deleteChannel') {
-      const e = parsed.data;
-      const botClient = connectedIRC.bots[e.network];
       botClient.part('#' + resolveNameForIRC(e.network, e.name));
       // XXX BUG!! have to remove this channel from appropriate structs!!!
     } else if (parsed.type === 'discord:requestJoinChannel:irc') {
@@ -178,13 +180,9 @@ module.exports = async (context, chan, msg) => {
       const chanPrefix = await joinFunc();
       chanPrefixes[categories[parsed.data.parentId].name].push(chanPrefix);
     } else if (parsed.type === 'discord:requestSay:irc') { // similar to 'irc:say' below; refactor?
-      const e = parsed.data;
-
       if (!e.network || !e.target || !e.message) {
         throw new Error('discord:requestSay:irc bad args ' + JSON.stringify(e));
       }
-
-      const botClient = connectedIRC.bots[e.network];
 
       if (!botClient) {
         throw new Error('discord:requestSay:irc bad client ' + JSON.stringify(e));

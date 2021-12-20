@@ -7,7 +7,8 @@ const { formatKVs, persistMessage } = require('./common');
 const {
   PREFIX,
   resolveNameForDiscord,
-  fmtDuration
+  fmtDuration,
+  ipInfo
 } = require('../util');
 const { MessageEmbed } = require('discord.js');
 const numerics = require('../irc/numerics');
@@ -42,7 +43,12 @@ module.exports = async (context, channel, msg) => {
 
     const runOneTimeHandlers = runOneTimeHandlersMatchingDiscriminator.bind(this, parsed.type, parsed.data);
 
-    if (type === 'http' && subType === 'get-req' && subSubType) {
+    if (type === 'irc' && subType === 'mode') {
+      console.debug('MODE RAW!', parsed);
+      if (parsed.data.raw_modes !== '+l') {
+        sendToBotChan('`IRC:MODE` ' + `**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on \`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
+      }
+    } else if (type === 'http' && subType === 'get-req' && subSubType) {
       runOneTimeHandlers(subSubType);
     } else if (type === 'irc' && subType === 'responseJoinChannel') {
       runOneTimeHandlers(parsed.data.name);
@@ -185,8 +191,13 @@ module.exports = async (context, channel, msg) => {
                   }
                 }
 
-                msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${e.message}`);
-                stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
+                try {
+                  msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${e.message}`);
+                  stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
+                } catch (err) {
+                  console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);
+                  ++stats.error;
+                }
 
                 if (captureSpecs[e.__drcNetwork]) {
                   const now = new Date();
@@ -277,21 +288,41 @@ module.exports = async (context, channel, msg) => {
     } else if (parsed.type === 'irc:notice') {
       const e = parsed.data;
       const mentionTarget = config.irc.registered[e.__drcNetwork].user.nick;
+      const redis = new Redis(config.redis.url);
+      const ignoreList = await userCommands('ignore')({ redis }, e.__drcNetwork);
+      let isIgnored = '';
+
+      if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick)) {
+        stats.messages.ignored++;
+        if (config.user.squelchIgnored) {
+          (await userCommands('ignore')({ redis }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
+          return;
+        }
+        isIgnored = '||';
+      }
+
+      redis.disconnect();
+
       sendToBotChan('`IRC:' + e.type.toUpperCase() + '` on `' + e.__drcNetwork + '`\n' +
         `\`From:\` **${e.nick}${e.from_server ? ' (SERVER!)' : ''}** <_${e.ident}@${e.hostname}_>\n` +
-        `\`  To:\` **${e.target}**${e.target === mentionTarget && (config.user.notifyOnNotices || e.type === 'privmsg') ? allowedSpeakersMentionString() : ''}\n` +
-        '```\n' + e.message + '\n```\n');
+        `\`  To:\` **${e.target}**${e.target === mentionTarget && isIgnored === '' && (config.user.notifyOnNotices || e.type === 'privmsg') ? allowedSpeakersMentionString() : ''}\n` +
+        '```\n' + isIgnored + e.message + isIgnored + '\n```\n');
     } else if (type === 'irc' && subType === 'nick') {
       if (config.user.showNickChanges) {
         sendToBotChan('`IRC:NICK` ' + `**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> changed nickname to **${parsed.data.new_nick}**`);
       }
     } else if (type === 'irc' && subType === 'whois') {
-      const network = parsed.data.__drcNetwork;
+      const d = parsed.data;
+      const network = d.__drcNetwork;
 
-      await runOneTimeHandlers(`${network}_${parsed.data.nick}`);
+      await runOneTimeHandlers(`${network}_${d.nick}`);
 
-      delete parsed.data.__drcNetwork; // just so it doesn't show up in the output...
-      sendToBotChan('`IRC:WHOIS` on `' + network + '` \n' + formatKVs(parsed.data));
+      delete d.__drcNetwork; // just so it doesn't show up in the output...
+
+      const lookupHost = d.actual_ip || d.actual_hostname || d.hostname;
+      const ipInf = await ipInfo(lookupHost);
+      sendToBotChan('`IRC:WHOIS` on `' + network + '` \n' + formatKVs(d) +
+        (ipInf ? `\n\nIP info for **${lookupHost}**:\n` + formatKVs(ipInf) : ''));
     } else if (parsed.type === 'irc:responseWhois:nmap') {
       const wd = parsed.data.whoisData;
 

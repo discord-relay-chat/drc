@@ -342,6 +342,11 @@ client.once('ready', async () => {
       }
 
       console.debug('messageCreate data param', data);
+
+      if (data.attachments) {
+        data.content += ' ' + [...data.attachments.entries()].map(([, att]) => att.proxyURL || att.attachment).join(' ');
+      }
+
       console.debug('messageCreate chan', channel);
 
       if (replyNick) {

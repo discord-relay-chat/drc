@@ -138,13 +138,18 @@ module.exports = {
     cleanupLoopFreqSeconds: 17
   },
 
+  ipinfo: {
+    token: null
+  },
+
   toJSON () {
     return replace(this, [
       'discord.botId',
       'discord.token',
       'irc.registered',
       'redis.url',
-      'shodan.apiKey'
+      'shodan.apiKey',
+      'ipinfo.token'
     ], '*');
   }
 };

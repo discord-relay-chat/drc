@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
+const { fetch } = require('undici');
+const dns = require('dns').promises;
 const shodan = require('shodan-client');
 
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
@@ -239,6 +241,39 @@ async function sizeAtPath (searchPath) {
   return a;
 }
 
+function isIpAddress (ip) {
+  return ip.match(/^(?:\d{1,3}\.){3}\d{1,3}$/) !== null;
+}
+
+async function ipInfo (ipOrHost) {
+  if (!config.ipinfo.token) {
+    return null;
+  }
+
+  let ip = ipOrHost;
+  if (!isIpAddress(ip)) {
+    try {
+      ip = (await dns.lookup(ipOrHost)).address;
+    } catch (err) {
+      console.warn(`Lookup for "${ip} failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  const res = await fetch(`https://ipinfo.io/${ip}`, {
+    headers: {
+      Authorization: `Bearer ${config.ipinfo.token}`
+    }
+  });
+
+  if (!res.ok) {
+    console.warn(`ipinfo.io lookup for "${ip}" failed (${res.status})`, res);
+    return null;
+  }
+
+  return res.json();
+}
+
 module.exports = {
   ENV,
   NAME,
@@ -257,6 +292,8 @@ module.exports = {
   matchNetwork,
   parseRedisInfoSection,
   sizeAtPath,
+  isIpAddress,
+  ipInfo,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

@@ -42,6 +42,41 @@ async function connectIRCClient (connSpec) {
     connSpec.account.password = password;
   }
 
+  if (connSpec.client_certificate && connSpec.client_certificate.fromFile) {
+    const certFile = (await fs.promises.readFile(path.resolve(connSpec.client_certificate.fromFile))).toString('utf8');
+    const boundaryRe = /-{5}(BEGIN|END)\s(PRIVATE\sKEY|CERTIFICATE)-{5}/g;
+    const elems = {
+      private_key: {},
+      certificate: {}
+    };
+
+    for (const match of certFile.matchAll(boundaryRe)) {
+      const [boundStr, state, type] = match;
+      const typeXform = type.toLowerCase().replace(/\s+/g, '_');
+
+      if (state === 'BEGIN') {
+        if (type === 'PRIVATE KEY' && match.index !== 0) {
+          throw new Error('pk start');
+        }
+
+        elems[typeXform].start = match.index;
+      } else if (state === 'END') {
+        if (elems[typeXform].start === undefined) {
+          throw new Error('bad start!');
+        }
+
+        elems[typeXform] = certFile
+          .substring(elems[typeXform].start, match.index + boundStr.length);
+      }
+    }
+
+    if (Object.values(elems).some(x => !x)) {
+      throw new Error('bad cert parse');
+    }
+
+    connSpec.client_certificate = elems;
+  }
+
   const ircClient = new irc.Client();
 
   const regPromise = new Promise((resolve, reject) => {
@@ -103,7 +138,7 @@ async function main () {
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
-      'whois', 'whowas', 'motd', 'info', 'help']
+      'whois', 'whowas', 'motd', 'info', 'help', 'mode']
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
           console.debug('<IRC EVENT>', ev, data);
@@ -122,7 +157,6 @@ async function main () {
       });
 
     connectedIRC.bots[host].on('pong', (data) => {
-      console.debug('RAW PONG', data);
       const nowNum = Number(new Date());
       const splitElems = data.message.split('-');
 
@@ -130,7 +164,6 @@ async function main () {
         const num = Number(splitElems[1]);
         if (!Number.isNaN(num)) {
           stats.latency[host] = nowNum - num;
-          console.debug(`Got PONG for ${host} with ${splitElems}: latency = ${stats.latency[host]}ms`);
 
           if (splitElems[0].indexOf('drc') === 0) {
             pubClient.publish(PREFIX, JSON.stringify({
@@ -199,6 +232,8 @@ async function main () {
     });
 
     console.log(`Connected registered IRC bot user ${spec.nick} to ${host}`);
+    console.debug('Connected user', connectedIRC.bots[host].user);
+    console.debug('Connected network', connectedIRC.bots[host].network);
     readyData.push({
       network: host,
       nickname: spec.nick,
