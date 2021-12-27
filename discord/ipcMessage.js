@@ -97,7 +97,8 @@ module.exports = async (context, channel, msg) => {
       }
 
       msgChan.__s = msgChan.send;
-      msgChan.send = (s) => msgChan.__s('`[' + new Date().toLocaleTimeString() + ']` ' + s);
+      msgChan.send = (s) => msgChan.__s('`[' + new Date().toLocaleTimeString() + ']` ' + s)
+        .catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack));
 
       const newClient = new Redis(config.redis.url);
       const ignoreClient = new Redis(config.redis.url);

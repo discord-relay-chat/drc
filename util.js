@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
+const readline = require('readline');
 const { fetch } = require('undici');
 const dns = require('dns').promises;
 const shodan = require('shodan-client');
@@ -274,6 +275,60 @@ async function ipInfo (ipOrHost) {
   return res.json();
 }
 
+const getLogsFormats = {
+  json: (x) => x,
+  txt: (x) => `[${new Date(x.__drcIrcRxTs).toISOString()}] <${x.nick}> ${x.message}`
+};
+
+async function getLogs (network, channel, fromTime, toTime, format = 'json', filterByNick) {
+  const logCfg = config.irc.log;
+
+  if (!logCfg || !logCfg.channelsToFile) {
+    return null;
+  }
+
+  const formatter = getLogsFormats[format];
+
+  if (!formatter) {
+    throw new Error(`bad format ${format}`);
+  }
+
+  [fromTime, toTime] = [fromTime, toTime].map(x => x ? new Date(x) : undefined);
+
+  const expectedPath = path.resolve(path.join(logCfg.path, network, channel));
+  const rl = readline.createInterface({ input: fs.createReadStream(expectedPath) });
+  const retList = [];
+  let lc = 1;
+
+  for await (const line of rl) {
+    try {
+      const pLine = JSON.parse(line);
+
+      if (!pLine.__drcIrcRxTs) {
+        throw new Error('missing __drcIrcRxTs');
+      }
+
+      const tsDate = new Date(pLine.__drcIrcRxTs);
+
+      if ((fromTime && tsDate < fromTime) || (toTime && tsDate > toTime)) {
+        continue;
+      }
+
+      if (filterByNick && !filterByNick.includes(pLine.nick)) {
+        continue;
+      }
+
+      retList.push(formatter(pLine));
+    } catch (e) {
+      console.error(`failed parse on line ${lc}, "${e.message}":`, line);
+    } finally {
+      lc++;
+    }
+  }
+
+  return retList;
+}
+
 module.exports = {
   ENV,
   NAME,
@@ -294,6 +349,7 @@ module.exports = {
   sizeAtPath,
   isIpAddress,
   ipInfo,
+  getLogs,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError
