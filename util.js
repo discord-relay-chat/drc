@@ -99,12 +99,18 @@ async function floodProtect (ops, ...args) {
   }
 }
 
-function fmtDuration (start) {
+function fmtDuration (start, allowSeconds) {
   if (typeof start === 'string') {
     start = dfns.parseISO(start);
   }
 
-  const options = { format: ['years', 'months', 'weeks', 'days', 'hours', 'minutes'] };
+  const defOpts = ['years', 'months', 'weeks', 'days', 'hours', 'minutes'];
+
+  if (allowSeconds) {
+    defOpts.push('seconds');
+  }
+
+  const options = { format: defOpts };
   const fmt = () => dfns.formatDuration(dfns.intervalToDuration({ start, end: new Date() }), options);
   let dur = fmt();
 
@@ -329,6 +335,50 @@ async function getLogs (network, channel, fromTime, toTime, format = 'json', fil
   return retList;
 }
 
+async function searchLogs (network, options) {
+  const logCfg = config.irc.log;
+
+  if (!logCfg || !logCfg.channelsToFile) {
+    return null;
+  }
+
+  const expectedPath = path.resolve(path.join(logCfg.path, network));
+  let networkFiles = (await fs.promises.readdir(expectedPath, { withFileTypes: true }))
+    .filter((fEnt) => fEnt.isFile());
+
+  if (!options.everything) {
+    networkFiles = networkFiles.filter((fEnt) => fEnt.name.indexOf('#') === 0);
+  }
+
+  if (!options.nick && !options.message) {
+    console.error(options);
+    throw new Error('no search option given');
+  }
+
+  let totalLines = 0;
+  const searchResults = Object.fromEntries((await Promise.all(networkFiles.map((f) => new Promise((resolve) => {
+    getLogs(network, f.name).then((logLines) => resolve([f.name, logLines]));
+  }))))
+    .map(([channel, lines]) => {
+      totalLines += lines.length;
+
+      return [channel, lines.filter((l) => {
+        if (options.nick && l.nick.indexOf(options.nick) === -1) {
+          return false;
+        }
+
+        if (options.message && l.message.indexOf(options.message) === -1) {
+          return false;
+        }
+
+        return true;
+      })];
+    })
+    .filter(([, lines]) => !!lines.length));
+
+  return { totalLines, searchResults };
+}
+
 module.exports = {
   ENV,
   NAME,
@@ -350,6 +400,7 @@ module.exports = {
   isIpAddress,
   ipInfo,
   getLogs,
+  searchLogs,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError
