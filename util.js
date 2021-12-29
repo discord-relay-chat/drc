@@ -335,6 +335,38 @@ async function getLogs (network, channel, fromTime, toTime, format = 'json', fil
   return retList;
 }
 
+const checkValAgainst_regexCache = {}; // eslint-disable-line camelcase
+
+function checkValAgainst (opt, field) {
+  if (opt.indexOf('/') === 0) {
+    const closingIdx = opt.slice(1).indexOf('/') + 1;
+
+    if (closingIdx < 1) {
+      throw new Error(`bad regex spec "${opt}"`);
+    }
+
+    if (!checkValAgainst_regexCache[opt]) {
+      const flags = opt.slice(closingIdx + 1);
+      const reExtract = opt.slice(1, -(opt.length - closingIdx));
+      checkValAgainst_regexCache[opt] = new RegExp(reExtract, flags);
+      console.log('CACHED RE for key', opt, checkValAgainst_regexCache[opt]);
+    }
+
+    return field.match(checkValAgainst_regexCache[opt]) !== null;
+  }
+
+  return field.indexOf(opt) !== -1;
+}
+
+function findFixedNonZero (num, depth = 1, maxDepth = 10) {
+  if (depth === maxDepth) {
+    return Number(num).toFixed(depth);
+  }
+
+  const chk = Number(num).toFixed(depth);
+  return Number(chk) ? chk : findFixedNonZero(num, depth + 1);
+}
+
 async function searchLogs (network, options) {
   const logCfg = config.irc.log;
 
@@ -363,11 +395,11 @@ async function searchLogs (network, options) {
       totalLines += lines.length;
 
       return [channel, lines.filter((l) => {
-        if (options.nick && l.nick.indexOf(options.nick) === -1) {
+        if (options.nick && !checkValAgainst(options.nick, l.nick)) {
           return false;
         }
 
-        if (options.message && l.message.indexOf(options.message) === -1) {
+        if (options.message && !checkValAgainst(options.message, l.message)) {
           return false;
         }
 
@@ -401,6 +433,8 @@ module.exports = {
   ipInfo,
   getLogs,
   searchLogs,
+  checkValAgainst,
+  findFixedNonZero,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError
