@@ -411,6 +411,37 @@ async function searchLogs (network, options) {
   return { totalLines, searchResults };
 }
 
+// ref: https://modern.ircdocs.horse/formatting.html#characters
+const ircEscapeXforms = Object.freeze({
+  '\x02': '**',
+  '\x1d': '_',
+  '\x1f': '__',
+  '\x1e': '~',
+  '\x11': '`'
+});
+
+// the following aren't supported by us, so we just strip them
+const ircEscapeStripSet = Object.freeze([
+  ...Buffer.from(Array.from({ length: 16 }).map((_, i) => i)).toString().split('').map(x => `\x03${x}`), // colors
+  '\x16', // reverse color
+  '\x0f' // reset
+]);
+
+const ircEscapeStripTester = new RegExp(`(${ircEscapeStripSet.join('|')})`);
+const ircEscapeTester = new RegExp(`(${Object.keys(ircEscapeXforms).join('|')})`);
+
+function replaceIrcEscapes (message) {
+  if (message.match(ircEscapeStripTester)) {
+    message = ircEscapeStripSet.reduce((m, esc) => m.replaceAll(esc, ''), message);
+  }
+
+  if (message.match(ircEscapeTester)) {
+    message = Object.entries(ircEscapeXforms).reduce((m, [esc, repl]) => m.replaceAll(esc, repl), message);
+  }
+
+  return message;
+}
+
 module.exports = {
   ENV,
   NAME,
@@ -435,6 +466,7 @@ module.exports = {
   searchLogs,
   checkValAgainst,
   findFixedNonZero,
+  replaceIrcEscapes,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

@@ -11,6 +11,7 @@ const {
   PREFIX,
   VERSION,
   resolveNameForIRC,
+  replaceIrcEscapes,
   NetworkNotMatchedError
 } = require('./util');
 
@@ -184,6 +185,10 @@ client.once('ready', async () => {
 
       let toSend;
       try {
+        if (!raw) {
+          s = replaceIrcEscapes(s);
+        }
+
         toSend = formatForAllowedSpeakerResponse(s, raw);
         await client.channels.cache.get(config.irc.quitMsgChanId).send(toSend);
       } catch (e) {

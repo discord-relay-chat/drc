@@ -28,3 +28,17 @@ test('matchNetwork', () => {
     util.matchNetwork('thisNetworkDoesntExist');
   }).toThrowError(util.NetworkNotMatchedError);
 });
+
+test('replaceIrcEscapes', () => {
+  expect(util.replaceIrcEscapes('\x1funderline me!\x1f \x02bold!\x02'))
+    .toEqual('__underline me!__ **bold!**');
+  expect(util.replaceIrcEscapes('\x1ditalics\x1d \x1estrikeout\x1e \x11monospace\x11'))
+    .toEqual('_italics_ ~strikeout~ `monospace`');
+
+  expect(util.replaceIrcEscapes('\x16\x0f')).toEqual('');
+
+  expect(util.replaceIrcEscapes(Buffer.from(Array.from({ length: 16 }).map((_, i) => i)).toString().split('').map(x => `\x03${x}`).join(''))).toEqual('');
+
+  expect(util.replaceIrcEscapes('`IRC:JOINED-CHANNEL` **#irpg** (#irpg) on `irc.undernet.org` has **77** users'))
+    .toEqual('`IRC:JOINED-CHANNEL` **#irpg** (#irpg) on `irc.undernet.org` has **77** users');
+})

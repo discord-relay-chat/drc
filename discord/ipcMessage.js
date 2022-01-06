@@ -8,7 +8,8 @@ const {
   PREFIX,
   resolveNameForDiscord,
   fmtDuration,
-  ipInfo
+  ipInfo,
+  replaceIrcEscapes
 } = require('../util');
 const { MessageEmbed } = require('discord.js');
 const numerics = require('../irc/numerics');
@@ -193,7 +194,7 @@ module.exports = async (context, channel, msg) => {
                 }
 
                 try {
-                  msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${e.message}`);
+                  msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${replaceIrcEscapes(e.message)}`);
                   stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
                 } catch (err) {
                   console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);
