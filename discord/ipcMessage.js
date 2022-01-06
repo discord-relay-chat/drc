@@ -420,7 +420,7 @@ module.exports = async (context, channel, msg) => {
     } else if (type === 'irc' && subType === 'numeric') {
       sendToBotChan('`IRC:' + subSubType + '` on ' + `\`${parsed.data.hostname || parsed.data.__drcNetwork}\`:\n>>> ${parsed.data.parsed ?? JSON.stringify(parsed.data.params)}`);
     } else if (type === 'irc' && subType === 'pong') {
-      const [_drc, startTs] = parsed.data.message.split('-');
+      const [, startTs] = parsed.data.message.split('-');
       const latencyToDiscord = new Date() - startTs;
       const embed = new MessageEmbed()
         .setColor('#22aaaa')

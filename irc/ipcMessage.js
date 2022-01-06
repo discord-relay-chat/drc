@@ -276,7 +276,7 @@ module.exports = async (context, chan, msg) => {
       await pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:responseStats', stats }));
     } else if (parsed.type === 'irc:say' || parsed.type === 'irc:action') {
       const networkSpec = specServers[parsed.data.network.name];
-      const [_, subType] = parsed.type.split(':');
+      const [, subType] = parsed.type.split(':');
 
       if (!networkSpec) {
         return;

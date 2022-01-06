@@ -15,7 +15,7 @@ require('./logger')('http');
 
 const redisListener = new Redis(config.app.redis);
 
-const stats = {
+const stats = { // eslint-disable-line no-unused-vars
   upSince: new Date()
 };
 
