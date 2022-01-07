@@ -37,8 +37,11 @@ test('replaceIrcEscapes', () => {
 
   expect(util.replaceIrcEscapes('\x16\x0f')).toEqual('');
 
-  expect(util.replaceIrcEscapes(Buffer.from(Array.from({ length: 16 }).map((_, i) => i)).toString().split('').map(x => `\x03${x}`).join(''))).toEqual('');
+  expect(util.replaceIrcEscapes(Buffer.from(Array.from({ length: util.IRCColorsStripMax }).map((_, i) => i)).toString().split('').map(x => `\x03${x}`).join(''))).toEqual('');
 
   expect(util.replaceIrcEscapes('`IRC:JOINED-CHANNEL` **#irpg** (#irpg) on `irc.undernet.org` has **77** users'))
     .toEqual('`IRC:JOINED-CHANNEL` **#irpg** (#irpg) on `irc.undernet.org` has **77** users');
+
+  expect(util.replaceIrcEscapes(Buffer.from('02 5b 72 69 7a 6f 6e 5d 02 20 3c 2b 03 30 35 44 75 63 6b 48 75 6e 74 03 3e'.split(' ').join(''), 'hex').toString()))
+    .toEqual('**[rizon]** <+DuckHunt>')
 })
