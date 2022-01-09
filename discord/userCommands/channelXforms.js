@@ -16,7 +16,7 @@ const subCommands = {
   set: async (context, network, dChan, iChan) => {
     if (iChan.match(CHANNELS_PATTERN)) {
       const [chanMatch, channelId] = [...iChan.matchAll(CHANNELS_PATTERN)][0];
-      iChan = '#' + iChan.replace(chanMatch, context.getDiscordChannelById(channelId).name);
+      iChan = iChan.replace(chanMatch, '#' + context.getDiscordChannelById(channelId).name);
     }
 
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));

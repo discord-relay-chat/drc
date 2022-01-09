@@ -1,6 +1,6 @@
 {
   "name": "drc",
-  "version": "0.2",
+  "version": "0.3",
   "description": "Discord Relay Chat",
   "scripts": {
     "pretest": "semistandard --fix --verbose",
@@ -8,7 +8,7 @@
     "test": "jest",
     "lint": "semistandard --fix --verbose"
   },
-  "author": "",
+  "author": "Ed Fletcher, Sector T137 <https://github.com/edfletcher>",
   "license": "MIT",
   "dependencies": {
     "config": "^3.3.6",

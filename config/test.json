@@ -4,15 +4,6 @@
       "irc.foo.bar": {},
       "irc.irc.irc": {},
       "foo.bar.irc": {}
-    },
-    "channelXforms": {
-      "irc.libera.chat": {
-        "nodejs": "node.js",
-        "chat": "#chat",
-        "cpp": "c++",
-        "cppgeneral": "c++-general",
-        "infra-talk": "#infra-talk"
-      }
     }
   }
 }

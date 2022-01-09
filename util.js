@@ -22,11 +22,32 @@ let resolverRev;
 
 const ChannelXforms = new class {
   constructor () {
+    this._resolve();
     this._load();
   }
 
+  _resolve () {
+    let resolvePath = config.irc.channelXformsPath;
+
+    if (process.env.NODE_ENV) {
+      console.debug('have env', process.env.NODE_ENV);
+      const pathComps = path.parse(config.irc.channelXformsPath);
+      this.path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
+
+      try {
+        this._load();
+        resolvePath = this.path;
+      } catch (err) {
+        console.warn(`Failed to find ${this.path}: falling back to default!`);
+        resolvePath = config.irc.channelXformsPath;
+      }
+    }
+
+    this.path = path.resolve(resolvePath);
+    console.log(`ChannelXforms resolved config file path to: ${this.path}`);
+  }
+
   _load () {
-    this.path = path.resolve(config.irc.channelXformsPath);
     this.cache = JSON.parse(fs.readFileSync(this.path));
   }
 
@@ -71,6 +92,7 @@ const ChannelXforms = new class {
 function resolveNameForIRC (network, name) {
   ChannelXforms._load();
   const xforms = ChannelXforms.cache[network];
+  console.debug('resolveNameForIRC', network, name, xforms);
   return (xforms && xforms[name]) || name;
 }
 

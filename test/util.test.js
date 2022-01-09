@@ -1,5 +1,7 @@
 const util = require('../util');
 
+process.env.NODE_ENV = 'test';
+
 test('resolveNameForIRC', () => {
   expect(util.resolveNameForIRC('irc.libera.chat', 'chat')).toEqual('#chat');
   expect(util.resolveNameForIRC('irc.libera.chat', 'cpp')).toEqual('c++');

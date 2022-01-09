@@ -3,7 +3,7 @@
 const inq = require('inquirer');
 const config = require('config');
 const crypto = require('crypto');
-const { Client, Intents, MessageActionRow, MessageButton, MessageEmbed } = require('discord.js');
+const { Client, Intents, MessageActionRow, MessageButton, MessageEmbed, MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
 const ipcMessageHandler = require('./discord/ipcMessage');
@@ -381,6 +381,22 @@ client.once('ready', async () => {
       if (data.content.indexOf('//me') === 0) {
         subType = 'action';
         data.content = data.content.replace('//me', '');
+      }
+
+      if (data.content.match(CHANNELS_PATTERN)) {
+        [...data.content.matchAll(CHANNELS_PATTERN)].forEach(([chanMatch, channelId]) => {
+          const chanObj = channelsById[channelId];
+          const parentObj = channelsById[chanObj.parent];
+
+          console.debug('CONTENT MATCH', chanMatch, channelId, channelsById[channelId], resolveNameForIRC(network.name, chanObj.name), parentObj);
+
+          let replacer = '#' + resolveNameForIRC(network.name, chanObj.name);
+          if (parentObj?.name !== network.name) {
+            replacer += ` (on ${network.name})`;
+          }
+
+          data.content = data.content.replace(chanMatch, replacer);
+        });
       }
 
       await redisClient.publish(PREFIX, JSON.stringify({
