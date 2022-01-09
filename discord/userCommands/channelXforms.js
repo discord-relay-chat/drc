@@ -2,6 +2,7 @@
 
 const { matchNetwork, ChannelXforms } = require('../../util');
 const { formatKVs } = require('../common');
+const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 async function formattedGet (network) {
   return `\nChannel transforms for **${network}** (\`Discord\` → IRC):\n` +
@@ -13,7 +14,13 @@ const subCommands = {
   get: async (context, network) => formattedGet(network),
 
   set: async (context, network, dChan, iChan) => {
+    if (iChan.match(CHANNELS_PATTERN)) {
+      const [chanMatch, channelId] = [...iChan.matchAll(CHANNELS_PATTERN)][0];
+      iChan = '#' + iChan.replace(chanMatch, context.getDiscordChannelById(channelId).name);
+    }
+
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));
+    // channelsByName doesn't have the right entry yet! but we don't have the discord channel ID yet either, so have to wait...
     return formattedGet(network);
   },
 
@@ -25,6 +32,12 @@ const subCommands = {
 
 module.exports = async function (context) {
   const [netStub, subCmd] = context.argObj._;
+
+  if (netStub === 'reload') {
+    ChannelXforms._load();
+    return ChannelXforms.cache;
+  }
+
   const { network } = matchNetwork(netStub);
   return subCommands[subCmd ?? 'get'](context, network, ...context.argObj._.slice(2));
 };

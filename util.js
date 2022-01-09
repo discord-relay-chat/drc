@@ -22,16 +22,12 @@ let resolverRev;
 
 const ChannelXforms = new class {
   constructor () {
-    this.path = path.resolve(config.irc.channelXformsPath);
-    this.cache = JSON.parse(fs.readFileSync(this.path));
+    this._load();
   }
 
-  forNetwork (network) {
-    if (ChannelXforms.cache[network]) {
-      return _.cloneDeep(ChannelXforms.cache[network]);
-    }
-
-    return undefined;
+  _load () {
+    this.path = path.resolve(config.irc.channelXformsPath);
+    this.cache = JSON.parse(fs.readFileSync(this.path));
   }
 
   async _mutate (network, discordChannel, ircChannel) {
@@ -54,6 +50,15 @@ const ChannelXforms = new class {
     return fs.promises.writeFile(this.path, JSON.stringify(this.cache, null, 2));
   }
 
+  forNetwork (network) {
+    this._load();
+    if (ChannelXforms.cache[network]) {
+      return _.cloneDeep(ChannelXforms.cache[network]);
+    }
+
+    return undefined;
+  }
+
   async set (network, discordChannel, ircChannel) {
     return this._mutate(network, discordChannel, ircChannel);
   }
@@ -64,11 +69,13 @@ const ChannelXforms = new class {
 }();
 
 function resolveNameForIRC (network, name) {
+  ChannelXforms._load();
   const xforms = ChannelXforms.cache[network];
   return (xforms && xforms[name]) || name;
 }
 
 function resolveNameForDiscord (network, ircName) {
+  ChannelXforms._load();
   if (!resolverRev) {
     resolverRev = Object.entries(ChannelXforms.cache).reduce((a, [network, nEnt]) => {
       return { [network]: Object.entries(nEnt).reduce((b, [k, v]) => ({ [v]: k, ...b }), {}), ...a };

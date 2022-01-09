@@ -2,7 +2,8 @@
 
 const inq = require('inquirer');
 const config = require('config');
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const crypto = require('crypto');
+const { Client, Intents, MessageActionRow, MessageButton, MessageEmbed } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
 const ipcMessageHandler = require('./discord/ipcMessage');
@@ -12,7 +13,8 @@ const {
   VERSION,
   resolveNameForIRC,
   replaceIrcEscapes,
-  NetworkNotMatchedError
+  NetworkNotMatchedError,
+  ChannelXforms
 } = require('./util');
 
 const userCommands = require('./discord/userCommands');
@@ -80,6 +82,15 @@ function registerChannelMessageHandler (channelId, handler) {
   channelMessageHandlers[channelId] = handler;
 }
 
+const buttonHandlers = {};
+function registerButtonHandler (buttonId, handlerFunc) {
+  if (!buttonHandlers[buttonId]) {
+    buttonHandlers[buttonId] = [];
+  }
+
+  buttonHandlers[buttonId].push(handlerFunc);
+}
+
 const allowedSpeakersMentionString = () => '[' + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + ']';
 
 let sendToBotChan = (...a) => console.error('sendToBotChan not initialized!', ...a);
@@ -108,7 +119,10 @@ setDefaultFont(config.figletBanners.font);
 
 console.log(`${PREFIX} Discord controller starting...`);
 
-const formatForAllowedSpeakerResponse = (s, raw = false) => (!raw ? `(*${new Date().toLocaleTimeString()}*) ${s}` : (s instanceof MessageEmbed ? { embeds: [s] } : s));
+const formatForAllowedSpeakerResponse = (s, raw = false) =>
+  (!raw
+    ? `(*${new Date().toLocaleTimeString()}*) ${s}`
+    : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
 client.once('ready', async () => {
   console.log('Ready!');
@@ -246,12 +260,14 @@ client.once('ready', async () => {
             registerOneTimeHandler,
             createGuildChannel,
             registerChannelMessageHandler,
+            registerButtonHandler,
             discordAuthor: data.author,
             ignoreSquelched,
             captureSpecs,
             channelsById,
             categoriesByName,
-            toChanId
+            toChanId,
+            getDiscordChannelById: (id) => client.channels.cache.get(id)
           }, ...args);
 
           console.log(`Exec'ed user command ${command} with args [${args.join(', ')}] --> `, result);
@@ -382,55 +398,142 @@ client.once('ready', async () => {
     });
   }
 
+  const deletedBeforeJoin = {};
   client.on('channelCreate', async (data) => {
     const { name, parentId, id } = data;
     const parentCat = categories[parentId];
 
     console.debug('channelCreate', name, parentId, id, parentCat);
 
-    if (!parentCat || !config.irc.registered[parentCat.name]) {
-      console.warn('bad parent cat', parentId, parentCat, data);
-      return;
+    const curXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
+    const buttonId = [parentId, id, crypto.randomBytes(8).toString('hex')].join('-');
+    const embed = new MessageEmbed()
+      .setTitle(`Ready to join \`#${name}\` on \`${parentCat.name}\`?`)
+      .setColor('#00ff00')
+      .addField('Don\'t want to join this channel after all?', 'Just click "Delete" and you\'re all set.')
+      .setTimestamp();
+
+    if (curXform) {
+      embed.setDescription('This channel already has a transform defined, so when you click "Join" below ' +
+        `we'll _actually_ join \`#${curXform}\` on \`${parentCat.name}\`.\n\nIf this is _not_ correct, adjust it with ` +
+        `\`!channelXforms ${parentCat.name} set ${name} <newTransformName>\` ` +
+        '_before clicking "Join"!_');
+    } else {
+      embed.setDescription('If a channel transform is needed for this channel, ' +
+        `set it up now with \`!channelXforms ${parentCat.name} set ${name} <transformName>\` ` +
+        '_before clicking "Join"!_');
     }
 
-    registerOneTimeHandler('irc:responseJoinChannel', name, (data) => {
-      console.debug('ONE TIME HANDLER for irc:responseJoinChannel ', name, id, data);
-      if (data.name !== name || data.id !== id || data.parentId !== parentId) {
-        console.warn('bad routing?!?!', name, id, parentId, data);
+    const actRow = new MessageActionRow()
+      .addComponents(
+        new MessageButton().setCustomId(buttonId + '-ok').setLabel('Join').setStyle('SUCCESS'),
+        new MessageButton().setCustomId(buttonId + '-del').setLabel('Delete').setStyle('DANGER')
+      );
+
+    registerButtonHandler(buttonId + '-ok', async (interaction) => {
+      const refreshedXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
+      interaction.update({
+        components: [],
+        embeds: [
+          new MessageEmbed().setTitle(`Joined \`${name}\`${refreshedXform ? `(really \`#${refreshedXform})\`` : ''} on \`${parentCat.name}\`!`).setTimestamp()
+        ]
+      }).catch(console.error);
+
+      if (!parentCat || !config.irc.registered[parentCat.name]) {
+        console.warn('bad parent cat', parentId, parentCat, data);
         return;
       }
 
-      channelsById[id] = categories[data.parentId].channels[id] = { name, parent: parentId, ...data };
-      channelsByName[categories[data.parentId].name][name] = id;
-      listenedToMutate.addOne();
+      registerOneTimeHandler('irc:responseJoinChannel', name, (data) => {
+        console.debug('ONE TIME HANDLER for irc:responseJoinChannel ', name, id, data);
+        if (data.name !== name || data.id !== id || data.parentId !== parentId) {
+          console.warn('bad routing?!?!', name, id, parentId, data);
+          return;
+        }
+
+        channelsById[id] = categories[data.parentId].channels[id] = { name, parent: parentId, ...data };
+        channelsByName[categories[data.parentId].name][name] = id;
+        listenedToMutate.addOne();
+      });
+
+      const c = new Redis(config.redis.url);
+
+      await c.publish(PREFIX, JSON.stringify({
+        type: 'discord:requestJoinChannel:irc',
+        data: {
+          name,
+          id,
+          parentId
+        }
+      }));
+
+      c.disconnect();
     });
 
-    const c = new Redis(config.redis.url);
+    registerButtonHandler(buttonId + '-del', (interaction) => {
+      deletedBeforeJoin[name] = id;
 
-    await c.publish(PREFIX, JSON.stringify({
-      type: 'discord:requestJoinChannel:irc',
-      data: {
-        name,
-        id,
-        parentId
-      }
-    }));
+      const msg = `Removed channel ${name} (ID: ${id}) before join!`;
+      interaction.update({
+        components: [],
+        embeds: [
+          new MessageEmbed().setTitle(msg).setTimestamp()
+        ]
+      }).catch(console.error);
 
-    c.disconnect();
+      sendToBotChan(msg);
+      client.channels.cache.get(id).delete('Removed before join');
+    });
+
+    client.channels.cache.get(id).send({ embeds: [embed], components: [actRow] });
   });
 
   client.on('channelDelete', async (data) => {
     const { name, parentId } = data;
     const parentCat = categories[parentId];
-    const c = new Redis(config.redis.url);
-    await c.publish(PREFIX, JSON.stringify({
-      type: 'discord:deleteChannel',
-      data: {
-        name,
-        network: parentCat.name
-      }
-    }));
-    c.disconnect();
+
+    if (!deletedBeforeJoin[name]) {
+      const c = new Redis(config.redis.url);
+      await c.publish(PREFIX, JSON.stringify({
+        type: 'discord:deleteChannel',
+        data: {
+          name,
+          network: parentCat.name
+        }
+      }));
+      c.disconnect();
+    } else {
+      console.log(`Removed channel ${name} (ID: ${deletedBeforeJoin[name]}) before join`);
+      delete deletedBeforeJoin[name];
+    }
+  });
+
+  client.on('interactionCreate', (interaction) => {
+    if (!interaction.isButton()) {
+      return;
+    }
+
+    console.debug('interactionCreate', interaction);
+
+    if (!config.app.allowedSpeakers.includes(interaction.user.id)) {
+      console.warn('BAD BUTTON PUSH', interaction.user);
+      return;
+    }
+
+    const handlerList = buttonHandlers[interaction.customId];
+
+    if (!handlerList) {
+      console.error(`No handlers registered for button ${interaction.customId}!`);
+      return;
+    }
+
+    try {
+      handlerList.forEach((handler) => handler(interaction));
+    } catch (err) {
+      console.error('Button handler failed:', err.message, err.stack);
+    }
+
+    buttonHandlers[interaction.customId] = [];
   });
 
   const cfgClient = new Redis(config.redis.url);
@@ -609,7 +712,7 @@ client.once('ready', async () => {
   }
 });
 
-['interactionCreate', 'error', 'userUpdate', 'warn', 'presenceUpdate', 'shardError'].forEach((eName) => {
+['error', 'userUpdate', 'warn', 'presenceUpdate', 'shardError'].forEach((eName) => {
   client.on(eName, (...a) => {
     console.debug({ event: eName }, ...a);
     if (eName === 'error' || eName === 'warn') {

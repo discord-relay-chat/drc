@@ -191,7 +191,7 @@ module.exports = {
         throw new Error(`Bad channel ID spec ${channelIdSpec}`);
       }
 
-      const [_, channel] = [...channelIdSpec.matchAll(CHANNELS_PATTERN)][0]; // eslint-disable-line no-unused-vars
+      const [, channel] = [...channelIdSpec.matchAll(CHANNELS_PATTERN)][0];
 
       const key = [network, channel].join('_');
       const cmdFunctor = generateListManagementUCExport(`${commandName}_${key}`, additionalCommands);

@@ -47,12 +47,16 @@ resolver.__unrequireCommands = function () {
     './common',
     ...fileExportReqdPaths
   ]
-    .forEach((fPath) => (delete require.cache[require.resolve(fPath)]));
+    .forEach((fPath) => {
+      delete require.cache[require.resolve(fPath)];
+      require(require.resolve(fPath));
+    });
 };
 
 resolver.__unresolve = function () {
   require(MODULENAME).__unrequireCommands();
   delete require.cache[require.resolve(MODULENAME)];
+  require(MODULENAME);
 };
 
 resolver.__functions = {
@@ -98,6 +102,19 @@ resolver.__functions = {
     const length = context.options.length || 16;
     const fmt = context.options.format || 'base64';
     return Buffer.from(Array.from({ length }, () => Math.floor(Math.random() * 0xFF))).toString(fmt);
+  },
+
+  debugLogging (context) {
+    let prefix = 'En';
+    if (context.argObj._[0]) {
+      require('../logger').enableLevel('debug');
+      console.debug('Debug logging enabled by user!');
+    } else {
+      require('../logger').disableLevel('debug');
+      prefix = 'Dis';
+    }
+
+    return `**${prefix}abled** debug logging for the Discord bot.`;
   }
 };
 
