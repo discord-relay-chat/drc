@@ -75,7 +75,7 @@ function resolveNameForDiscord (network, ircName) {
     }, {});
   }
 
-  return ((network && ircName && (resolverRev && resolverRev[network] && 
+  return ((network && ircName && (resolverRev && resolverRev[network] &&
     resolverRev[network][ircName.toLowerCase().slice(1)])) || ircName.replace(/^#/, '')).toLowerCase();
 }
 

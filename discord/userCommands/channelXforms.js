@@ -4,7 +4,7 @@ const { matchNetwork, ChannelXforms } = require('../../util');
 const { formatKVs } = require('../common');
 
 async function formattedGet (network) {
-  return `\nChannel transforms for **${network}** (\`Discord\` → IRC):\n` + 
+  return `\nChannel transforms for **${network}** (\`Discord\` → IRC):\n` +
     formatKVs(Object.fromEntries(Object.entries(
       ChannelXforms.forNetwork(network)).map(([k, v]) => [k, `#${v}`])), ' → ');
 }
@@ -16,7 +16,7 @@ const subCommands = {
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));
     return formattedGet(network);
   },
-  
+
   remove: async (context, network, dChan) => {
     await ChannelXforms.remove(network, dChan);
     return formattedGet(network);
