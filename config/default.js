@@ -76,6 +76,7 @@ module.exports = {
     ctcpVersionUrl: 'https://discordrc.com',
     floodProtectWaitMs: 500,
     quitMsgChanId: '',
+    channelXformsPath: 'config/channelXforms.json',
     registered: {
       /*
       "networkHostname": {
@@ -88,20 +89,6 @@ module.exports = {
             "password": "" // if falsy, will be prompted for on the console
           }
         }
-      }
-      */
-    },
-    channelXforms: {
-      /*
-      "networkHostname": {
-        // NOTE: both are specified WITHOUT the leading hash (#)!
-        "discordChannelName": "ircChannelName",
-
-        // examples from irc.libera.chat where the irc channel name is not a valid discord channel name
-        "nodejs": "node.js",
-        "chat": "#chat", // libera channel name is ##chat
-        "cpp": "c++",
-        "infra-talk": "#infra-talk" // libera channel name is ##infra-talk
       }
       */
     }

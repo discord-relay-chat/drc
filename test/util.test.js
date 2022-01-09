@@ -43,5 +43,7 @@ test('replaceIrcEscapes', () => {
     .toEqual('`IRC:JOINED-CHANNEL` **#irpg** (#irpg) on `irc.undernet.org` has **77** users');
 
   expect(util.replaceIrcEscapes(Buffer.from('02 5b 72 69 7a 6f 6e 5d 02 20 3c 2b 03 30 35 44 75 63 6b 48 75 6e 74 03 3e'.split(' ').join(''), 'hex').toString()))
-    .toEqual('**[rizon]** <+DuckHunt>')
+    .toEqual('**[rizon]** <+DuckHunt>');
+
+  expect(util.replaceIrcEscapes('\x02[rizon]\x02 <\x0309cpucake_13\x03>')).toEqual('**[rizon]** <cpucake_13>');
 })

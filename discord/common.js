@@ -105,7 +105,7 @@ module.exports = {
     const name = uuid.v4();
 
     if (!data.length) {
-      context.sendToBotChan(`No messages for \`${context.network}\` have been squelched.`);
+      context.sendToBotChan(`No messages for \`${context.network}\` were found.`);
       return;
     }
 
@@ -162,7 +162,7 @@ module.exports = {
     return { msgId, msgKey };
   },
 
-  formatKVs (obj) {
+  formatKVs (obj, delim = ':\t') {
     const vFmt = (v) => {
       switch (typeof v) {
         case 'object':
@@ -177,7 +177,7 @@ module.exports = {
     };
 
     const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
-    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`:\t**${vFmt(obj[k])}**`).join('\n');
+    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}**${vFmt(obj[k])}**`).join('\n');
   },
 
   generateListManagementUCExport,

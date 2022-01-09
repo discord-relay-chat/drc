@@ -280,7 +280,7 @@ module.exports = async (context, channel, msg) => {
       stats.sinceLast.quits.push(e.nick.replace(/[^a-zA-Z0-9]/g, ''));
 
       if (config.user.showQuits) {
-        sendToBotChan(`\`QUIT\` **${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> quit: "${parsed.data.message}"`);
+        sendToBotChan(`\`QUIT\` **${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> quit: "${replaceIrcEscapes(parsed.data.message)}"`);
       }
     } else if (parsed.type === 'irc:exit') {
       console.error('IRC daemon exited!');
@@ -389,6 +389,10 @@ module.exports = async (context, channel, msg) => {
 
       const msgChan = client.channels.cache.get(chanSpec.id);
 
+      if (parsed.data.message) {
+        parsed.data.message = replaceIrcEscapes(parsed.data.message);
+      }
+
       if (msgChan) {
         if (subType === 'part' || subType === 'join') {
           let sender = sendToBotChan;
@@ -396,7 +400,9 @@ module.exports = async (context, channel, msg) => {
             sender = (s) => msgChan.__s(`(*${new Date().toLocaleTimeString()}*) ${s}`);
           }
 
-          sender(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${subType}ed${subType !== 'join' ? (config.user.joinsToBotChannel ? ` #${parsed.data.channel}: "${parsed.data.message}"` : ': "' + parsed.data.message + '"') : ''}`);
+          sender(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${subType}ed${subType !== 'join'
+            ? (config.user.joinsToBotChannel ? ` #${parsed.data.channel}: "${parsed.data.message}"` : ': "' + parsed.data.message + '"')
+: ''}`);
         } else if (subType === 'kick') {
           msgChan.send(`\`KICK\` **${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
           sendToBotChan(`\`IRC:KICK\` **${parsed.data.kicked}** was kicked from **${parsed.data.channel}** by **${parsed.data.nick}**: "${parsed.data.message}"`);

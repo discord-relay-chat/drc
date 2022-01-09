@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const _ = require('lodash');
 const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
@@ -8,6 +9,7 @@ const readline = require('readline');
 const { fetch } = require('undici');
 const dns = require('dns').promises;
 const shodan = require('shodan-client');
+const parseDuration = require('parse-duration');
 
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
 const VERSION = PKGJSON.version;
@@ -18,19 +20,63 @@ const CTCPVersion = `${config.irc.ctcpVersionPrefix} v${VERSION} <${config.irc.c
 
 let resolverRev;
 
+const ChannelXforms = new class {
+  constructor () {
+    this.path = path.resolve(config.irc.channelXformsPath);
+    this.cache = JSON.parse(fs.readFileSync(this.path));
+  }
+
+  forNetwork (network) {
+    if (ChannelXforms.cache[network]) {
+      return _.cloneDeep(ChannelXforms.cache[network]);
+    }
+
+    return undefined;
+  }
+
+  async _mutate (network, discordChannel, ircChannel) {
+    if (!this.cache[network]) {
+      return null;
+    }
+
+    const net = this.cache[network];
+
+    if (ircChannel) {
+      net[discordChannel] = ircChannel;
+    } else {
+      if (!net[discordChannel]) {
+        return null;
+      }
+
+      delete net[discordChannel];
+    }
+
+    return fs.promises.writeFile(this.path, JSON.stringify(this.cache, null, 2));
+  }
+
+  async set (network, discordChannel, ircChannel) {
+    return this._mutate(network, discordChannel, ircChannel);
+  }
+
+  async remove (network, discordChannel) {
+    return this._mutate(network, discordChannel, null);
+  }
+}();
+
 function resolveNameForIRC (network, name) {
-  const xforms = config.irc && config.irc.channelXforms[network];
+  const xforms = ChannelXforms.cache[network];
   return (xforms && xforms[name]) || name;
 }
 
 function resolveNameForDiscord (network, ircName) {
   if (!resolverRev) {
-    resolverRev = Object.entries(config.irc.channelXforms).reduce((a, [network, nEnt]) => {
+    resolverRev = Object.entries(ChannelXforms.cache).reduce((a, [network, nEnt]) => {
       return { [network]: Object.entries(nEnt).reduce((b, [k, v]) => ({ [v]: k, ...b }), {}), ...a };
     }, {});
   }
 
-  return ((network && ircName && (resolverRev && resolverRev[network] && resolverRev[network][ircName.toLowerCase().slice(1)])) || ircName.replace(/^#/, '')).toLowerCase();
+  return ((network && ircName && (resolverRev && resolverRev[network] && 
+    resolverRev[network][ircName.toLowerCase().slice(1)])) || ircName.replace(/^#/, '')).toLowerCase();
 }
 
 function channelsCountProcessed (channels, prev, durationInS) {
@@ -286,7 +332,7 @@ const getLogsFormats = {
   txt: (x) => `[${new Date(x.__drcIrcRxTs).toISOString()}] <${x.nick}> ${x.message}`
 };
 
-async function getLogs (network, channel, fromTime, toTime, format = 'json', filterByNick) {
+async function getLogs (network, channel, { from, to, format = 'json', filterByNick } = {}) {
   const logCfg = config.irc.log;
 
   if (!logCfg || !logCfg.channelsToFile) {
@@ -299,7 +345,21 @@ async function getLogs (network, channel, fromTime, toTime, format = 'json', fil
     throw new Error(`bad format ${format}`);
   }
 
-  [fromTime, toTime] = [fromTime, toTime].map(x => x ? new Date(x) : undefined);
+  const [fromTime, toTime] = [from, to].map(x => {
+    const chkDate = new Date(x);
+
+    if (chkDate.toString() === 'Invalid Date') {
+      const parsed = parseDuration(x);
+
+      if (parsed) {
+        return Number(new Date()) + parsed;
+      }
+
+      return undefined;
+    }
+
+    return chkDate;
+  });
 
   const expectedPath = path.resolve(path.join(logCfg.path, network, channel));
   const rl = readline.createInterface({ input: fs.createReadStream(expectedPath) });
@@ -326,7 +386,7 @@ async function getLogs (network, channel, fromTime, toTime, format = 'json', fil
 
       retList.push(formatter(pLine));
     } catch (e) {
-      console.error(`failed parse on line ${lc}, "${e.message}":`, line);
+      console.debug(`getLogs(${network}, ${channel})> failed parse ${expectedPath}:${lc}, "${e.message}":`, line);
     } finally {
       lc++;
     }
@@ -389,7 +449,7 @@ async function searchLogs (network, options) {
 
   let totalLines = 0;
   const searchResults = Object.fromEntries((await Promise.all(networkFiles.map((f) => new Promise((resolve) => {
-    getLogs(network, f.name).then((logLines) => resolve([f.name, logLines]));
+    getLogs(network, f.name, options).then((logLines) => resolve([f.name, logLines]));
   }))))
     .map(([channel, lines]) => {
       totalLines += lines.length;
@@ -425,7 +485,7 @@ const IRCColorsStripMax = 16;
 // the following aren't supported by us, so we just strip them
 const ircEscapeStripSet = Object.freeze([
   ...Buffer.from(Array.from({ length: IRCColorsStripMax }).map((_, i) => i)).toString().split('').map(x => `\x03${x}`), // colors
-  ...Array.from({ length: 9 }).map((_, i) => i).map(x => `\x030${x}`),
+  ...Array.from({ length: 10 }).map((_, i) => i).map(x => `\x030${x}`),
   ...Array.from({ length: 7 }).map((_, i) => i).map(x => `\x03${x + 10}`),
   '\x16', // reverse color
   '\x0f' // reset; TODO, some bots have been seen to use this byte to reset standard escapes (defined in ircEscapeXforms above)... need to handle this
@@ -493,12 +553,15 @@ function xxd (buffer, { rowWidth = 32, returnRawLines = false } = {}) {
 }
 
 module.exports = {
+  ircEscapeStripSet,
   ENV,
   NAME,
   PREFIX,
   VERSION,
   CTCPVersion,
   IRCColorsStripMax,
+
+  ChannelXforms,
 
   resolveNameForIRC,
   resolveNameForDiscord,

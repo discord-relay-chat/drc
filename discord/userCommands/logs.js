@@ -18,11 +18,14 @@ const subCommands = {
     }
 
     const resChan = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
-    const retList = await getLogs(network, resChan, context.options.from, context.options.to, 'json', context.options.onlyNicks);
+    const retList = await getLogs(network, resChan, context.options);
+
     serveMessages({ network, ...context }, retList.map((data) => ({
       timestamp: data.__drcIrcRxTs,
       data
     })));
+
+    return `Query results for \`${network}\`:**${resChan}**:`;
   },
 
   search: async (context, network) => {
@@ -52,6 +55,7 @@ const subCommands = {
     }
   }
 };
+
 module.exports = async function (context) {
   const [netStub, subCmd] = context.argObj._;
   const { network } = matchNetwork(netStub);
