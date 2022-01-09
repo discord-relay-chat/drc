@@ -1,0 +1,9 @@
+{
+  "irc.libera.chat": {
+    "nodejs": "node.js",
+    "chat": "#chat",
+    "cpp": "c++",
+    "cppgeneral": "c++-general",
+    "infra-talk": "#infra-talk"
+  }
+}
