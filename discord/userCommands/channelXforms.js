@@ -20,7 +20,6 @@ const subCommands = {
     }
 
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));
-    // channelsByName doesn't have the right entry yet! but we don't have the discord channel ID yet either, so have to wait...
     return formattedGet(network);
   },
 

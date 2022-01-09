@@ -30,7 +30,6 @@ const ChannelXforms = new class {
     let resolvePath = config.irc.channelXformsPath;
 
     if (process.env.NODE_ENV) {
-      console.debug('have env', process.env.NODE_ENV);
       const pathComps = path.parse(config.irc.channelXformsPath);
       this.path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
 
