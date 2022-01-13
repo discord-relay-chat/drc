@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PREFIX, NAME, VERSION } = require('./util');
+const { PREFIX, NAME, VERSION, expiryFromOptions } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
 const mustache = require('mustache');
@@ -25,16 +25,26 @@ const registered = {
 
 const renderCache = {};
 
-const templatePath = path.join(__dirname, 'http', 'templates');
-const templates = fs.readdirSync(templatePath).reduce((a, tmplPath) => {
-  const { name } = path.parse(tmplPath);
-  return {
-    [name]: () => fs.readFileSync(path.join(templatePath, tmplPath)).toString('utf8'),
-    ...a
-  };
-}, {});
+let templates;
+function templatesLoad () {
+  const templatePath = path.join(__dirname, 'http', 'templates');
+  templates = fs.readdirSync(templatePath).reduce((a, tmplPath) => {
+    const { name } = path.parse(tmplPath);
+    return {
+      [name]: () => fs.readFileSync(path.join(templatePath, tmplPath)).toString('utf8'),
+      ...a
+    };
+  }, {});
 
-console.log(`Found templates: ${Object.keys(templates).join(', ')}`);
+  console.log(`Loaded templates: ${Object.keys(templates).join(', ')}`);
+}
+
+process.on('SIGUSR1', () => {
+  console.log('SIGUSR1 received, reloading templates');
+  templatesLoad();
+});
+
+templatesLoad();
 
 redisListener.subscribe(PREFIX, (err) => {
   if (err) {
@@ -159,7 +169,7 @@ redisListener.subscribe(PREFIX, (err) => {
           });
 
           registered.get[name] = {
-            exp: Number(new Date()) + ((options.ttl ? options.ttl * 60 : config.http.ttlSecs) * 1000),
+            exp: expiryFromOptions(options),
             parsed,
             promise,
             ...rr

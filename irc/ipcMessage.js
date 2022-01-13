@@ -132,7 +132,13 @@ module.exports = async (context, chan, msg) => {
 
         const joinFuncs = [];
         chanPrefixes[serverSpec.name] = serverSpec.channels.map(getChannelJoinFunc.bind(null, joinFuncs, serverSpec), []);
-        await floodProtect(joinFuncs);
+
+        // XXX: pretty sure this function is never actually called on the reconnect path!
+        if (isReconnect) {
+          await Promise.all(joinFuncs.map((f) => f()));
+        } else {
+          await floodProtect(joinFuncs);
+        }
 
         console.log(`Joined ${joinFuncs.length} channels on ${serverSpec.name}.`);
         console.debug('chanPrefixes for', serverSpec.name, chanPrefixes[serverSpec.name]);
@@ -309,15 +315,13 @@ module.exports = async (context, chan, msg) => {
 
       for (const [network, prefixes] of Object.entries(chanPrefixes)) {
         // replay each irc:channelJoined then irc:joined
-        await floodProtect(prefixes.map(chanSpec => {
-          return async () => {
-            console.log('Replaying irc:channelJoined on', network, chanSpec);
-            await pubClient.publish(PREFIX, JSON.stringify({
-              type: 'irc:channelJoined',
-              data: chanSpec
-            }));
-          };
-        }));
+        for (const chanSpec of prefixes) {
+          console.log('Replaying irc:channelJoined on', network, chanSpec);
+          await pubClient.publish(PREFIX, JSON.stringify({
+            type: 'irc:channelJoined',
+            data: chanSpec
+          }));
+        }
 
         console.log('Replaying irc:joined for', network);
         console.debug('chanPrefixes', prefixes);

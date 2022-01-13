@@ -1,28 +1,16 @@
-const fs = require('fs');
+'use strict';
+
 const path = require('path');
 const uuid = require('uuid');
+const { nanoid } = require('nanoid');
 const { PREFIX, AmbiguousMatchResultError, matchNetwork } = require('../util');
-const { generateListManagementUCExport } = require('./common');
+const { dynRequireFrom, generateListManagementUCExport } = require('./common');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
 const fileExportReqdPaths = [];
 const fileExportsPath = path.join(__dirname, path.parse(__filename).name);
-const fileExports = fs.readdirSync(fileExportsPath)
-  .reduce((a, dirEnt) => {
-    const fPath = path.join(fileExportsPath, dirEnt);
-    const fParsed = path.parse(fPath);
-
-    if (!fs.statSync(fPath).isDirectory() && fParsed.ext === '.js') {
-      fileExportReqdPaths.push(fPath);
-      return {
-        [fParsed.name]: require(fPath),
-        ...a
-      };
-    }
-
-    return a;
-  }, {});
+const fileExports = dynRequireFrom(fileExportsPath, (fPath) => fileExportReqdPaths.push(fPath));
 
 function resolver (functionName) {
   const fs = require(MODULENAME).__functions;
@@ -96,6 +84,10 @@ resolver.__functions = {
       f = uuid['v' + context.options.v];
     }
     return f();
+  },
+
+  nanoid () {
+    return nanoid();
   },
 
   rand (context) {

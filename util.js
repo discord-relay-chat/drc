@@ -367,6 +367,10 @@ async function getLogs (network, channel, { from, to, format = 'json', filterByN
     return null;
   }
 
+  if (filterByNick && typeof filterByNick === 'string') {
+    filterByNick = filterByNick.split(',');
+  }
+
   const formatter = getLogsFormats[format];
 
   if (!formatter) {
@@ -580,6 +584,14 @@ function xxd (buffer, { rowWidth = 32, returnRawLines = false } = {}) {
   return returnRawLines ? retLines : retLines.join('\n');
 }
 
+function expiryDurationFromOptions (options) {
+  return (options.ttl ? options.ttl * 60 : config.http.ttlSecs) * 1000;
+}
+
+function expiryFromOptions (options) {
+  return Number(new Date()) + expiryDurationFromOptions(options);
+}
+
 module.exports = {
   ircEscapeStripSet,
   ENV,
@@ -610,6 +622,10 @@ module.exports = {
   findFixedNonZero,
   replaceIrcEscapes,
   xxd,
+
+  expiryFromOptions,
+
+  expiryDurationFromOptions,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

@@ -13,10 +13,6 @@ const subCommands = {
       throw new Error('bad channel ' + chanId);
     }
 
-    if (context.options.onlyNicks) {
-      context.options.onlyNicks = context.options.onlyNicks.split(',');
-    }
-
     const resChan = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
     const retList = await getLogs(network, resChan, context.options);
 
@@ -56,8 +52,31 @@ const subCommands = {
   }
 };
 
-module.exports = async function (context) {
+async function f (context) {
   const [netStub, subCmd] = context.argObj._;
   const { network } = matchNetwork(netStub);
   return subCommands[subCmd](context, network);
+}
+
+f.__drcHelp = () => {
+  return {
+    title: 'Query & search IRC logs',
+    usage: '<network> <subcommand> [arguments] [options]',
+    notes: 'Anywhere a time value is required, it can either be anything parseable by `new Date()`, ' +
+      '_or_ a duration value (negative of course, as searching into the future isn\'t quite perfect yet) ' +
+      'such as "-1h" for "one hour in the past".\n\nDiscord channels will be correctly translated, if used.',
+    subcommands: {
+      get: {
+        header: 'Directly queries the logs for the specified channel.',
+        text: 'Sole argument is the channel to be queried.\n\n' +
+        'Options:\n'
+      },
+      set: {
+        header: 'Searches across all logs for the given network. Slower, but more capable, than `get`',
+        text: 'Options:\n'
+      }
+    }
+  };
 };
+
+module.exports = f;

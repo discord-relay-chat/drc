@@ -1,10 +1,32 @@
 'use strict';
 
-const uuid = require('uuid');
+const fs = require('fs');
+const path = require('path');
 const config = require('config');
 const Redis = require('ioredis');
+const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
+
+function dynRequireFrom (dir, addedCb) {
+  return fs.readdirSync(dir).reduce((a, dirEnt) => {
+    const fPath = path.join(dir, dirEnt);
+    const fParsed = path.parse(fPath);
+
+    if (!fs.statSync(fPath).isDirectory() && fParsed.ext === '.js' && fParsed.name !== 'index') {
+      if (addedCb) {
+        addedCb(fPath);
+      }
+
+      return {
+        [fParsed.name]: require(fPath),
+        ...a
+      };
+    }
+
+    return a;
+  }, {});
+}
 
 function generateListManagementUCExport (commandName, additionalCommands) {
   const f = async function (context, ...a) {
@@ -52,25 +74,36 @@ function generateListManagementUCExport (commandName, additionalCommands) {
   };
 
   f.__drcHelp = () => {
-    return `!${commandName} network subcommand ...\n\n` +
-    'Where \'subcommand\' is one of: add, remove, clear.\n' +
-    '\'add\' & \'remove\' use the remaining arguments as the value; \'clear\' takes no arguments.\n\n' +
-    (additionalCommands
-      ? 'Additional subcommand:\n' +
-      Object.keys(additionalCommands).filter(x => x[0] !== '_').join(', ')
-      : '');
+    return {
+      title: `Add or remove strings to the \`${commandName}\` list.`,
+      usage: 'network subcommand [string]',
+      subcommands: {
+        add: {
+          text: `Adds \`string\` to the \`${commandName}\` list.`
+        },
+        remove: {
+          text: `Removes \`string\` from the \`${commandName}\` list.`
+        },
+        clear: {
+          text: `Removes all strings from the \`${commandName}\` list.`
+        }
+      }
+    };
   };
 
   return f;
 }
 
 module.exports = {
+  dynRequireFrom,
+  generateListManagementUCExport,
+
   async servePage (context, data, renderType, callback) {
     if (!context || !data || !renderType) {
       throw new Error('not enough args');
     }
 
-    const name = uuid.v4();
+    const name = nanoid();
 
     context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
       const r = new Redis(config.redis.url);
@@ -102,7 +135,7 @@ module.exports = {
 
   // this and ^servePage should be refactored together, they're very similar
   async serveMessages (context, data, callback) {
-    const name = uuid.v4();
+    const name = nanoid();
 
     if (!data.length) {
       context.sendToBotChan(`No messages for \`${context.network}\` were found.`);
@@ -154,7 +187,7 @@ module.exports = {
 
     const rClient = new Redis(config.redis.url);
     key = [key, messageType, network, 'stream'].join(':');
-    const msgKey = ':' + [Number(msgObj.timestamp), uuid.v4()].join(':');
+    const msgKey = ':' + [Number(msgObj.timestamp), nanoid()].join(':');
     const fullKey = key + msgKey;
     const msgId = await rClient.xadd(key, '*', 'message', msgKey);
     await rClient.set(fullKey, JSON.stringify({ __drcMsgId: msgId, ...msgObj }));
@@ -179,8 +212,6 @@ module.exports = {
     const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
     return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}**${vFmt(obj[k])}**`).join('\n');
   },
-
-  generateListManagementUCExport,
 
   generatePerChanListManagementUCExport (commandName, additionalCommands) {
     return function (context, ...a) {

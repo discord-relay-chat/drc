@@ -1,3 +1,7 @@
+'use strict';
+
+const { MessageEmbed } = require('discord.js');
+
 function f (context) {
   const [cmd] = context.options._;
 
@@ -11,14 +15,48 @@ function f (context) {
       throw new Error(`no __drcHelp defined for "${cmd}"`);
     }
 
-    toSend = '```\n' + helpFunc(context) + '\n```';
+    toSend = helpFunc(context);
   }
 
   if (!toSend) {
-    toSend = '_Available commands (`!help [command]` for help with `command`)_: **' + Object.keys(reReq.__functions).sort().join('**, **') + '**\n';
-  }
+    context.sendToBotChan('_Available commands, **bolded** have further help available via `!help [command]`_: ' +
+      Object.keys(reReq.__functions).sort().map((fk) =>
+        reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
+      ).join(', ') + '\n');
+  } else {
+    if (typeof toSend === 'string') {
+      toSend = '```\n' + toSend + '\n```';
+      context.sendToBotChan(toSend);
+    } else {
+      if (typeof toSend === 'object') {
+        if (!toSend.title || !toSend.usage) {
+          throw new Error('bad shape of help object');
+        }
 
-  context.sendToBotChan(toSend);
+        const toSendEmbed = new MessageEmbed()
+          .setTitle(toSend.title)
+          .setColor(toSend.color || '#0011ff')
+          .addField('Usage', '`!' + cmd + ' ' + toSend.usage + '`')
+          .setTimestamp();
+
+        if (toSend.notes) {
+          toSendEmbed.addField('Notes', toSend.notes);
+        }
+
+        if (toSend.subcommands) {
+          for (const [name, { header, text }] of Object.entries(toSend.subcommands)) {
+            toSendEmbed
+              .addField('Subcommand', '`' + name + '`')
+              .addField(text && header ? header : 'Usage', text);
+          }
+        }
+
+        toSend = toSendEmbed;
+      }
+
+      context.sendToBotChan(toSend, true);
+    }
+  }
 }
 
 f.__drcHelp = (context) => {

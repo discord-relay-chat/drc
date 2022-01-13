@@ -97,9 +97,9 @@ module.exports = async (context, channel, msg) => {
         throw new Error(`Bad Discord channel id ${joined.id}`, joined);
       }
 
-      msgChan.__s = msgChan.send;
-      msgChan.send = (s) => msgChan.__s('`[' + new Date().toLocaleTimeString() + ']` ' + s)
-        .catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack));
+      msgChan.__drcSend = (s) => msgChan.send(
+        (config.user.timestampMessages ? '`' + new Date().toLocaleTimeString() + '` ' : '') + s
+      ).catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack));
 
       const newClient = new Redis(config.redis.url);
       const ignoreClient = new Redis(config.redis.url);
@@ -121,18 +121,19 @@ module.exports = async (context, channel, msg) => {
             if (parsed.type === 'irc:message') {
               const e = parsed.data;
               if (e.type === 'privmsg' || e.type === 'action') {
-                let eHead = '<';
-                let eFoot = '>';
-                let eStyle = '**';
+                let eHead = config.app.render.message.normal.head;
+                let eFoot = config.app.render.message.normal.foot;
+                let eStyle = config.app.render.message.normal.style;
 
                 if (e.type === 'action') {
-                  eHead = '* ';
-                  eFoot = '';
+                  eHead = config.app.render.message.action.head;
+                  eFoot = config.app.render.message.action.foot;
+                  eStyle = config.app.render.message.action.style;
                 }
 
                 // it's us (when enable_echomessage === true)
                 if (config.irc.registered[e.__drcNetwork].user.nick === e.nick) {
-                  eStyle = '_';
+                  eStyle = config.app.render.message.self.style;
                 }
 
                 const persistMsgWithAutoCapture = async (type) => {
@@ -194,7 +195,7 @@ module.exports = async (context, channel, msg) => {
                 }
 
                 try {
-                  msgChan.send(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${replaceIrcEscapes(e.message)}`);
+                  msgChan.__drcSend(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${replaceIrcEscapes(e.message).trim()}`);
                   stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
                 } catch (err) {
                   console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);
@@ -252,9 +253,6 @@ module.exports = async (context, channel, msg) => {
       subscribedChans[joined.id] = newClient;
       listenedToMutate.addOne();
 
-      sendToBotChan('`IRC:JOINED-CHANNEL` ' + `**${parsed.data.ircName}** (#${parsed.data.name}) on \`${parsed.data.__drcNetwork}\` has **${parsed.data.userCount}** users` +
-        (parsed.data.operators && parsed.data.operators.length ? `\n**Operators**: ${parsed.data.operators.join(', ')}` : ''));
-
       if (!isReconnect()) {
         const onJoinOpts = [parsed.data.__drcNetwork, `<#${parsed.data.id}>`];
         const onJoinCtx = {
@@ -273,8 +271,18 @@ module.exports = async (context, channel, msg) => {
 
         onJoinCtx.redis.disconnect();
       }
+
+      if (!isReconnect() || !config.user.squelchReconnectChannelJoins) {
+        sendToBotChan('`IRC:JOINED-CHANNEL` ' + `**${parsed.data.ircName}** (#${parsed.data.name}) on \`${parsed.data.__drcNetwork}\` has **${parsed.data.userCount}** users` +
+          (parsed.data.operators && parsed.data.operators.length ? `\n**Operators**: ${parsed.data.operators.join(', ')}` : ''));
+      }
     } else if (parsed.type === 'irc:joined') {
-      // sendToBotChan('`IRC:JOINED` network ' + parsed.data.network + '\n\n' + ` * Listening to ${parsed.data.channels.length} channels.\n`)
+      const embed = new MessageEmbed()
+        .setColor(config.app.stats.embedColors.irc.networkJoined)
+        .setTitle(`Fully joined network \`${parsed.data.network}\``)
+        .setDescription('Listening to ' + `**${parsed.data.channels.length}** channels`)
+        .setTimestamp();
+      sendToBotChan(embed, true);
     } else if (parsed.type === 'irc:quit') {
       const e = parsed.data;
       stats.sinceLast.quits.push(e.nick.replace(/[^a-zA-Z0-9]/g, ''));
@@ -305,10 +313,19 @@ module.exports = async (context, channel, msg) => {
 
       redis.disconnect();
 
-      sendToBotChan('`IRC:' + e.type.toUpperCase() + '` on `' + e.__drcNetwork + '`\n' +
-        `\`From:\` **${e.nick}${e.from_server ? ' (SERVER!)' : ''}** <_${e.ident}@${e.hostname}_>\n` +
-        `\`  To:\` **${e.target}**${e.target === mentionTarget && isIgnored === '' && (config.user.notifyOnNotices || e.type === 'privmsg') ? allowedSpeakersMentionString() : ''}\n` +
-        '```\n' + isIgnored + e.message + isIgnored + '\n```\n');
+      const embed = new MessageEmbed()
+        .setColor(config.app.stats.embedColors.irc.privMsg)
+        .setTitle(`Private message on \`${e.__drcNetwork}\`:`)
+        .addField('`From:`', `**${e.nick}${e.from_server ? ' (SERVER!)' : ''}** <_${e.ident}@${e.hostname}_>`)
+        .addField('`  To:`', `**${e.target}**`)
+        .setDescription('```\n' + isIgnored + e.message + isIgnored + '\n```\n')
+        .setTimestamp();
+
+      if (e.target === mentionTarget && isIgnored === '' && (config.user.notifyOnNotices || e.type === 'privmsg')) {
+        sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
+      }
+
+      sendToBotChan(embed, true);
     } else if (type === 'irc' && subType === 'nick') {
       if (config.user.showNickChanges) {
         sendToBotChan('`IRC:NICK` ' + `**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> changed nickname to **${parsed.data.new_nick}**`);
@@ -396,15 +413,15 @@ module.exports = async (context, channel, msg) => {
       if (msgChan) {
         if (subType === 'part' || subType === 'join') {
           let sender = sendToBotChan;
-          if ((subType === 'join' ? !config.user.joinsToBotChannel : true) && msgChan.__s) {
-            sender = (s) => msgChan.__s(`(*${new Date().toLocaleTimeString()}*) ${s}`);
+          if ((subType === 'join' ? !config.user.joinsToBotChannel : true)) {
+            sender = (msgChan.__drcSend || msgChan.send).bind(msgChan);
           }
 
           sender(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${subType}ed${subType !== 'join'
             ? (config.user.joinsToBotChannel ? ` #${parsed.data.channel}: "${parsed.data.message}"` : ': "' + parsed.data.message + '"')
 : ''}`);
         } else if (subType === 'kick') {
-          msgChan.send(`\`KICK\` **${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
+          msgChan.__drcSend(`\`KICK\` **${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
           sendToBotChan(`\`IRC:KICK\` **${parsed.data.kicked}** was kicked from **${parsed.data.channel}** by **${parsed.data.nick}**: "${parsed.data.message}"`);
         } else if (subType === 'topic' && parsed.data.topic) {
           msgChan.setTopic(parsed.data.topic);

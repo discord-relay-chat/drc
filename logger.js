@@ -24,7 +24,7 @@ function initialize (processName = process.title, overrideConsole = true) {
       fs.mkdirSync(config.app.log.path);
     }
 
-    const APP_NAMEVER = [NAME, VERSION, processName].join('/');
+    const APP_NAMEVER = [NAME, VERSION, processName, process.pid].join('/');
     const dsMapper = (dsArr, colors = false) => dsArr.map(x => typeof x === 'string' ? x : util.inspect(x, { colors, depth: null })).join(' ');
 
     const _outStream = fs.createWriteStream(path.join(config.app.log.path, `${processName}.log`));

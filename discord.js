@@ -2,23 +2,15 @@
 
 const inq = require('inquirer');
 const config = require('config');
-const crypto = require('crypto');
-const { Client, Intents, MessageActionRow, MessageButton, MessageEmbed, MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
+const { Client, Intents, MessageEmbed } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
-const {
-  PREFIX,
-  VERSION,
-  resolveNameForIRC,
-  replaceIrcEscapes,
-  NetworkNotMatchedError,
-  ChannelXforms
-} = require('./util');
-
+const { PREFIX, replaceIrcEscapes, NetworkNotMatchedError } = require('./util');
 const userCommands = require('./discord/userCommands');
 const { formatKVs } = require('./discord/common');
+const eventHandlers = require('./discord/events');
 
 require('./logger')('discord');
 
@@ -91,7 +83,7 @@ function registerButtonHandler (buttonId, handlerFunc) {
   buttonHandlers[buttonId].push(handlerFunc);
 }
 
-const allowedSpeakersMentionString = () => '[' + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + ']';
+const allowedSpeakersMentionString = (s = ['[', ']']) => s[0] + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + s[1];
 
 let sendToBotChan = (...a) => console.error('sendToBotChan not initialized!', ...a);
 
@@ -121,7 +113,7 @@ console.log(`${PREFIX} Discord controller starting...`);
 
 const formatForAllowedSpeakerResponse = (s, raw = false) =>
   (!raw
-    ? `(*${new Date().toLocaleTimeString()}*) ${s}`
+    ? (config.user.timestampMessages ? `(*${new Date().toLocaleTimeString()}*)` : '') + s
     : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
 client.once('ready', async () => {
@@ -129,14 +121,6 @@ client.once('ready', async () => {
 
   client.user.setStatus('idle');
   client.user.setActivity('the IRC daemon...', { type: 'LISTENING' });
-
-  const [uName, uVer] = client.user.username.split(' ');
-  const curVer = `v${VERSION}`;
-
-  if (!uVer || uVer !== curVer) {
-    console.warn('Setting RATE-LIMITED username!');
-    client.user.setUsername(`${uName} ${curVer}`);
-  }
 
   const onExit = async (s) => {
     sendToBotChan('\n```\n' + (await banner(s)) + '\n```\n');
@@ -146,12 +130,12 @@ client.once('ready', async () => {
 
   process.on('exit', () => {
     console.log('beforeExit!');
-    onExit('Bye!');
+    onExit('Exit!');
   });
 
   process.on('SIGINT', () => {
     console.log('Exiting...');
-    onExit('Exit!');
+    onExit('Bye!');
     setInterval(process.exit, 2000);
   });
 
@@ -218,7 +202,9 @@ client.once('ready', async () => {
 
   sendToBotChan('\n```\n' + (await banner('Hello!')) + '\n```\n\n');
 
-  let allowedSpeakerCommandHandler = () => { throw new Error('allowedSpeakerCommandHandler not initialized! not configured?'); };
+  let allowedSpeakerCommandHandler = () => {
+    throw new Error('allowedSpeakerCommandHandler not initialized! not configured?');
+  };
 
   if (config.app.allowedSpeakers.length) {
     allowedSpeakerCommandHandler = async (data, toChanId) => {
@@ -247,7 +233,7 @@ client.once('ready', async () => {
           let localSender = sendToBotChan;
 
           if (toChanId) {
-            localSender = async (msg, raw) => client.channels.cache.get(toChanId).send(formatForAllowedSpeakerResponse(msg, raw));
+            localSender = async (msg, raw) => client.channels.cache.get(toChanId).__drcSend(formatForAllowedSpeakerResponse(msg, raw));
           }
 
           const result = await cmdFunc({
@@ -298,258 +284,31 @@ client.once('ready', async () => {
         }
       }
     };
-
-    client.on('messageCreate', async (data) => {
-      if (!data.author || !config.app.allowedSpeakers.includes(data.author.id)) {
-        if (data.author && data.author.id !== config.discord.botId) {
-          sendToBotChan('`DISALLOWED SPEAKER` **' + data.author.username +
-            '#' + data.author.discriminator + '**: ' + data.content);
-          console.error('DISALLOWED SPEAKER', data.author, data.content);
-        }
-        return;
-      }
-
-      if (channelMessageHandlers[data.channelId]) {
-        try {
-          channelMessageHandlers[data.channelId](data);
-        } catch (e) {
-          console.error(`channel message handler for ${data.channelId} failed!`, data, e);
-        }
-
-        return;
-      }
-
-      let replyNick;
-      if (data.type === 'REPLY') {
-        const repliedMsgId = data.reference.messageId;
-        console.debug('REPLYING TO MSG ID' + repliedMsgId + ' in channel ID ' + data.channelId);
-        const chan = await client.channels.cache.get(data.channelId);
-        const replyMsg = await chan.messages.cache.get(repliedMsgId);
-        console.debug('REPLYING TO MSG ' + replyMsg);
-
-        const replyNickMatch = replyMsg.content.matchAll(/<(?:\*\*)?(.*)(?:\*\*)>/g);
-
-        if (replyNickMatch && !replyNickMatch.done) {
-          const replyNickArr = replyNickMatch.next().value;
-
-          if (replyNickArr && replyNickArr.length > 1) {
-            replyNick = replyNickArr[1];
-          }
-        }
-      }
-
-      if (data.channelId === config.irc.quitMsgChanId || data.content.match(/^\s*!/)) {
-        if (replyNick) {
-          console.log(`Appending ${replyNick} to ${data.content} for user command in ${data.channelId}`);
-          data.content = `${data.content} ${replyNick}`;
-        }
-
-        await allowedSpeakerCommandHandler(data, data.channelId !== config.irc.quitMsgChanId ? data.channelId : undefined);
-        return;
-      }
-
-      const channel = channelsById[data.channelId];
-      const network = categories[channel.parent];
-
-      if (!channel || !network) {
-        console.error('Bad channel or network!', channel, network);
-        sendToBotChan('Bad channel or network!');
-        ++stats.errors;
-        return;
-      }
-
-      if (config.user.supressBotEmbeds) {
-        await data.suppressEmbeds(true);
-      }
-
-      console.debug('messageCreate data param', data);
-
-      if (data.attachments) {
-        data.content += ' ' + [...data.attachments.entries()].map(([, att]) => att.proxyURL || att.attachment).join(' ');
-      }
-
-      console.debug('messageCreate chan', channel);
-
-      if (replyNick) {
-        console.log(`Replying to <${replyNick}> in ${data.channelId}`);
-        data.content = `${replyNick}: ${data.content}`;
-      }
-
-      console.debug(`Emitting SAY with data.content: "${data.content}"`);
-
-      let subType = 'say';
-      if (data.content.indexOf('//me') === 0) {
-        subType = 'action';
-        data.content = data.content.replace('//me', '');
-      }
-
-      if (data.content.match(CHANNELS_PATTERN)) {
-        [...data.content.matchAll(CHANNELS_PATTERN)].forEach(([chanMatch, channelId]) => {
-          const chanObj = channelsById[channelId];
-          const parentObj = channelsById[chanObj.parent];
-
-          console.debug('CONTENT MATCH', chanMatch, channelId, channelsById[channelId], resolveNameForIRC(network.name, chanObj.name), parentObj);
-
-          let replacer = '#' + resolveNameForIRC(network.name, chanObj.name);
-          if (parentObj?.name !== network.name) {
-            replacer += ` (on ${network.name})`;
-          }
-
-          data.content = data.content.replace(chanMatch, replacer);
-        });
-      }
-
-      await redisClient.publish(PREFIX, JSON.stringify({
-        type: 'irc:' + subType,
-        data: {
-          network: { name: network.name },
-          channel: resolveNameForIRC(network.name, channel.name),
-          message: data.content
-        }
-      }));
-
-      if (config.user.deleteDiscordWithEchoMessageOn && config.irc.registered[network.name].user.enable_echomessage) {
-        await data.delete();
-      }
-    });
+  } else {
+    delete eventHandlers.messageCreate;
   }
 
   const deletedBeforeJoin = {};
-  client.on('channelCreate', async (data) => {
-    const { name, parentId, id } = data;
-    const parentCat = categories[parentId];
+  const eventHandlerContext = {
+    sendToBotChan,
+    channelMessageHandlers,
+    client,
+    allowedSpeakerCommandHandler,
+    channelsById,
+    categories,
+    stats,
+    deletedBeforeJoin,
+    redisClient,
+    registerButtonHandler,
+    channelsByName,
+    listenedToMutate,
+    registerOneTimeHandler,
+    buttonHandlers
+  };
 
-    console.debug('channelCreate', name, parentId, id, parentCat);
-
-    const curXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
-    const buttonId = [parentId, id, crypto.randomBytes(8).toString('hex')].join('-');
-    const embed = new MessageEmbed()
-      .setTitle(`Ready to join \`#${name}\` on \`${parentCat.name}\`?`)
-      .setColor('#00ff00')
-      .addField('Don\'t want to join this channel after all?', 'Just click "Delete" and you\'re all set.')
-      .setTimestamp();
-
-    if (curXform) {
-      embed.setDescription('This channel already has a transform defined, so when you click "Join" below ' +
-        `we'll _actually_ join \`#${curXform}\` on \`${parentCat.name}\`.\n\nIf this is _not_ correct, adjust it with ` +
-        `\`!channelXforms ${parentCat.name} set ${name} <newTransformName>\` ` +
-        '_before clicking "Join"!_');
-    } else {
-      embed.setDescription('If a channel transform is needed for this channel, ' +
-        `set it up now with \`!channelXforms ${parentCat.name} set ${name} <transformName>\` ` +
-        '_before clicking "Join"!_');
-    }
-
-    const actRow = new MessageActionRow()
-      .addComponents(
-        new MessageButton().setCustomId(buttonId + '-ok').setLabel('Join').setStyle('SUCCESS'),
-        new MessageButton().setCustomId(buttonId + '-del').setLabel('Delete').setStyle('DANGER')
-      );
-
-    registerButtonHandler(buttonId + '-ok', async (interaction) => {
-      const refreshedXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
-      interaction.update({
-        components: [],
-        embeds: [
-          new MessageEmbed().setTitle(`Joined \`${name}\`${refreshedXform ? `(really \`#${refreshedXform})\`` : ''} on \`${parentCat.name}\`!`).setTimestamp()
-        ]
-      }).catch(console.error);
-
-      if (!parentCat || !config.irc.registered[parentCat.name]) {
-        console.warn('bad parent cat', parentId, parentCat, data);
-        return;
-      }
-
-      registerOneTimeHandler('irc:responseJoinChannel', name, (data) => {
-        console.debug('ONE TIME HANDLER for irc:responseJoinChannel ', name, id, data);
-        if (data.name !== name || data.id !== id || data.parentId !== parentId) {
-          console.warn('bad routing?!?!', name, id, parentId, data);
-          return;
-        }
-
-        channelsById[id] = categories[data.parentId].channels[id] = { name, parent: parentId, ...data };
-        channelsByName[categories[data.parentId].name][name] = id;
-        listenedToMutate.addOne();
-      });
-
-      const c = new Redis(config.redis.url);
-
-      await c.publish(PREFIX, JSON.stringify({
-        type: 'discord:requestJoinChannel:irc',
-        data: {
-          name,
-          id,
-          parentId
-        }
-      }));
-
-      c.disconnect();
-    });
-
-    registerButtonHandler(buttonId + '-del', (interaction) => {
-      deletedBeforeJoin[name] = id;
-
-      const msg = `Removed channel ${name} (ID: ${id}) before join!`;
-      interaction.update({
-        components: [],
-        embeds: [
-          new MessageEmbed().setTitle(msg).setTimestamp()
-        ]
-      }).catch(console.error);
-
-      sendToBotChan(msg);
-      client.channels.cache.get(id).delete('Removed before join');
-    });
-
-    client.channels.cache.get(id).send({ embeds: [embed], components: [actRow] });
-  });
-
-  client.on('channelDelete', async (data) => {
-    const { name, parentId } = data;
-    const parentCat = categories[parentId];
-
-    if (!deletedBeforeJoin[name]) {
-      const c = new Redis(config.redis.url);
-      await c.publish(PREFIX, JSON.stringify({
-        type: 'discord:deleteChannel',
-        data: {
-          name,
-          network: parentCat.name
-        }
-      }));
-      c.disconnect();
-    } else {
-      console.log(`Removed channel ${name} (ID: ${deletedBeforeJoin[name]}) before join`);
-      delete deletedBeforeJoin[name];
-    }
-  });
-
-  client.on('interactionCreate', (interaction) => {
-    if (!interaction.isButton()) {
-      return;
-    }
-
-    console.debug('interactionCreate', interaction);
-
-    if (!config.app.allowedSpeakers.includes(interaction.user.id)) {
-      console.warn('BAD BUTTON PUSH', interaction.user);
-      return;
-    }
-
-    const handlerList = buttonHandlers[interaction.customId];
-
-    if (!handlerList) {
-      console.error(`No handlers registered for button ${interaction.customId}!`);
-      return;
-    }
-
-    try {
-      handlerList.forEach((handler) => handler(interaction));
-    } catch (err) {
-      console.error('Button handler failed:', err.message, err.stack);
-    }
-
-    buttonHandlers[interaction.customId] = [];
+  Object.entries(eventHandlers).forEach(([eventName, handler]) => {
+    console.log(`Registered handler for event "${eventName}"`);
+    client.on(eventName, (data) => handler(eventHandlerContext, data));
   });
 
   const cfgClient = new Redis(config.redis.url);
@@ -565,10 +324,8 @@ client.once('ready', async () => {
   }
 
   const mainSubClient = new Redis(config.redis.url);
-
   await mainSubClient.subscribe(PREFIX);
 
-  console.log('Subed to Redis');
   const subscribedChans = {};
   const ircReady = {
     reject: (...a) => { throw new Error('ircReady not setup', a); },
@@ -719,7 +476,6 @@ client.once('ready', async () => {
       }));
     } else {
       console.log('Re-connected!');
-      sendToBotChan('Re-connected!');
     }
 
     client.user.setStatus('online');

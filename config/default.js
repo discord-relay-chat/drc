@@ -33,7 +33,9 @@ module.exports = {
     showParts: true,
     showQuits: false,
     squelchIgnored: true,
-    supressBotEmbeds: true
+    squelchReconnectChannelJoins: true,
+    supressBotEmbeds: true,
+    timestampMessages: true
   },
 
   app: {
@@ -54,7 +56,26 @@ module.exports = {
         long: '#1155ee',
         irc: {
           ready: '#aaeeaa',
-          ipcReconnect: '#99ff99'
+          ipcReconnect: '#99ff99',
+          privMsg: '#bc04fb',
+          networkJoined: '#22aaaa'
+        }
+      }
+    },
+    render: {
+      message: {
+        normal: {
+          head: '[',
+          foot: ']',
+          style: '`'
+        },
+        action: {
+          head: '* ',
+          foot: '',
+          style: ''
+        },
+        self: {
+          style: '**'
         }
       }
     }
@@ -114,6 +135,7 @@ module.exports = {
 
   http: {
     port: 4242,
+    proto: 'https',
     fqdn: os.hostname(),
     ttlSecs: 30 * 60
   },
