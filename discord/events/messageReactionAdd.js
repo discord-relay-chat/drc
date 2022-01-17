@@ -5,9 +5,9 @@ const userCommands = require('../userCommands');
 const { senderNickFromMessage, messageIsFromAllowedSpeaker } = require('../common');
 
 async function whois (context, data) {
-  context.argObj = { 
-    _: [ /// XXX fix this 
-      context.channelsById[context.channelsById[data?.message.channelId].parent].name, 
+  context.argObj = {
+    _: [ /// XXX fix this
+      context.channelsById[context.channelsById[data?.message.channelId].parent].name,
       senderNickFromMessage(data?.message)
     ]
   };
@@ -16,8 +16,8 @@ async function whois (context, data) {
 }
 
 async function ignoreAdd (context, data) {
-  context.argObj = { 
-    _: [ /// XXX fix this 
+  context.argObj = {
+    _: [ /// XXX fix this
       context.channelsById[context.channelsById[data?.message.channelId].parent].name,
       'add',
       senderNickFromMessage(data?.message)
@@ -28,8 +28,8 @@ async function ignoreAdd (context, data) {
 }
 
 async function ignoreRemove (context, data) {
-  context.argObj = { 
-    _: [ /// XXX fix this 
+  context.argObj = {
+    _: [ /// XXX fix this
       context.channelsById[context.channelsById[data?.message.channelId].parent].name,
       'remove',
       senderNickFromMessage(data?.message)
@@ -50,7 +50,7 @@ const allowedReactions = {
   '%E2%9B%94': ignoreAdd, // "⛔"
   '%F0%9F%9A%AB': ignoreAdd, // "🚫",
 
-  '%E2%9E%96': ignoreRemove, // "➖"
+  '%E2%9E%96': ignoreRemove // "➖"
 };
 
 module.exports = async (context, messageReaction, author) => {
@@ -63,17 +63,16 @@ module.exports = async (context, messageReaction, author) => {
 
   if (!messageIsFromAllowedSpeaker({ author }, context)) {
     console.log('can NOT?! use reaction!', author);
-    messageReaction.message.react("❌");
+    messageReaction.message.react('❌');
     return messageReaction.remove();
   }
-  
+
   const retVal = allowedReactions?.[messageReaction.users.reaction?.emoji?.identifier]?.(context, messageReaction, author);
 
   if (retVal) {
-    messageReaction.message.react("✅");
+    messageReaction.message.react('✅');
     removeInTime();
-  }
-  else {
+  } else {
     messageReaction.remove();
   }
 };

@@ -28,28 +28,27 @@ function dynRequireFrom (dir, addedCb) {
   }, {});
 }
 
-const discordEscapeRx = /([*_\`])/g;
+const discordEscapeRx = /([*_`])/g;
 function simpleEscapeForDiscord (s) {
   let lastIndex = 0;
   let accum = '';
 
   for (const match of [...s.matchAll(discordEscapeRx)]) {
-    console.debug(match, lastIndex, match.index, s.slice(lastIndex, match.index), s.slice(match.index, match.index + 1))
+    console.debug(match, lastIndex, match.index, s.slice(lastIndex, match.index), s.slice(match.index, match.index + 1));
     accum += s.slice(lastIndex, match.index) + '\\' + s.slice(match.index, match.index);
     lastIndex = match.index;
   }
 
   if (!lastIndex) {
     accum = s;
-  }
-  else {
+  } else {
     accum += s.slice(lastIndex, s.length);
   }
 
   if (s !== accum) {
     console.debug(`escapeForDiscord "${s}" -> "${accum}"`);
   }
-  
+
   return accum;
 }
 
@@ -125,7 +124,7 @@ module.exports = {
   generateListManagementUCExport,
 
   senderNickFromMessage (msgObj) {
-    const matchRx = new RegExp(`${config.app.render.message.normal.head}${String.raw`(?:\*\*)?(.*)(?:\*\*)`}${config.app.render.message.normal.foot}`, 'g')
+    const matchRx = new RegExp(`${config.app.render.message.normal.head}${String.raw`(?:\*\*)?(.*)(?:\*\*)`}${config.app.render.message.normal.foot}`, 'g');
     const replyNickMatch = msgObj.content?.matchAll(matchRx);
 
     if (replyNickMatch && !replyNickMatch.done) {

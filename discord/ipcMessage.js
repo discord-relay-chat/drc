@@ -47,7 +47,7 @@ module.exports = async (context, channel, msg) => {
         if (parsed.data[i]) {
           parsed.data[i] = simpleEscapeForDiscord(parsed.data[i]);
         }
-      })
+      });
     }
 
     const runOneTimeHandlers = runOneTimeHandlersMatchingDiscriminator.bind(this, parsed.type, parsed.data);
