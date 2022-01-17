@@ -28,6 +28,31 @@ function dynRequireFrom (dir, addedCb) {
   }, {});
 }
 
+const discordEscapeRx = /([*_\`])/g;
+function simpleEscapeForDiscord (s) {
+  let lastIndex = 0;
+  let accum = '';
+
+  for (const match of [...s.matchAll(discordEscapeRx)]) {
+    console.debug(match, lastIndex, match.index, s.slice(lastIndex, match.index), s.slice(match.index, match.index + 1))
+    accum += s.slice(lastIndex, match.index) + '\\' + s.slice(match.index, match.index);
+    lastIndex = match.index;
+  }
+
+  if (!lastIndex) {
+    accum = s;
+  }
+  else {
+    accum += s.slice(lastIndex, s.length);
+  }
+
+  if (s !== accum) {
+    console.debug(`escapeForDiscord "${s}" -> "${accum}"`);
+  }
+  
+  return accum;
+}
+
 function generateListManagementUCExport (commandName, additionalCommands) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
@@ -96,7 +121,35 @@ function generateListManagementUCExport (commandName, additionalCommands) {
 
 module.exports = {
   dynRequireFrom,
+  simpleEscapeForDiscord,
   generateListManagementUCExport,
+
+  senderNickFromMessage (msgObj) {
+    const matchRx = new RegExp(`${config.app.render.message.normal.head}${String.raw`(?:\*\*)?(.*)(?:\*\*)`}${config.app.render.message.normal.foot}`, 'g')
+    const replyNickMatch = msgObj.content?.matchAll(matchRx);
+
+    if (replyNickMatch && !replyNickMatch.done) {
+      const replyNickArr = replyNickMatch.next().value;
+
+      if (replyNickArr && replyNickArr.length > 1) {
+        return replyNickArr[1].replace(/\\/g, '');
+      }
+    }
+  },
+
+  messageIsFromAllowedSpeaker (data, { sendToBotChan = () => {} }) {
+    if (!data.author || !config.app.allowedSpeakers.includes(data.author.id)) {
+      if (data.author && data.author.id !== config.discord.botId) {
+        sendToBotChan('`DISALLOWED SPEAKER` **' + data.author.username +
+          '#' + data.author.discriminator + '**: ' + data.content);
+        console.error('DISALLOWED SPEAKER', data.author, data.content);
+      }
+
+      return false;
+    }
+
+    return true;
+  },
 
   async servePage (context, data, renderType, callback) {
     if (!context || !data || !renderType) {

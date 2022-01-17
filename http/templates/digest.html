@@ -6,16 +6,63 @@
       body {
         color: rgb(29, 251, 0);
         background-color: #111;
+        font-family: 'Helvetica Light', Helvetica, sans-serif;
       }
-      table {
+      .mono {
         font-family: monospace;
-        padding: 20px 0 20px 0;
       }
       .msg {
         color: white;
       }
       .nick {
         color: cyan;
+      }
+
+      /* https://codepen.io/davidelrizzo/pen/eJwqzp */
+      .Rtable {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 0 0 3em 0;
+        padding: 0;
+      }
+
+      .Rtable-cell {
+        box-sizing: border-box;
+        flex-grow: 1;
+        width: 100%;
+        padding: 0.8em 1.2em;
+        overflow: hidden;
+        list-style: none;
+        background: fade(slategrey,20%);
+      }
+
+      .Rtable--2cols > .Rtable-cell  { width: 50%; }
+      .Rtable--3cols > .Rtable-cell  { width: 33.33%; }
+      .Rtable--4cols > .Rtable-cell  { width: 25%; }
+      .Rtable--5cols > .Rtable-cell  { width: 20%; }
+      .Rtable--6cols > .Rtable-cell  { width: 16.6%; }
+      
+      .Rtable--1cols-cell  { width: 63.4%; }
+      .Rtable--2cols-cell  { width: 50%; }
+      .Rtable--3cols-cell  { width: 33.33%; }
+      .Rtable--4cols-cell  { width: 25%; }
+      .Rtable--5cols-cell  { width: 20%; }
+      .Rtable--6cols-cell  { width: 16.6%; }
+      .Rtable--7cols-cell  { width: 10%; }
+
+      /*https://css-tricks.com/accessible-simple-responsive-tables/#article-header-id-2 */
+
+      @media all and (max-width: 600px) {
+        .Rtable--collapse  {
+          display: block;
+        }
+        .Rtable-cell { width: 100% !important; }
+        .Rtable-cell--foot { margin-bottom: 1em; }
+      }
+
+      .Rtable-cell--head { 
+        background-color: rgb(51, 51, 51);
+        border-color: darken(grey,10%);
       }
     </style>
   </head>
@@ -24,17 +71,15 @@
       {{ elements.length }} messages in this digest from <code>{{ network }}</code>
     </h3>
 
-    <table>
+    <div class="row Rtable Rtable--collapse" id="headerrow">
       {{ #elements }}
-      <tr>
-        <td>[{{ timestampString }}]</td>
-        <!-- {{ timestamp }} -->
-        <td>{{ data.target }}</td>
-        <td>&lt;<b class="nick">{{ data.nick }}</b>&gt;</td>
-        <td class="msg">{{ data.message }}</td>
-      </tr>
+      <div class="Rtable-cell Rtable--6cols-cell Rtable-cell--head mono">[{{ timestampString }}]</div>
+      <!-- {{ timestamp }} -->
+      <div class="Rtable-cell Rtable--7cols-cell Rtable-cell--head mono">{{ data.target }}</div>
+      <div class="Rtable-cell Rtable--7cols-cell">&lt;<b class="nick mono">{{ data.nick }}</b>&gt;</div>
+      <div class="Rtable-cell Rtable--1cols-cell" class="msg">{{ data.message }}</div>
       {{ /elements }}
-    </table>
+    </div>
 
     <hr />
     

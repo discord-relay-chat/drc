@@ -1,3 +1,5 @@
+'use strict';
+
 const { shodanHostLookup, matchNetwork } = require('../../util');
 const { PREFIX } = require('../../util');
 const Redis = require('ioredis');
@@ -8,7 +10,7 @@ module.exports = async function (context, ...a) {
     throw new Error('not enough args');
   }
 
-  if (context.argObj.nmap && typeof context.argObj.nmap === 'string') {
+  if (context.argObj?.nmap && typeof context.argObj?.nmap === 'string') {
     context.argObj.nmap = context.argObj.nmap.split(/\s+/g);
   }
 
@@ -24,7 +26,7 @@ module.exports = async function (context, ...a) {
     }
   };
 
-  if (reqObj.data.options.nmap) {
+  if (reqObj.data.options?.nmap) {
     if (typeof reqObj.data.options.nmap === 'number') {
       reqObj.data.options.nmap = `${reqObj.data.options.nmap}`;
     }
@@ -34,7 +36,7 @@ module.exports = async function (context, ...a) {
     }
   }
 
-  if (reqObj.data.options.shodan) {
+  if (reqObj.data.options?.shodan) {
     context.registerOneTimeHandler('irc:whois', `${network}_${nick}`, async (data) => {
       const r = new Redis(config.redis.url);
       await r.publish(PREFIX, JSON.stringify({
@@ -45,5 +47,6 @@ module.exports = async function (context, ...a) {
     });
   }
 
+  console.log('whois PUB', reqObj);
   await context.publish(reqObj);
 };

@@ -3,7 +3,7 @@
 const config = require('config');
 const Redis = require('ioredis');
 const userCommands = require('./userCommands');
-const { formatKVs, persistMessage } = require('./common');
+const { formatKVs, persistMessage, simpleEscapeForDiscord } = require('./common');
 const {
   PREFIX,
   resolveNameForDiscord,
@@ -41,6 +41,14 @@ module.exports = async (context, channel, msg) => {
     const [type, subType, subSubType] = parsed.type.split(':');
     ++stats.messages.total;
     stats.messages.types[type] = (stats.messages.types[type] ?? 0) + 1;
+
+    if (parsed.data) {
+      ['nick', 'kicked', 'ident', 'hostname'].forEach((i) => {
+        if (parsed.data[i]) {
+          parsed.data[i] = simpleEscapeForDiscord(parsed.data[i]);
+        }
+      })
+    }
 
     const runOneTimeHandlers = runOneTimeHandlersMatchingDiscriminator.bind(this, parsed.type, parsed.data);
 
@@ -99,7 +107,7 @@ module.exports = async (context, channel, msg) => {
 
       msgChan.__drcSend = (s) => msgChan.send(
         (config.user.timestampMessages ? '`' + new Date().toLocaleTimeString() + '` ' : '') + s
-      ).catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack));
+      ).catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack, parsed, JSON.stringify(err)));
 
       const newClient = new Redis(config.redis.url);
       const ignoreClient = new Redis(config.redis.url);
@@ -117,6 +125,11 @@ module.exports = async (context, channel, msg) => {
             const [type] = parsed.type.split(':');
             ++stats.messages.total;
             stats.messages.types[type] = (stats.messages.types[type] ?? 0) + 1;
+
+            // ugh copy/pasted directly from above, need to refactor ALL OF THIS
+            if (parsed.data && parsed.data.nick) {
+              parsed.data.nick = simpleEscapeForDiscord(parsed.data.nick);
+            }
 
             if (parsed.type === 'irc:message') {
               const e = parsed.data;

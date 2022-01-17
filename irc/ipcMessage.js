@@ -219,7 +219,7 @@ module.exports = async (context, chan, msg) => {
           // the 'whois' event is wired up and that is taking care of the response to the user
           let whoisCallback = () => {};
 
-          if (parsed.data.options.nmap) {
+          if (parsed.data.options?.nmap) {
             whoisCallback = (whoisData) => {
               if (!whoisData.hostname) {
                 // should check more here maybe?

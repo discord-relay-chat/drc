@@ -8,6 +8,7 @@
         color: rgb(29, 251, 0);
         background-color: #111;
         padding: 1em;
+        font-family: 'Helvetica Light', Helvetica, sans-serif;
       }
       table {
         width: 320px;
@@ -32,29 +33,71 @@
       #headerrow {
         color: white;
       }
+
+      /* https://codepen.io/davidelrizzo/pen/eJwqzp */
+      .Rtable {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 0 0 3em 0;
+        padding: 0;
+      }
+
+      .Rtable-cell {
+        box-sizing: border-box;
+        flex-grow: 1;
+        width: 100%;
+        padding: 0.8em 1.2em;
+        overflow: hidden;
+        list-style: none;
+        background: fade(slategrey,20%);
+      }
+
+      .Rtable--2cols > .Rtable-cell  { width: 50%; }
+      .Rtable--3cols > .Rtable-cell  { width: 33.33%; }
+      .Rtable--4cols > .Rtable-cell  { width: 25%; }
+      .Rtable--5cols > .Rtable-cell  { width: 20%; }
+      .Rtable--6cols > .Rtable-cell  { width: 16.6%; }
+
+      /*https://css-tricks.com/accessible-simple-responsive-tables/#article-header-id-2 */
+
+      @media all and (max-width: 600px) {
+        .Rtable--collapse  {
+          display: block;
+        }
+        .Rtable-cell { width: 100% !important; }
+        .Rtable-cell--foot { margin-bottom: 1em; }
+      }
+
+      .Rtable-cell--head { 
+        background-color: slategrey;
+        border-color: darken(grey,10%);
+       }
     </style>
   </head>
   <body>
     <h3>Channel transforms for <kbd>{{ network }}</kbd></h3>
 
     <div class="container">
-      <div class="row" id="headerrow">
-        <div class="col-sm-1" style="text-align: right; text-decoration: underline;">Discord</div>
-        <div class="col-sm-1" style="text-align: center;">➵</div>
-        <div class="col-sm-1" style="text-decoration: underline;">IRC</div>
+      <div class="row Rtable Rtable--3cols Rtable--collapse" id="headerrow">
+        <div class="Rtable-cell Rtable-cell--head" style="text-align: right; text-decoration: underline;">Discord</div>
+        <div class="Rtable-cell Rtable-cell--head" style="text-align: center;">➵</div>
+        <div class="Rtable-cell Rtable-cell--head" style="text-decoration: underline;">IRC</div>
       </div>
     {{ #transforms }}
-      <div class="row">
-        <div class="col-sm-1" style="text-align: right; vertical-align: middle;">{{ discord }}</div>
-        <div class="col-sm-1" style="text-align: center;">➵</div>
-        <div class="col-sm-2">
+      <div class="row Rtable Rtable--3cols Rtable--collapse">
+        <div class="Rtable-cell" style="text-align: right; vertical-align: middle;">{{ discord }}</div>
+        <div class="Rtable-cell" style="text-align: center;">➵</div>
+        <div class="Rtable-cell">
           <input id="{{ id }}_input" class="small" type="text" value="#{{ irc }}" />
-        </div>
-        <div class="col-sm-1">
-          <button id="{{ id }}_button" class="tertiary" class="small" disabled>OK</button>
-        </div>
-        <div class="col-sm-1">
-          <button id="{{ id }}_reset" class="tertiary" class="small" disabled>Reset</button>
+          
+          <div class="container">
+            <span class="col-sm-1">
+              <button id="{{ id }}_button" class="tertiary" class="small" disabled>OK</button>
+            </span>
+            <span class="col-sm-1">
+              <button id="{{ id }}_reset" class="tertiary" class="small" disabled>Reset</button>
+            </span>
+          </div>
         </div>
       </div>
       <script>

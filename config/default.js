@@ -65,9 +65,9 @@ module.exports = {
     render: {
       message: {
         normal: {
-          head: '[',
-          foot: ']',
-          style: '`'
+          head: '<',
+          foot: '>',
+          style: '**'
         },
         action: {
           head: '* ',
@@ -75,13 +75,14 @@ module.exports = {
           style: ''
         },
         self: {
-          style: '**'
+          style: '_'
         }
       }
     }
   },
 
   discord: {
+    reactionRemovalTimeMs: 2500,
     maxMsgLength: 1800,
     guildId: '',
     botId: '',

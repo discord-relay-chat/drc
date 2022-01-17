@@ -14,10 +14,18 @@ const eventHandlers = require('./discord/events');
 
 require('./logger')('discord');
 
-const INTENTS = [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_TYPING];
+const INTENTS = [
+  Intents.FLAGS.GUILDS,
+  Intents.FLAGS.GUILD_MESSAGES,
+  Intents.FLAGS.DIRECT_MESSAGES,
+  Intents.FLAGS.GUILD_MESSAGE_REACTIONS
+];
+
+const client = new Client({
+  intents: INTENTS
+});
 
 const redisClient = new Redis(config.redis.url);
-const client = new Client({ intents: INTENTS });
 const categories = {};
 const categoriesByName = {};
 const channelsById = {};
@@ -299,16 +307,18 @@ client.once('ready', async () => {
     stats,
     deletedBeforeJoin,
     redisClient,
+    redis: redisClient, // ugh
     registerButtonHandler,
     channelsByName,
     listenedToMutate,
     registerOneTimeHandler,
-    buttonHandlers
+    buttonHandlers,
+    publish: async (publishObj) => redisClient.publish(PREFIX, JSON.stringify(publishObj))
   };
 
   Object.entries(eventHandlers).forEach(([eventName, handler]) => {
     console.log(`Registered handler for event "${eventName}"`);
-    client.on(eventName, (data) => handler(eventHandlerContext, data));
+    client.on(eventName, (...a) => handler(eventHandlerContext, ...a));
   });
 
   const cfgClient = new Redis(config.redis.url);
@@ -484,7 +494,7 @@ client.once('ready', async () => {
   }
 });
 
-['error', 'userUpdate', 'warn', 'presenceUpdate', 'shardError'].forEach((eName) => {
+['error', 'debug', 'userUpdate', 'warn', 'presenceUpdate', 'shardError'].forEach((eName) => {
   client.on(eName, (...a) => {
     console.debug({ event: eName }, ...a);
     if (eName === 'error' || eName === 'warn') {

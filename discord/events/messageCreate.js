@@ -2,6 +2,7 @@
 
 const config = require('config');
 const { PREFIX, resolveNameForIRC } = require('../../util');
+const { messageIsFromAllowedSpeaker, senderNickFromMessage } = require('../common');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 module.exports = async (context, data) => {
@@ -16,12 +17,7 @@ module.exports = async (context, data) => {
     redisClient
   } = context;
 
-  if (!data.author || !config.app.allowedSpeakers.includes(data.author.id)) {
-    if (data.author && data.author.id !== config.discord.botId) {
-      sendToBotChan('`DISALLOWED SPEAKER` **' + data.author.username +
-        '#' + data.author.discriminator + '**: ' + data.content);
-      console.error('DISALLOWED SPEAKER', data.author, data.content);
-    }
+  if (!messageIsFromAllowedSpeaker(data, context)) {
     return;
   }
 
@@ -42,16 +38,7 @@ module.exports = async (context, data) => {
     const chan = await client.channels.cache.get(data.channelId);
     const replyMsg = await chan.messages.cache.get(repliedMsgId);
     console.debug('REPLYING TO MSG ' + replyMsg);
-
-    const replyNickMatch = replyMsg.content.matchAll(/<(?:\*\*)?(.*)(?:\*\*)>/g);
-
-    if (replyNickMatch && !replyNickMatch.done) {
-      const replyNickArr = replyNickMatch.next().value;
-
-      if (replyNickArr && replyNickArr.length > 1) {
-        replyNick = replyNickArr[1];
-      }
-    }
+    replyNick = senderNickFromMessage(replyMsg);
   }
 
   if (data.channelId === config.irc.quitMsgChanId || data.content.match(/^\s*!/)) {
