@@ -32,10 +32,11 @@ module.exports = {
     showNickChanges: true,
     showParts: true,
     showQuits: false,
-    squelchIgnored: true,
+    squelchIgnored: false,
     squelchReconnectChannelJoins: true,
     supressBotEmbeds: true,
-    timestampMessages: true
+    timestampMessages: true,
+    monospacePrivmsgs: false
   },
 
   app: {
@@ -82,6 +83,8 @@ module.exports = {
   },
 
   discord: {
+    privMsgChannelStalenessTimeMinutes: 720,
+    privMsgCategoryId: null,
     reactionRemovalTimeMs: 2500,
     maxMsgLength: 1800,
     guildId: '',
@@ -99,6 +102,7 @@ module.exports = {
     floodProtectWaitMs: 500,
     quitMsgChanId: '',
     channelXformsPath: 'config/channelXforms.json',
+    privmsgMappingsPath: 'config/privmsgMappings.json',
     registered: {
       /*
       "networkHostname": {

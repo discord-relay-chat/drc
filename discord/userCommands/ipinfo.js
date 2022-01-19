@@ -8,5 +8,5 @@ module.exports = async function (context) {
     return null;
   }
 
-  return '\n' + formatKVs(await ipInfo(context.argObj._[0]));
+  return `\nIP info for **${context.argObj._[0]}**:\n` + formatKVs(await ipInfo(context.argObj._[0]));
 };

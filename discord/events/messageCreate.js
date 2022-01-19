@@ -1,8 +1,8 @@
 'use strict';
 
 const config = require('config');
-const { PREFIX, resolveNameForIRC } = require('../../util');
-const { messageIsFromAllowedSpeaker, senderNickFromMessage } = require('../common');
+const { PREFIX, resolveNameForIRC, PrivmsgMappings } = require('../../util');
+const { messageIsFromAllowedSpeaker, senderNickFromMessage, tickleExpiry } = require('../common');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 module.exports = async (context, data) => {
@@ -94,12 +94,27 @@ module.exports = async (context, data) => {
       console.debug('CONTENT MATCH', chanMatch, channelId, channelsById[channelId], resolveNameForIRC(network.name, chanObj.name), parentObj);
 
       let replacer = '#' + resolveNameForIRC(network.name, chanObj.name);
-      if (parentObj?.name !== network.name) {
+
+      if (parentObj?.name !== network.name && channel.parent !== config.discord.privMsgCategoryId) {
         replacer += ` (on ${network.name})`;
       }
 
       data.content = data.content.replace(chanMatch, replacer);
     });
+  }
+
+  if (channel.parent === config.discord.privMsgCategoryId) {
+    const network /* shadowed! */ = PrivmsgMappings.findNetworkForKey(data.channelId);
+    console.log('PM CAT', channel, data.channelId, network, PrivmsgMappings.forNetwork(network), data.content);
+    tickleExpiry(network, data.channelId);
+    return await redisClient.publish(PREFIX, JSON.stringify({
+      type: 'discord:requestSay:irc',
+      data: {
+        network,
+        target: PrivmsgMappings.forNetwork(network)[data.channelId].target,
+        message: data.content
+      }
+    }));
   }
 
   await redisClient.publish(PREFIX, JSON.stringify({
@@ -111,7 +126,7 @@ module.exports = async (context, data) => {
     }
   }));
 
-  if (config.user.deleteDiscordWithEchoMessageOn && config.irc.registered[network.name].user.enable_echomessage) {
+  if (config.user.deleteDiscordWithEchoMessageOn && config.irc.registered[network.name]?.user.enable_echomessage) {
     await data.delete();
   }
 };

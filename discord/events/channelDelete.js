@@ -1,7 +1,7 @@
 'use strict';
 
 const config = require('config');
-const { PREFIX } = require('../../util');
+const { PREFIX, PrivmsgMappings } = require('../../util');
 const Redis = require('ioredis');
 
 module.exports = async (context, data) => {
@@ -10,8 +10,11 @@ module.exports = async (context, data) => {
     deletedBeforeJoin
   } = context;
 
-  const { name, parentId } = data;
+  const { name, id, parentId } = data;
   const parentCat = categories[parentId];
+
+  console.log('REMOVE!', PrivmsgMappings.findNetworkForKey(id), id, name);
+  PrivmsgMappings.remove(PrivmsgMappings.findNetworkForKey(id), id);
 
   if (!deletedBeforeJoin[name]) {
     const c = new Redis(config.redis.url);

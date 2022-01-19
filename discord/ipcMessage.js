@@ -3,16 +3,38 @@
 const config = require('config');
 const Redis = require('ioredis');
 const userCommands = require('./userCommands');
-const { formatKVs, persistMessage, simpleEscapeForDiscord } = require('./common');
+const { formatKVs, persistMessage, simpleEscapeForDiscord, tickleExpiry } = require('./common');
 const {
   PREFIX,
   resolveNameForDiscord,
   fmtDuration,
   ipInfo,
-  replaceIrcEscapes
+  replaceIrcEscapes,
+  PrivmsgMappings
 } = require('../util');
 const { MessageEmbed } = require('discord.js');
 const numerics = require('../irc/numerics');
+
+const serialQueue = [];
+let serialLock = false;
+setInterval(() => {
+  if (serialQueue.length) {
+    if (serialLock) {
+      return;
+    }
+
+    serialLock = true;
+    serialQueue.shift()()
+      .then((...a) => a)
+      .catch((err) => {
+        console.error('serialized op failed', err);
+      }).finally(() => {
+        serialLock = false;
+      });
+  }
+}, 10);
+
+const serialize = (op) => serialQueue.push(op);
 
 module.exports = async (context, channel, msg) => {
   const {
@@ -43,8 +65,10 @@ module.exports = async (context, channel, msg) => {
     stats.messages.types[type] = (stats.messages.types[type] ?? 0) + 1;
 
     if (parsed.data) {
+      parsed.data._orig = {};
       ['nick', 'kicked', 'ident', 'hostname'].forEach((i) => {
         if (parsed.data[i]) {
+          parsed.data._orig[i] = parsed.data[i];
           parsed.data[i] = simpleEscapeForDiscord(parsed.data[i]);
         }
       });
@@ -55,7 +79,7 @@ module.exports = async (context, channel, msg) => {
     if (type === 'irc' && subType === 'mode') {
       console.debug('MODE RAW!', parsed);
       if (parsed.data.raw_modes !== '+l') {
-        sendToBotChan('`IRC:MODE` ' + `**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on \`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
+        sendToBotChan(`**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on \`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
       }
     } else if (type === 'http' && subType === 'get-req' && subSubType) {
       runOneTimeHandlers(subSubType);
@@ -80,7 +104,7 @@ module.exports = async (context, channel, msg) => {
         );
       }
     } else if (type === 'irc' && subType === 'responsePs') {
-      sendToBotChan('`IRC:PS`: \n\n\t' + parsed.data.map((psObj) => `\`${psObj.pid}\`\t\`${psObj.started}\`\t\`${psObj.args.join(' ')}\``).join('\n\t'));
+      sendToBotChan('\n\n' + parsed.data.map((psObj) => `\`${psObj.pid}\`\t\`${psObj.started}\`\t\`${psObj.args.join(' ')}\``).join('\n\t'));
     } else if (type === 'irc' && subType === 'responseStats') {
       if (!parsed.stats) {
         throw new Error('expecting stats but none!');
@@ -286,7 +310,7 @@ module.exports = async (context, channel, msg) => {
       }
 
       if (!isReconnect() || !config.user.squelchReconnectChannelJoins) {
-        sendToBotChan('`IRC:JOINED-CHANNEL` ' + `**${parsed.data.ircName}** (#${parsed.data.name}) on \`${parsed.data.__drcNetwork}\` has **${parsed.data.userCount}** users` +
+        sendToBotChan('Joined ' + `**${parsed.data.ircName}** (#${parsed.data.name}) on \`${parsed.data.__drcNetwork}\`, which has **${parsed.data.userCount}** users` +
           (parsed.data.operators && parsed.data.operators.length ? `\n**Operators**: ${parsed.data.operators.join(', ')}` : ''));
       }
     } else if (parsed.type === 'irc:joined') {
@@ -326,22 +350,76 @@ module.exports = async (context, channel, msg) => {
 
       redis.disconnect();
 
-      const embed = new MessageEmbed()
-        .setColor(config.app.stats.embedColors.irc.privMsg)
-        .setTitle(`Private message on \`${e.__drcNetwork}\`:`)
-        .addField('`From:`', `**${e.nick}${e.from_server ? ' (SERVER!)' : ''}** <_${e.ident}@${e.hostname}_>`)
-        .addField('`  To:`', `**${e.target}**`)
-        .setDescription('```\n' + isIgnored + e.message + isIgnored + '\n```\n')
-        .setTimestamp();
+      e.message = replaceIrcEscapes(e.message);
 
-      if (e.target === mentionTarget && isIgnored === '' && (config.user.notifyOnNotices || e.type === 'privmsg')) {
-        sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
+      if (!e.nick || e.nick.length === 0) {
+        console.error('BAD NICK!', e);
+        return;
       }
 
-      sendToBotChan(embed, true);
+      if (config.discord.privMsgCategoryId) {
+        serialize(async () => {
+          let chanId = Object.entries(PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
+
+          if (!chanId) {
+            const netTrunc = e.__drcNetwork.split('.');
+            const netTruncName = netTrunc.length ? netTrunc[netTrunc.length - 2] : e.__drcNetwork;
+            const newName = `${e.nick}_${netTruncName}`;
+            let created = new Date(Math.floor(Number(new Date()) / 1e3) * 1e3);
+
+            const newChan = await client.guilds.cache.get(config.discord.guildId).channels.create(newName, {
+              parent: config.discord.privMsgCategoryId,
+              topic: `Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${created.toLocaleString()}** ` +
+                `& will be removed after ${config.discord.privMsgChannelStalenessTimeMinutes} minutes with no activity. `
+            });
+
+            channelsById[newChan.id] = {
+              name: newChan.name,
+              parent: newChan.parentId
+            };
+
+            chanId = newChan.id;
+
+            created = Number(created);
+            PrivmsgMappings.set(e.__drcNetwork, newChan.id, {
+              target: e._orig.nick,
+              channelName: newChan.name,
+              created
+            });
+
+            console.log('Create PM chan', newChan.name, newChan.id);
+          }
+
+          await tickleExpiry(e.__drcNetwork, chanId);
+
+          const msChar = config.user.monospacePrivmsgs ? '`' : '';
+          const msg = msChar + isIgnored + e.message + isIgnored + msChar;
+          if (msg.length && !e.message.match(/^\s*$/g)) {
+            try {
+              await client.channels.cache.get(chanId).send(msg);
+            } catch (err) {
+              console.error('send err', '[', msg, ']', msg.length, err);
+            }
+          }
+        });
+      } else {
+        const embed = new MessageEmbed()
+          .setColor(config.app.stats.embedColors.irc.privMsg)
+          .setTitle(`Private message on \`${e.__drcNetwork}\`:`)
+          .addField('`From:`', `**${e.nick}${e.from_server ? ' (SERVER!)' : ''}** <_${e.ident}@${e.hostname}_>`)
+          .addField('`To:`', `**${e.target}**`)
+          .setDescription('```\n' + isIgnored + e.message + isIgnored + '\n```\n')
+          .setTimestamp();
+
+        if (e.target === mentionTarget && isIgnored === '' && (config.user.notifyOnNotices || e.type === 'privmsg')) {
+          await sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
+        }
+
+        await sendToBotChan(embed, true);
+      }
     } else if (type === 'irc' && subType === 'nick') {
       if (config.user.showNickChanges) {
-        sendToBotChan('`IRC:NICK` ' + `**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> changed nickname to **${parsed.data.new_nick}**`);
+        sendToBotChan(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> changed nickname to **${parsed.data.new_nick}** on \`${parsed.data.__drcNetwork}\``);
       }
     } else if (type === 'irc' && subType === 'whois') {
       const d = parsed.data;
@@ -349,11 +427,13 @@ module.exports = async (context, channel, msg) => {
 
       await runOneTimeHandlers(`${network}_${d.nick}`);
 
-      delete d.__drcNetwork; // just so it doesn't show up in the output...
+      // so they don't show up in the output...
+      delete d.__drcNetwork;
+      delete d._orig;
 
       const lookupHost = d.actual_ip || d.actual_hostname || d.hostname;
       const ipInf = await ipInfo(lookupHost);
-      sendToBotChan('`IRC:WHOIS` on `' + network + '` \n' + formatKVs(d) +
+      sendToBotChan('`whois` on `' + network + '` \n' + formatKVs(d) +
         (ipInf ? `\n\nIP info for **${lookupHost}**:\n` + formatKVs(ipInf) : ''));
     } else if (parsed.type === 'irc:responseWhois:nmap') {
       const wd = parsed.data.whoisData;
@@ -434,8 +514,8 @@ module.exports = async (context, channel, msg) => {
             ? (config.user.joinsToBotChannel ? ` #${parsed.data.channel}: "${parsed.data.message}"` : ': "' + parsed.data.message + '"')
 : ''}`);
         } else if (subType === 'kick') {
-          msgChan.__drcSend(`\`KICK\` **${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
-          sendToBotChan(`\`IRC:KICK\` **${parsed.data.kicked}** was kicked from **${parsed.data.channel}** by **${parsed.data.nick}**: "${parsed.data.message}"`);
+          msgChan.__drcSend(`**${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
+          sendToBotChan(`**${parsed.data.kicked}** was kicked from **${parsed.data.channel}** by **${parsed.data.nick}**: "${parsed.data.message}"`);
         } else if (subType === 'topic' && parsed.data.topic) {
           msgChan.setTopic(parsed.data.topic);
         }
@@ -443,7 +523,7 @@ module.exports = async (context, channel, msg) => {
         // skip our own parts, since the channel will necessarily have _already_ been deleted!
         if (config.irc.registered[parsed.data.__drcNetwork].user.nick !== parsed.data.nick) {
           if (subType === 'part') {
-            sendToBotChan('`IRC:' + subType.toUpperCase() + '` ' + `**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${parsed.data.channel} "${parsed.data.message}"`);
+            sendToBotChan(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${parsed.data.channel} "${parsed.data.message}"`);
           }
 
           throw new Error(subType + '-- chan lookup failed', discName, chanSpec, parsed);
@@ -452,7 +532,7 @@ module.exports = async (context, channel, msg) => {
         }
       }
     } else if (type === 'irc' && subType === 'motd') {
-      sendToBotChan('`IRC:MessageOfTheDay` for network `' + parsed.data.__drcNetwork + '`\n```\n' + parsed.data.motd + '\n```\n');
+      sendToBotChan('Message Of The Day (MOTD) for network `' + parsed.data.__drcNetwork + '`\n```\n' + parsed.data.motd + '\n```\n');
     } else if (type === 'irc' && subType === 'numeric') {
       sendToBotChan('`IRC:' + subSubType + '` on ' + `\`${parsed.data.hostname || parsed.data.__drcNetwork}\`:\n>>> ${parsed.data.parsed ?? JSON.stringify(parsed.data.params)}`);
     } else if (type === 'irc' && subType === 'pong') {

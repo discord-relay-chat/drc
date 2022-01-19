@@ -7,13 +7,13 @@ const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 const subCommands = {
   get: async (context, network) => {
     const [,, chanId] = context.argObj._;
+    let resChan = chanId;
     const chanMatch = [...chanId.matchAll(CHANNELS_PATTERN)];
 
-    if (!chanMatch.length) {
-      throw new Error('bad channel ' + chanId);
+    if (chanMatch.length) {
+      resChan = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
     }
 
-    const resChan = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
     const retList = await getLogs(network, resChan, context.options);
 
     serveMessages({ network, ...context }, retList.map((data) => ({
@@ -55,7 +55,12 @@ const subCommands = {
 async function f (context) {
   const [netStub, subCmd] = context.argObj._;
   const { network } = matchNetwork(netStub);
-  return subCommands[subCmd](context, network);
+
+  if (!subCommands[subCmd]) {
+    return `Bad subcommand "${subCmd}"`;
+  }
+
+  return subCommands[subCmd]?.(context, network);
 }
 
 f.__drcHelp = () => {
@@ -71,7 +76,7 @@ f.__drcHelp = () => {
         text: 'Sole argument is the channel to be queried.\n\n' +
         'Options:\n'
       },
-      set: {
+      search: {
         header: 'Searches across all logs for the given network. Slower, but more capable, than `get`',
         text: 'Options:\n'
       }

@@ -184,9 +184,11 @@ async function main () {
       data.__drcIrcRxTs = Number(new Date());
       data.__drcNetwork = host;
 
+      const isNotice = data.target === spec.nick || data.type === 'notice';
+
       if (config.irc.log.channelsToFile) {
         const chanFileDir = path.join(ircLogPath, host);
-        const chanFilePath = path.join(chanFileDir, data.target);
+        const chanFilePath = path.join(chanFileDir, isNotice && data.target === config.irc.registered[host].user.nick /* XXX:really need to keep LIVE track of our nick!! also add !nick DUH */ ? data.nick : data.target);
 
         fs.stat(chanFileDir, async (err, _stats) => {
           if (err && err.code === 'ENOENT') {
@@ -199,13 +201,14 @@ async function main () {
             }
           }
 
+          if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, data);
           const fh = await fs.promises.open(chanFilePath, 'a');
           await fh.write(JSON.stringify(data) + '\n');
           fh.close();
         });
       }
 
-      if (data.target === spec.nick || data.type === 'notice') {
+      if (isNotice) {
         noticePubClient.publish(PREFIX, JSON.stringify({
           type: 'irc:notice',
           data

@@ -8,7 +8,7 @@ module.exports = async function (context, ...a) {
 
   switch (a[0]) {
     case 'get':
-      return '\n' + formatKVs(_.get(config, a[1]));
+      return '\n\n' + formatKVs(_.get(config, a[1]));
 
     case 'set':
     {

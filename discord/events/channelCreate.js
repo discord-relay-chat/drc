@@ -24,6 +24,11 @@ module.exports = async (context, data) => {
 
   console.debug('channelCreate', name, parentId, id, parentCat);
 
+  if (!parentCat || parentId === config.discord.privMsgCategoryId) {
+    // channel was createed in top-level category or a privMsg category; we don't deal with those
+    return;
+  }
+
   const curXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
   const buttonId = [parentId, id, crypto.randomBytes(8).toString('hex')].join('-');
   const embed = new MessageEmbed()
@@ -54,7 +59,7 @@ module.exports = async (context, data) => {
     interaction.update({
       components: [],
       embeds: [
-        new MessageEmbed().setTitle(`Joined \`${name}\`${refreshedXform ? `(really \`#${refreshedXform})\`` : ''} on \`${parentCat.name}\`!`).setTimestamp()
+        new MessageEmbed().setTitle(`Joined **#${name}**${refreshedXform ? ` (really \`#${refreshedXform})\`` : ''} on \`${parentCat.name}\`!`).setTimestamp()
       ]
     }).catch(console.error);
 

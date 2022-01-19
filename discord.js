@@ -2,12 +2,13 @@
 
 const inq = require('inquirer');
 const config = require('config');
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const crypto = require('crypto');
+const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
-const { PREFIX, replaceIrcEscapes, NetworkNotMatchedError } = require('./util');
+const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError } = require('./util');
 const userCommands = require('./discord/userCommands');
 const { formatKVs } = require('./discord/common');
 const eventHandlers = require('./discord/events');
@@ -121,7 +122,7 @@ console.log(`${PREFIX} Discord controller starting...`);
 
 const formatForAllowedSpeakerResponse = (s, raw = false) =>
   (!raw
-    ? (config.user.timestampMessages ? `(*${new Date().toLocaleTimeString()}*)` : '') + s
+    ? (config.user.timestampMessages ? `(*${new Date().toLocaleTimeString()}*) ` : '') + s
     : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
 client.once('ready', async () => {
@@ -241,7 +242,15 @@ client.once('ready', async () => {
           let localSender = sendToBotChan;
 
           if (toChanId) {
-            localSender = async (msg, raw) => client.channels.cache.get(toChanId).__drcSend(formatForAllowedSpeakerResponse(msg, raw));
+            localSender = async (msg, raw) => {
+              const chan = client.channels.cache.get(toChanId);
+
+              try {
+                return await (chan.__drcSend || chan.send || client.channels.cache.get(config.irc.quitMsgChanId))(formatForAllowedSpeakerResponse(msg, raw));
+              } catch (err) {
+                console.error('localSender/send failed!', err, toChanId, msg, chan);
+              }
+            };
           }
 
           const result = await cmdFunc({
@@ -331,6 +340,135 @@ client.once('ready', async () => {
     console.warn('Reloading user config failed', uCfg.error);
   } else {
     sendToBotChan('\nUser configuration:\n\n' + formatKVs(uCfg));
+  }
+
+  console.log('PM DISCovery', config.discord.privMsgCategoryId, channelsById[config.discord.privMsgCategoryId]);
+  if (!config.discord.privMsgCategoryId || !channelsById[config.discord.privMsgCategoryId]) {
+    const potentials = Object.keys(categoriesByName).filter(x => x.match(/priv(?:ate)?\s*me?s(?:sa)?ge?s?/ig) || x === 'PMs');
+
+    if (potentials && potentials.length) {
+      const emb = new MessageEmbed()
+        .setColor(config.app.stats.embedColors.irc.privMsg)
+        .setTitle(`Discovered private message category "${potentials[0]}"`)
+        .setDescription(`Category ID: ${categoriesByName[potentials[0]]}`);
+
+      if (potentials.length > 1) {
+        emb.addField('Also found the following potential categories', '...');
+        potentials.slice(1).forEach((cName) => emb.addField(cName, categoriesByName[cName]));
+      }
+
+      await userCommands('config')({ redis: redisClient }, 'set', 'discord.privMsgCategoryId', categoriesByName[potentials[0]]);
+      sendToBotChan(emb, true);
+    }
+  } else if (channelsById[config.discord.privMsgCategoryId]) {
+    sendToBotChan(new MessageEmbed()
+      .setColor(config.app.stats.embedColors.irc.privMsg)
+      .setTitle(`Using private message category "${channelsById[config.discord.privMsgCategoryId].name}"`)
+      .setDescription(`Category ID: ${config.discord.privMsgCategoryId}`),
+    true);
+  } else {
+    await userCommands('config')({ redis: redisClient }, 'set', 'discord.privMsgCategoryId', null);
+    delete config.discord.privMsgCategoryId;
+  }
+
+  if (config.discord.privMsgCategoryId) {
+    const toDel = Object.entries(channelsById).filter(([, { parent }]) => parent === config.discord.privMsgCategoryId);
+
+    if (toDel.length) {
+      const rmEmbed = new MessageEmbed()
+        .setColor(config.app.stats.embedColors.irc.privMsg)
+        .setTitle('Private Message channel cleanup')
+        .setDescription('I removed the following stale private message channels:');
+
+      for (const [chanId, { name }] of toDel) {
+        console.log(`Removing old PM channel "${name}" ${chanId}`);
+        rmEmbed.addField(name, chanId);
+        await client.channels.cache.get(chanId).delete('discord.js startup');
+      }
+
+      await sendToBotChan(rmEmbed, true);
+    }
+
+    const privMsgExpiryListener = new Redis(config.redis.url);
+    privMsgExpiryListener.on('pmessage', (_chan, key, event) => {
+      console.log('EXPIRY MSG', key, event);
+      const [, prefix, type, trackingType, id, network] = key.split(':');
+
+      if (prefix !== PREFIX) {
+        console.error(`bad prefix for keyspace notification! ${prefix}`, key, event);
+        return;
+      }
+
+      if (event === 'expired') {
+        if (type === 'pmchan' && trackingType === 'aliveness' && event === 'expired') {
+          console.log(`PM channel ${id}:${network} expired! Removing...`);
+          const chInfo = Object.entries(PrivmsgMappings.forNetwork(network)).find(([chId]) => chId == id)?.[1]; // eslint-disable-line eqeqeq
+          if (!chInfo || !chInfo.target || !channelsById[id]) {
+            console.error('bad chinfo?!', key, event, chInfo, channelsById[id], PrivmsgMappings.forNetwork(network));
+            return;
+          }
+
+          if (channelsById[id].parent !== config.discord.privMsgCategoryId) {
+            console.error('bad ch parent!?', key, event, channelsById[id].parent);
+            return;
+          }
+
+          const toTime = Number(new Date());
+          const queryArgs = [network, 'get', chInfo.target, `--from=${chInfo.created}`, `--to=${toTime}`];
+
+          const rmEmbed = new MessageEmbed()
+            .setColor(config.app.stats.embedColors.irc.privMsg)
+            .setTitle('Private Message channel cleanup')
+            .setDescription('I removed the following channel due to inactivity:')
+            .addField(channelsById[id].name, 'Query logs for this session with the button below or:\n`' + `!logs ${queryArgs.join(' ')}` + '`');
+
+          const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
+          const actRow = new MessageActionRow()
+            .addComponents(
+              new MessageButton().setCustomId(buttonId).setLabel('Query logs').setStyle('SUCCESS')
+            );
+
+          registerButtonHandler(buttonId, async (interaction) => {
+            const logs = await userCommands('logs')({
+              registerOneTimeHandler,
+              sendToBotChan,
+              channelsById,
+              network,
+              publish: eventHandlerContext.publish,
+              argObj: {
+                _: queryArgs
+              },
+              options: {
+                from: chInfo.created,
+                to: toTime
+              }
+            }, ...queryArgs);
+
+            interaction.update({ embeds: [rmEmbed], components: [] });
+            sendToBotChan(logs);
+          });
+
+          sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
+          client.channels.cache.get(config.irc.quitMsgChanId).send({
+            embeds: [new MessageEmbed()
+              .setColor(config.app.stats.embedColors.irc.privMsg)
+              .setTitle('Private Message channel cleanup')
+              .setDescription('I removed the following channel due to inactivity:')
+              .addField(channelsById[id].name, 'Query logs for this session with:\n`' + `!logs ${queryArgs.join(' ')}` + '`')],
+            components: [actRow]
+          });
+          // sendToBotChan(rmEmbed, true);
+          client.channels.cache.get(id).delete('stale');
+          PrivmsgMappings.remove(network, id);
+        }
+      } else {
+        console.error(`unknown keyspace event! key:${key} event: ${event}`);
+      }
+    });
+
+    const ksKey = `__keyspace@${new URL(config.redis.url).pathname.replace('/', '')}*`;
+    privMsgExpiryListener.psubscribe(ksKey);
+    console.log(`Listening to expiry events on ${ksKey}`);
   }
 
   const mainSubClient = new Redis(config.redis.url);

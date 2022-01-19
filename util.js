@@ -14,57 +14,74 @@ const parseDuration = require('parse-duration');
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
 const VERSION = PKGJSON.version;
 const NAME = PKGJSON.name;
-const ENV = process.env.DRC_ENV || 'dev';
+const ENV = /* process.env.NODE_ENV || */ 'dev';
 const PREFIX = [NAME, ENV].join('-');
 const CTCPVersion = `${config.irc.ctcpVersionPrefix} v${VERSION} <${config.irc.ctcpVersionUrl}>`;
 
 let resolverRev;
 
-const ChannelXforms = new class {
-  constructor () {
+class JsonMapper {
+  constructor (path, name, { createOnNotFound = true, createNetworksOnNotFound = false } = {}) {
+    this._path = path;
+    this._name = name;
+    this._options = {
+      createOnNotFound,
+      createNetworksOnNotFound
+    };
+
     this._resolve();
     this._load();
   }
 
   _resolve () {
-    let resolvePath = config.irc.channelXformsPath;
+    let resolvePath = this._path;
 
     if (process.env.NODE_ENV) {
-      const pathComps = path.parse(config.irc.channelXformsPath);
+      const pathComps = path.parse(this._path);
       this.path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
 
       try {
         this._load();
         resolvePath = this.path;
       } catch (err) {
-        console.warn(`Failed to find ${this.path}: falling back to default!`);
-        resolvePath = config.irc.channelXformsPath;
+        console.warn(`Failed to find ${this.path}: ${this._options.createOnNotFound ? 'creating!' : 'falling back to default!'}`);
+
+        if (this._options.createOnNotFound) {
+          resolvePath = this.path;
+          fs.writeFileSync(this.path, JSON.stringify({}));
+        } else {
+          resolvePath = this._path;
+        }
       }
     }
 
     this.path = path.resolve(resolvePath);
-    console.log(`ChannelXforms resolved config file path to: ${this.path}`);
+    console.log(`${this._name} resolved config file path to: ${this.path}`);
   }
 
   _load () {
     this.cache = JSON.parse(fs.readFileSync(this.path));
   }
 
-  async _mutate (network, discordChannel, ircChannel) {
+  async _mutate (network, key, value) {
     if (!this.cache[network]) {
-      return null;
+      if (!this._options.createNetworksOnNotFound) {
+        return null;
+      }
+
+      this.cache[network] = {};
     }
 
     const net = this.cache[network];
 
-    if (ircChannel) {
-      net[discordChannel] = ircChannel;
+    if (value) {
+      net[key] = value;
     } else {
-      if (!net[discordChannel]) {
+      if (!net[key]) {
         return null;
       }
 
-      delete net[discordChannel];
+      delete net[key];
     }
 
     return fs.promises.writeFile(this.path, JSON.stringify(this.cache, null, 2));
@@ -72,21 +89,32 @@ const ChannelXforms = new class {
 
   forNetwork (network) {
     this._load();
-    if (ChannelXforms.cache[network]) {
-      return _.cloneDeep(ChannelXforms.cache[network]);
+
+    if (this.cache[network]) {
+      return _.cloneDeep(this.cache[network]);
     }
 
-    return undefined;
+    return {};
   }
 
-  async set (network, discordChannel, ircChannel) {
-    return this._mutate(network, discordChannel, ircChannel);
+  findNetworkForKey (key) {
+    this._load();
+    return Object.entries(this.cache).find(([, netMap]) => Object.entries(netMap).find(([k]) => k === key))?.[0] ?? {};
   }
 
-  async remove (network, discordChannel) {
-    return this._mutate(network, discordChannel, null);
+  async set (network, key, value) {
+    return this._mutate(network, key, value);
   }
-}();
+
+  async remove (network, key) {
+    return this._mutate(network, key, null);
+  }
+}
+
+const ChannelXforms = new JsonMapper(config.irc.channelXformsPath, 'ChannelXforms');
+const PrivmsgMappings = new JsonMapper(config.irc.privmsgMappingsPath, 'PrivmsgMappings', {
+  createNetworksOnNotFound: true
+});
 
 function resolveNameForIRC (network, name) {
   ChannelXforms._load();
@@ -602,6 +630,7 @@ module.exports = {
   IRCColorsStripMax,
 
   ChannelXforms,
+  PrivmsgMappings,
 
   resolveNameForIRC,
   resolveNameForDiscord,
