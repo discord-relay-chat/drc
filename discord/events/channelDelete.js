@@ -22,7 +22,8 @@ module.exports = async (context, data) => {
       type: 'discord:deleteChannel',
       data: {
         name,
-        network: parentCat.name
+        network: parentCat.name,
+        isPrivMsgChannel: parentId === config.discord.privMsgCategoryId
       }
     }));
     c.disconnect();

@@ -10,7 +10,7 @@ const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
 const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError } = require('./util');
 const userCommands = require('./discord/userCommands');
-const { formatKVs } = require('./discord/common');
+const { formatKVs, aliveKey } = require('./discord/common');
 const eventHandlers = require('./discord/events');
 
 require('./logger')('discord');
@@ -350,7 +350,8 @@ client.once('ready', async () => {
       const emb = new MessageEmbed()
         .setColor(config.app.stats.embedColors.irc.privMsg)
         .setTitle(`Discovered private message category "${potentials[0]}"`)
-        .setDescription(`Category ID: ${categoriesByName[potentials[0]]}`);
+        .setDescription(`Category ID: ${categoriesByName[potentials[0]]}`)
+        .addField('Channel inactivity removal time:', config.discord.privMsgChannelStalenessTimeMinutes + ' minutes');
 
       if (potentials.length > 1) {
         emb.addField('Also found the following potential categories', '...');
@@ -364,7 +365,8 @@ client.once('ready', async () => {
     sendToBotChan(new MessageEmbed()
       .setColor(config.app.stats.embedColors.irc.privMsg)
       .setTitle(`Using private message category "${channelsById[config.discord.privMsgCategoryId].name}"`)
-      .setDescription(`Category ID: ${config.discord.privMsgCategoryId}`),
+      .setDescription(`Category ID: ${config.discord.privMsgCategoryId}`)
+      .addField('Channel inactivity removal time:', config.discord.privMsgChannelStalenessTimeMinutes + ' minutes'),
     true);
   } else {
     await userCommands('config')({ redis: redisClient }, 'set', 'discord.privMsgCategoryId', null);
@@ -374,13 +376,24 @@ client.once('ready', async () => {
   if (config.discord.privMsgCategoryId) {
     const toDel = Object.entries(channelsById).filter(([, { parent }]) => parent === config.discord.privMsgCategoryId);
 
-    if (toDel.length) {
+    const aliveClient = new Redis(config.redis.url);
+    const realDel = [];
+    for (const [chanId, o] of toDel) {
+      const network = PrivmsgMappings.findNetworkForKey(chanId);
+      // only delete channels that have expired in Redis (assuming here that we've missed the keyspace notification for some reason)
+      if (!(await aliveClient.get(aliveKey(network, chanId)))) {
+        realDel.push([chanId, o]);
+      }
+    }
+    aliveClient.disconnect();
+
+    if (realDel.length) {
       const rmEmbed = new MessageEmbed()
         .setColor(config.app.stats.embedColors.irc.privMsg)
         .setTitle('Private Message channel cleanup')
         .setDescription('I removed the following stale private message channels:');
 
-      for (const [chanId, { name }] of toDel) {
+      for (const [chanId, { name }] of realDel) {
         console.log(`Removing old PM channel "${name}" ${chanId}`);
         rmEmbed.addField(name, chanId);
         await client.channels.cache.get(chanId).delete('discord.js startup');

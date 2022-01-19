@@ -174,7 +174,14 @@ module.exports = async (context, chan, msg) => {
       console.debug(`Pinging ${e.network}...`);
       botClient.ping(['drc', Number(new Date()).toString()].join('-'));
     } else if (parsed.type === 'discord:deleteChannel') {
-      botClient.part('#' + resolveNameForIRC(e.network, e.name));
+      if (parsed.data?.isPrivMsgChannel) {
+        return;
+      }
+
+      const ircName = '#' + resolveNameForIRC(e.network, e.name);
+      botClient?.part(ircName);
+      delete msgHandlers[e.network][ircName];
+      console.log(`IS ${ircName} (${e.name}) in here?!`, chanPrefixes[e.network]);
       // XXX BUG!! have to remove this channel from appropriate structs!!!
     } else if (parsed.type === 'discord:requestJoinChannel:irc') {
       // this comes first to signal the discord bot that we've ACKed the message and are acting on it

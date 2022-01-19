@@ -118,6 +118,8 @@ function generateListManagementUCExport (commandName, additionalCommands) {
   return f;
 }
 
+const aliveKey = (network, chanId, type = 'pmchan') => `${PREFIX}:${type}:aliveness:${chanId}:${network}`;
+
 module.exports = {
   dynRequireFrom,
   simpleEscapeForDiscord,
@@ -287,6 +289,8 @@ module.exports = {
     };
   },
 
+  aliveKey,
+
   tickleExpiry: async (network, chanId) => {
     if (!network || !chanId) {
       console.error('tickleExpiry bad args', network, chanId);
@@ -294,11 +298,11 @@ module.exports = {
     }
 
     const rc = new Redis(config.redis.url);
-    const aliveKey = `${PREFIX}:pmchan:aliveness:${chanId}:${network}`;
-    await rc.set(aliveKey, chanId);
-    await rc.expire(aliveKey, config.discord.privMsgChannelStalenessTimeMinutes * 60);
+    const ak = aliveKey(network, chanId);
+    await rc.set(ak, chanId);
+    await rc.expire(ak, config.discord.privMsgChannelStalenessTimeMinutes * 60);
     rc.disconnect();
-    console.log('tickleExpiry', chanId, network, aliveKey, 'expires',
+    console.log('tickleExpiry', chanId, network, ak, 'expires',
       new Date(Number(new Date()) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toLocaleString());
   }
 };
