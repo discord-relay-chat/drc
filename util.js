@@ -201,7 +201,7 @@ async function floodProtect (ops, ...args) {
   }
 }
 
-function fmtDuration (start, allowSeconds) {
+function fmtDuration (start, allowSeconds, end = new Date()) {
   if (typeof start === 'string') {
     start = dfns.parseISO(start);
   }
@@ -213,7 +213,7 @@ function fmtDuration (start, allowSeconds) {
   }
 
   const options = { format: defOpts };
-  const fmt = () => dfns.formatDuration(dfns.intervalToDuration({ start, end: new Date() }), options);
+  const fmt = () => dfns.formatDuration(dfns.intervalToDuration({ start, end }), options);
   let dur = fmt();
 
   if (!dur) {

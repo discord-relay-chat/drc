@@ -492,9 +492,9 @@ client.once('ready', async () => {
               const rmWarnEmbed = new MessageEmbed()
                 .setColor('#ff0000')
                 .setTitle('Inactivity removal warning!')
-                .setDescription(`This channel has been inactive for **${mins.alertMins} minutes** ` +
-                  `and will be removed in **${mins.remainMins} minutes** if it remains inactive!\n\n` +
-                  `Click the button below to reset this countdown to **${mins.origMins} minutes**.`);
+                .setDescription(`This channel has been inactive for **${mins.humanReadable.alertMins}** ` +
+                  `and will be removed in **${mins.humanReadable.remainMins}** if it remains inactive!\n\n` +
+                  `Click the button below to reset this countdown to **${mins.humanReadable.origMins}**.`);
 
               const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
               const actRow = new MessageActionRow()

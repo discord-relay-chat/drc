@@ -5,7 +5,7 @@ const path = require('path');
 const config = require('config');
 const Redis = require('ioredis');
 const { nanoid } = require('nanoid');
-const { PREFIX, matchNetwork } = require('../util');
+const { PREFIX, matchNetwork, fmtDuration } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 function dynRequireFrom (dir, addedCb) {
@@ -312,12 +312,18 @@ module.exports = {
     const nDate = new Date();
     const alertMins = Math.floor(config.discord.privMsgChannelStalenessTimeMinutes * (1 - config.discord.privMsgChannelStalenessRemovalAlert));
     const alertKey = aliveKey(network, chanId, 'removalWarning');
+    const remainMins = config.discord.privMsgChannelStalenessTimeMinutes - alertMins;
 
     const setObj = {
-      origMins: config.discord.privMsgChannelStalenessTimeMinutes,
       stalenessPercentage: Math.floor(config.discord.privMsgChannelStalenessRemovalAlert * 100),
-      alertMins: alertMins,
-      remainMins: config.discord.privMsgChannelStalenessTimeMinutes - alertMins
+      origMins: config.discord.privMsgChannelStalenessTimeMinutes,
+      alertMins,
+      remainMins,
+      humanReadable: {
+        origMins: fmtDuration(0, false, config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000),
+        alertMins: fmtDuration(0, false, alertMins * 60 * 1000),
+        remainMins: fmtDuration(0, false, remainMins * 60 * 1000)
+      }
     };
 
     const r = new Redis(config.redis.url);

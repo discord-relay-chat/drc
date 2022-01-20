@@ -379,7 +379,7 @@ module.exports = async (context, channel, msg) => {
             newChan = await client.guilds.cache.get(config.discord.guildId).channels.create(newName, {
               parent: config.discord.privMsgCategoryId,
               topic: `Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${created.toLocaleString()}** ` +
-                `& will be removed after ${config.discord.privMsgChannelStalenessTimeMinutes} minutes with no activity. `
+                `& will be removed after ${fmtDuration(0, false, config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)} with no activity. `
             });
 
             channelsById[newChan.id] = {
@@ -406,8 +406,8 @@ module.exports = async (context, channel, msg) => {
             const rmWarnEmbed = new MessageEmbed()
               .setColor(config.app.stats.embedColors.irc.privMsg)
               .setTitle(`Private messages with **${e.nick}** on **${e.__drcNetwork}**`)
-              .setDescription(`This channel will be removed after ${expTimes.origMins} minutes with no activity. ` +
-              `A warning will be issued when ${expTimes.stalenessPercentage}% of that time - ${expTimes.remainMins} minutes - remains.`)
+              .setDescription(`This channel will be removed after ${expTimes.humanReadable.origMins} with no activity. ` +
+              `A warning will be issued when ${expTimes.stalenessPercentage}% of that time - ${expTimes.humanReadable.remainMins} - remains.`)
               .addField('**Alternatively,** make the channel permanent with the button below',
                 'But **be warned**, Discord restricts categories to a maximum of 50 channels!');
 
