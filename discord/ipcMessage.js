@@ -431,7 +431,7 @@ module.exports = async (context, channel, msg) => {
                   .setDescription('This message will self-destruct in 1 minute...')],
                 components: []
               });
-              setTimeout(() => msg.delete(), 60 * 1000);
+              setTimeout(() => msg.delete().catch(console.error), 60 * 1000);
             });
 
             registerButtonHandler(keepId, async (interaction) => {
@@ -443,7 +443,7 @@ module.exports = async (context, channel, msg) => {
                   .setDescription('This message will self-destruct in 1 minute...')],
                 components: []
               });
-              setTimeout(() => msg.delete(), 60 * 1000);
+              setTimeout(() => msg.delete().catch(console.error), 60 * 1000);
             });
           }
 

@@ -513,7 +513,7 @@ client.once('ready', async () => {
                     .setDescription('This message will self-destruct in 1 minute...')],
                   components: []
                 });
-                setTimeout(() => warnMsg.delete(), 60 * 1000);
+                setTimeout(() => warnMsg.delete().catch(console.error), 60 * 1000);
               });
             } catch (err) {
               stats.errors++;
