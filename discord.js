@@ -243,12 +243,22 @@ client.once('ready', async () => {
 
           if (toChanId) {
             localSender = async (msg, raw) => {
+              const msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
               const chan = client.channels.cache.get(toChanId);
 
               try {
-                return await (chan.__drcSend || chan.send || client.channels.cache.get(config.irc.quitMsgChanId))(formatForAllowedSpeakerResponse(msg, raw));
+                if (chan.__drcSend) {
+                  return await chan.__drcSend(msgFormatted);
+                }
+
+                return await chan.send(msgFormatted);
               } catch (err) {
-                console.error('localSender/send failed!', err, toChanId, msg, chan);
+                try {
+                  console.warn('send failed, falling back to bot chan', err);
+                  return await client?.channels.cache.get(config.irc.quitMsgChanId).send(msgFormatted);
+                } catch (iErr) {
+                  console.error('localSender/send failed!', iErr, toChanId, msg, chan);
+                }
               }
             };
           }

@@ -14,9 +14,11 @@ module.exports = async (context, data) => {
   const { name, id, parentId } = data;
   const parentCat = categories[parentId];
 
-  console.log('REMOVE!', PrivmsgMappings.findNetworkForKey(id), id, name);
-  PrivmsgMappings.remove(PrivmsgMappings.findNetworkForKey(id), id);
-  await removePmChan(parentCat.name, id);
+  if (parentId === config.discord.privMsgCategoryId) {
+    const network = PrivmsgMappings.findNetworkForKey(id);
+    PrivmsgMappings.remove(network, id);
+    return removePmChan(network, id);
+  }
 
   if (!deletedBeforeJoin[name]) {
     const c = new Redis(config.redis.url);
