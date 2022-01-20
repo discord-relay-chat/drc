@@ -2,7 +2,7 @@
 
 const config = require('config');
 const { PREFIX, resolveNameForIRC, PrivmsgMappings } = require('../../util');
-const { messageIsFromAllowedSpeaker, senderNickFromMessage, tickleExpiry } = require('../common');
+const { messageIsFromAllowedSpeaker, senderNickFromMessage, ticklePmChanExpiry } = require('../common');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 module.exports = async (context, data) => {
@@ -106,7 +106,7 @@ module.exports = async (context, data) => {
   if (channel.parent === config.discord.privMsgCategoryId) {
     const network /* shadowed! */ = PrivmsgMappings.findNetworkForKey(data.channelId);
     console.log('PM CAT', channel, data.channelId, network, PrivmsgMappings.forNetwork(network), data.content);
-    tickleExpiry(network, data.channelId);
+    ticklePmChanExpiry(network, data.channelId);
     return await redisClient.publish(PREFIX, JSON.stringify({
       type: 'discord:requestSay:irc',
       data: {

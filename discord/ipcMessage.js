@@ -1,9 +1,16 @@
 'use strict';
 
 const config = require('config');
+const crypto = require('crypto');
 const Redis = require('ioredis');
 const userCommands = require('./userCommands');
-const { formatKVs, persistMessage, simpleEscapeForDiscord, tickleExpiry } = require('./common');
+const {
+  formatKVs,
+  persistMessage,
+  simpleEscapeForDiscord,
+  ticklePmChanExpiry,
+  persistPmChan
+} = require('./common');
 const {
   PREFIX,
   resolveNameForDiscord,
@@ -12,7 +19,7 @@ const {
   replaceIrcEscapes,
   PrivmsgMappings
 } = require('../util');
-const { MessageEmbed } = require('discord.js');
+const { MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
 const numerics = require('../irc/numerics');
 
 const serialQueue = [];
@@ -40,6 +47,7 @@ module.exports = async (context, channel, msg) => {
   const {
     stats,
     runOneTimeHandlersMatchingDiscriminator,
+    registerButtonHandler,
     sendToBotChan,
     ircReady,
     client,
@@ -360,14 +368,15 @@ module.exports = async (context, channel, msg) => {
       if (config.discord.privMsgCategoryId) {
         serialize(async () => {
           let chanId = Object.entries(PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
+          let newChan, created;
 
           if (!chanId) {
             const netTrunc = e.__drcNetwork.split('.');
             const netTruncName = netTrunc.length ? netTrunc[netTrunc.length - 2] : e.__drcNetwork;
             const newName = `${e.nick}_${netTruncName}`;
-            let created = new Date(Math.floor(Number(new Date()) / 1e3) * 1e3);
+            created = new Date(Math.floor(Number(new Date()) / 1e3) * 1e3);
 
-            const newChan = await client.guilds.cache.get(config.discord.guildId).channels.create(newName, {
+            newChan = await client.guilds.cache.get(config.discord.guildId).channels.create(newName, {
               parent: config.discord.privMsgCategoryId,
               topic: `Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${created.toLocaleString()}** ` +
                 `& will be removed after ${config.discord.privMsgChannelStalenessTimeMinutes} minutes with no activity. `
@@ -390,7 +399,53 @@ module.exports = async (context, channel, msg) => {
             console.log('Create PM chan', newChan.name, newChan.id);
           }
 
-          await tickleExpiry(e.__drcNetwork, chanId);
+          const expTimes = await ticklePmChanExpiry(e.__drcNetwork, chanId);
+
+          if (newChan) {
+            const { id } = newChan;
+            const rmWarnEmbed = new MessageEmbed()
+              .setColor(config.app.stats.embedColors.irc.privMsg)
+              .setTitle(`Private messages with **${e.nick}** on **${e.__drcNetwork}**`)
+              .setDescription(`This channel will be removed after ${expTimes.origMins} minutes with no activity. ` +
+              `A warning will be issued when ${expTimes.stalenessPercentage}% of that time - ${expTimes.remainMins} minutes - remains.`)
+              .addField('**Alternatively,** make the channel permanent with the button below',
+                'But **be warned**, Discord restricts categories to a maximum of 50 channels!');
+
+            const permId = [id, crypto.randomBytes(8).toString('hex')].join('-');
+            const keepId = [id, crypto.randomBytes(8).toString('hex')].join('-');
+            const actRow = new MessageActionRow()
+              .addComponents(
+                new MessageButton().setCustomId(permId).setLabel('Make channel permanent').setStyle('DANGER'),
+                new MessageButton().setCustomId(keepId).setLabel('Keep the countdown').setStyle('SUCCESS')
+              );
+
+            const msg = await client.channels.cache.get(id).send({ embeds: [rmWarnEmbed], components: [actRow] });
+
+            registerButtonHandler(permId, async (interaction) => {
+              await persistPmChan(e.__drcNetwork, id);
+              newChan.setTopic(`Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${new Date(created).toLocaleString()}**.`);
+              interaction.update({
+                embeds: [new MessageEmbed()
+                  .setColor('#00ff00')
+                  .setTitle('Channel is now permanent!')
+                  .setDescription('This message will self-destruct in 1 minute...')],
+                components: []
+              });
+              setTimeout(() => msg.delete(), 60 * 1000);
+            });
+
+            registerButtonHandler(keepId, async (interaction) => {
+              await ticklePmChanExpiry(e.__drcNetwork, id);
+              interaction.update({
+                embeds: [new MessageEmbed()
+                  .setColor('#00ff00')
+                  .setTitle('Keeping the countdown :+1:')
+                  .setDescription('This message will self-destruct in 1 minute...')],
+                components: []
+              });
+              setTimeout(() => msg.delete(), 60 * 1000);
+            });
+          }
 
           const msChar = config.user.monospacePrivmsgs ? '`' : '';
           const msg = msChar + isIgnored + e.message + isIgnored + msChar;

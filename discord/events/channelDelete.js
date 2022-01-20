@@ -2,6 +2,7 @@
 
 const config = require('config');
 const { PREFIX, PrivmsgMappings } = require('../../util');
+const { removePmChan } = require('../common');
 const Redis = require('ioredis');
 
 module.exports = async (context, data) => {
@@ -15,6 +16,7 @@ module.exports = async (context, data) => {
 
   console.log('REMOVE!', PrivmsgMappings.findNetworkForKey(id), id, name);
   PrivmsgMappings.remove(PrivmsgMappings.findNetworkForKey(id), id);
+  await removePmChan(parentCat.name, id);
 
   if (!deletedBeforeJoin[name]) {
     const c = new Redis(config.redis.url);

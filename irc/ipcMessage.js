@@ -181,8 +181,7 @@ module.exports = async (context, chan, msg) => {
       const ircName = '#' + resolveNameForIRC(e.network, e.name);
       botClient?.part(ircName);
       delete msgHandlers[e.network][ircName];
-      console.log(`IS ${ircName} (${e.name}) in here?!`, chanPrefixes[e.network]);
-      // XXX BUG!! have to remove this channel from appropriate structs!!!
+      chanPrefixes[e.network] = chanPrefixes[e.network].filter(o => o.ircName !== ircName);
     } else if (parsed.type === 'discord:requestJoinChannel:irc') {
       // this comes first to signal the discord bot that we've ACKed the message and are acting on it
       // there's still a race here though on the discord side: if our "irc:topic" is RX'ed BEFORE this

@@ -118,7 +118,18 @@ function generateListManagementUCExport (commandName, additionalCommands) {
   return f;
 }
 
-const aliveKey = (network, chanId, type = 'pmchan') => `${PREFIX}:${type}:aliveness:${chanId}:${network}`;
+const aliveKey = (network, chanId, event = 'aliveness', type = 'pmchan') => `${PREFIX}:${type}:${event}:${chanId}:${network}`;
+
+const persistOrClearPmChan = async (network, chanId, persist = true) => {
+  const ak = aliveKey(network, chanId);
+  const alertKey = aliveKey(network, chanId, 'removalWarning');
+  const r = new Redis(config.redis.url);
+  const rc = r.pipeline();
+  await (persist ? rc.persist(ak) : rc.del(ak));
+  await rc.del(alertKey);
+  await rc.exec();
+  r.disconnect();
+};
 
 module.exports = {
   dynRequireFrom,
@@ -291,18 +302,40 @@ module.exports = {
 
   aliveKey,
 
-  tickleExpiry: async (network, chanId) => {
+  ticklePmChanExpiry: async (network, chanId) => {
     if (!network || !chanId) {
-      console.error('tickleExpiry bad args', network, chanId);
+      console.error('ticklePmChanExpiry bad args', network, chanId);
       return null;
     }
 
-    const rc = new Redis(config.redis.url);
     const ak = aliveKey(network, chanId);
-    await rc.set(ak, chanId);
+    const nDate = new Date();
+    const alertMins = Math.floor(config.discord.privMsgChannelStalenessTimeMinutes * (1 - config.discord.privMsgChannelStalenessRemovalAlert));
+    const alertKey = aliveKey(network, chanId, 'removalWarning');
+
+    const setObj = {
+      origMins: config.discord.privMsgChannelStalenessTimeMinutes,
+      stalenessPercentage: Math.floor(config.discord.privMsgChannelStalenessRemovalAlert * 100),
+      alertMins: alertMins,
+      remainMins: config.discord.privMsgChannelStalenessTimeMinutes - alertMins
+    };
+
+    const r = new Redis(config.redis.url);
+    const rc = r.pipeline();
+    await rc.set(ak, JSON.stringify(setObj));
     await rc.expire(ak, config.discord.privMsgChannelStalenessTimeMinutes * 60);
-    rc.disconnect();
-    console.log('tickleExpiry', chanId, network, ak, 'expires',
-      new Date(Number(new Date()) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toLocaleString());
-  }
+    await rc.set(alertKey, chanId);
+    await rc.expire(alertKey, alertMins * 60);
+    await rc.exec();
+    r.disconnect();
+
+    console.log('ticklePmChanExpiry', chanId, network, ak, 'expires',
+      new Date(Number(nDate) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toLocaleString());
+
+    return setObj;
+  },
+
+  persistPmChan: async (network, chanId) => persistOrClearPmChan(network, chanId),
+
+  removePmChan: async (network, chanId) => persistOrClearPmChan(network, chanId, false)
 };

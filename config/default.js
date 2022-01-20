@@ -84,6 +84,7 @@ module.exports = {
 
   discord: {
     privMsgChannelStalenessTimeMinutes: 720,
+    privMsgChannelStalenessRemovalAlert: 0.1, // remaining of privMsgChannelStalenessTimeMinutes
     privMsgCategoryId: null,
     reactionRemovalTimeMs: 2500,
     maxMsgLength: 1800,

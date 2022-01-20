@@ -10,7 +10,7 @@ const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
 const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError } = require('./util');
 const userCommands = require('./discord/userCommands');
-const { formatKVs, aliveKey } = require('./discord/common');
+const { formatKVs, aliveKey, ticklePmChanExpiry } = require('./discord/common');
 const eventHandlers = require('./discord/events');
 
 require('./logger')('discord');
@@ -403,78 +403,116 @@ client.once('ready', async () => {
     }
 
     const privMsgExpiryListener = new Redis(config.redis.url);
-    privMsgExpiryListener.on('pmessage', (_chan, key, event) => {
+    privMsgExpiryListener.on('pmessage', async (_chan, key, event) => {
       console.log('EXPIRY MSG', key, event);
       const [, prefix, type, trackingType, id, network] = key.split(':');
 
       if (prefix !== PREFIX) {
+        stats.errors++;
         console.error(`bad prefix for keyspace notification! ${prefix}`, key, event);
         return;
       }
 
       if (event === 'expired') {
-        if (type === 'pmchan' && trackingType === 'aliveness' && event === 'expired') {
-          console.log(`PM channel ${id}:${network} expired! Removing...`);
-          const chInfo = Object.entries(PrivmsgMappings.forNetwork(network)).find(([chId]) => chId == id)?.[1]; // eslint-disable-line eqeqeq
-          if (!chInfo || !chInfo.target || !channelsById[id]) {
-            console.error('bad chinfo?!', key, event, chInfo, channelsById[id], PrivmsgMappings.forNetwork(network));
-            return;
-          }
+        if (type === 'pmchan') {
+          if (trackingType === 'aliveness') {
+            console.log(`PM channel ${id}:${network} expired! Removing...`);
+            const chInfo = Object.entries(PrivmsgMappings.forNetwork(network)).find(([chId]) => chId == id)?.[1]; // eslint-disable-line eqeqeq
+            if (!chInfo || !chInfo.target || !channelsById[id]) {
+              console.error('bad chinfo?!', key, event, chInfo, channelsById[id], PrivmsgMappings.forNetwork(network));
+              return;
+            }
 
-          if (channelsById[id].parent !== config.discord.privMsgCategoryId) {
-            console.error('bad ch parent!?', key, event, channelsById[id].parent);
-            return;
-          }
+            if (channelsById[id].parent !== config.discord.privMsgCategoryId) {
+              console.error('bad ch parent!?', key, event, channelsById[id].parent);
+              return;
+            }
 
-          const toTime = Number(new Date());
-          const queryArgs = [network, 'get', chInfo.target, `--from=${chInfo.created}`, `--to=${toTime}`];
+            const toTime = Number(new Date());
+            const queryArgs = [network, 'get', chInfo.target, `--from=${chInfo.created}`, `--to=${toTime}`];
 
-          const rmEmbed = new MessageEmbed()
-            .setColor(config.app.stats.embedColors.irc.privMsg)
-            .setTitle('Private Message channel cleanup')
-            .setDescription('I removed the following channel due to inactivity:')
-            .addField(channelsById[id].name, 'Query logs for this session with the button below or:\n`' + `!logs ${queryArgs.join(' ')}` + '`');
-
-          const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
-          const actRow = new MessageActionRow()
-            .addComponents(
-              new MessageButton().setCustomId(buttonId).setLabel('Query logs').setStyle('SUCCESS')
-            );
-
-          registerButtonHandler(buttonId, async (interaction) => {
-            const logs = await userCommands('logs')({
-              registerOneTimeHandler,
-              sendToBotChan,
-              channelsById,
-              network,
-              publish: eventHandlerContext.publish,
-              argObj: {
-                _: queryArgs
-              },
-              options: {
-                from: chInfo.created,
-                to: toTime
-              }
-            }, ...queryArgs);
-
-            interaction.update({ embeds: [rmEmbed], components: [] });
-            sendToBotChan(logs);
-          });
-
-          sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
-          client.channels.cache.get(config.irc.quitMsgChanId).send({
-            embeds: [new MessageEmbed()
+            const rmEmbed = new MessageEmbed()
               .setColor(config.app.stats.embedColors.irc.privMsg)
               .setTitle('Private Message channel cleanup')
               .setDescription('I removed the following channel due to inactivity:')
-              .addField(channelsById[id].name, 'Query logs for this session with:\n`' + `!logs ${queryArgs.join(' ')}` + '`')],
-            components: [actRow]
-          });
-          // sendToBotChan(rmEmbed, true);
-          client.channels.cache.get(id).delete('stale');
-          PrivmsgMappings.remove(network, id);
+              .addField(channelsById[id].name, 'Query logs for this session with:\n`' + `!logs ${queryArgs.join(' ')}` + '`');
+
+            const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
+            const actRow = new MessageActionRow()
+              .addComponents(
+                new MessageButton().setCustomId(buttonId).setLabel('Query logs').setStyle('SUCCESS')
+              );
+
+            registerButtonHandler(buttonId, async (interaction) => {
+              const logs = await userCommands('logs')({
+                registerOneTimeHandler,
+                sendToBotChan,
+                channelsById,
+                network,
+                publish: eventHandlerContext.publish,
+                argObj: {
+                  _: queryArgs
+                },
+                options: {
+                  from: chInfo.created,
+                  to: toTime
+                }
+              }, ...queryArgs);
+
+              interaction.update({ embeds: [rmEmbed], components: [] });
+              sendToBotChan(logs);
+            });
+
+            sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
+            client.channels.cache.get(config.irc.quitMsgChanId).send({
+              embeds: [new MessageEmbed()
+                .setColor(config.app.stats.embedColors.irc.privMsg)
+                .setTitle('Private Message channel cleanup')
+                .setDescription('I removed the following channel due to inactivity:')
+                .addField(channelsById[id].name, 'Query logs for this session with the button below or:\n`' + `!logs ${queryArgs.join(' ')}` + '`')],
+              components: [actRow]
+            });
+
+            client.channels.cache.get(id).delete('stale');
+            PrivmsgMappings.remove(network, id);
+          } else if (trackingType === 'removalWarning') {
+            try {
+              const mins = JSON.parse(await redisClient.get(aliveKey(network, id)));
+
+              const rmWarnEmbed = new MessageEmbed()
+                .setColor('#ff0000')
+                .setTitle('Inactivity removal warning!')
+                .setDescription(`This channel has been inactive for **${mins.alertMins} minutes** ` +
+                  `and will be removed in **${mins.remainMins} minutes** if it remains inactive!\n\n` +
+                  `Click the button below to reset this countdown to **${mins.origMins} minutes**.`);
+
+              const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
+              const actRow = new MessageActionRow()
+                .addComponents(
+                  new MessageButton().setCustomId(buttonId).setLabel('Reset countdown').setStyle('SUCCESS')
+                );
+
+              const warnMsg = await client.channels.cache.get(id).send({ embeds: [rmWarnEmbed], components: [actRow] });
+
+              registerButtonHandler(buttonId, async (interaction) => {
+                await ticklePmChanExpiry(network, id);
+                interaction.update({
+                  embeds: [new MessageEmbed()
+                    .setColor('#00ff00')
+                    .setTitle('Countdown reset')
+                    .setDescription('This message will self-destruct in 1 minute...')],
+                  components: []
+                });
+                setTimeout(() => warnMsg.delete(), 60 * 1000);
+              });
+            } catch (err) {
+              stats.errors++;
+              console.error('removalWarning KS notification threw', err);
+            }
+          }
         }
       } else {
+        stats.errors++;
         console.error(`unknown keyspace event! key:${key} event: ${event}`);
       }
     });
@@ -526,6 +564,7 @@ client.once('ready', async () => {
   mainSubClient.on('message', ipcMessageHandler.bind(null, {
     stats,
     runOneTimeHandlersMatchingDiscriminator,
+    registerButtonHandler,
     sendToBotChan,
     ircReady,
     client,
