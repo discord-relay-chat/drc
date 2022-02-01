@@ -185,7 +185,7 @@ client.once('ready', async () => {
 
   if (config.irc.quitMsgChanId) {
     sendToBotChan = async (s, raw = false) => {
-      if (s.length > config.discord.maxMsgLength) {
+      if (!raw && s.length > config.discord.maxMsgLength) {
         console.error('MSG TOO LARGE -- TRUNCATING!!\n', s);
         s = s.slice(0, config.discord.maxMsgLength - 50) + ' [TRUNCATED]';
       }
@@ -352,7 +352,7 @@ client.once('ready', async () => {
     sendToBotChan('\nUser configuration:\n\n' + formatKVs(uCfg));
   }
 
-  console.log('PM DISCovery', config.discord.privMsgCategoryId, channelsById[config.discord.privMsgCategoryId]);
+  console.log('Discovered private messaging category:', config.discord.privMsgCategoryId, channelsById[config.discord.privMsgCategoryId]);
   if (!config.discord.privMsgCategoryId || !channelsById[config.discord.privMsgCategoryId]) {
     const potentials = Object.keys(categoriesByName).filter(x => x.match(/priv(?:ate)?\s*me?s(?:sa)?ge?s?/ig) || x === 'PMs');
 

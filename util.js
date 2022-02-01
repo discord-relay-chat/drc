@@ -422,7 +422,14 @@ async function getLogs (network, channel, { from, to, format = 'json', filterByN
   });
 
   const expectedPath = path.resolve(path.join(logCfg.path, network, channel));
-  const rl = readline.createInterface({ input: fs.createReadStream(expectedPath) });
+  let rl;
+  try {
+    rl = readline.createInterface({ input: fs.createReadStream(expectedPath) });
+  } catch (e) {
+    console.error(`Logs failed to open ${expectedPath}`, e);
+    return;
+  }
+
   const retList = [];
   let lc = 1;
 

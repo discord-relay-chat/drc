@@ -84,7 +84,17 @@ module.exports = async (context, channel, msg) => {
 
     const runOneTimeHandlers = runOneTimeHandlersMatchingDiscriminator.bind(this, parsed.type, parsed.data);
 
-    if (type === 'irc' && subType === 'mode') {
+    if (type === 'irc' && subType === 'responseUserList') {
+      const discName = resolveNameForDiscord(parsed.data.network, parsed.data.channel.name);
+      const chanSpec = categories[categoriesByName[parsed.data.network]].channels[channelsByName[parsed.data.network][discName]];
+
+      parsed.data.__othHelpers = {
+        msgChan: client.channels.cache.get(chanSpec.id)
+      };
+
+      console.log('USER LIST!!', parsed.data, discName, chanSpec);
+      await runOneTimeHandlers(parsed.data.channel.name);
+    } else if (type === 'irc' && subType === 'mode') {
       console.debug('MODE RAW!', parsed);
       if (parsed.data.raw_modes !== '+l') {
         sendToBotChan(`**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on \`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
@@ -603,6 +613,40 @@ module.exports = async (context, channel, msg) => {
         .addField('To all servers', '(in milliseconds)')
         .addFields(...stats.lastCalcs.lagAsEmbedFields)
         .setTimestamp();
+
+      sendToBotChan(embed, true);
+    } else if (type === 'irc' && subType === 'ctcp_response') {
+      const { type, target, nick, ident, hostname, message } = parsed.data;
+
+      if (nick !== config.irc.registered[parsed.data.__drcNetwork].user.nick) {
+        sendToBotChan(new MessageEmbed()
+          .setColor('#11bbbb')
+          .setTitle(`CTCP \`${type.toUpperCase()}\` response on \`${parsed.data.__drcNetwork}\``)
+          .setDescription(`From **${nick}** <_${ident}@${hostname}_>`)
+          .addFields(
+            { name: 'Target', value: target, inline: true },
+            { name: 'Message', value: message, inline: true }
+          )
+          .setTimestamp(),
+        true);
+      }
+    } else if (type === 'irc' && subType === 'channel_info') {
+      const network = parsed.data.__drcNetwork;
+      delete parsed.data.__drcNetwork;
+      delete parsed.data._orig;
+      delete parsed.data.tags;
+      const { channel } = parsed.data;
+      delete parsed.data.channel;
+
+      const embed = new MessageEmbed()
+        .setColor('#11bbbb')
+        .setTitle(`Channel info for **${channel}** on \`${network}\``)
+        .setTimestamp();
+
+      Object.keys(parsed.data).forEach((key) => {
+        const valStr = JSON.stringify(parsed.data[key]);
+        if (valStr.length) embed.addField(key[0].toUpperCase() + key.slice(1), valStr);
+      });
 
       sendToBotChan(embed, true);
     } else if (type === 'irc') {

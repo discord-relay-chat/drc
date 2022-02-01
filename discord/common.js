@@ -309,6 +309,14 @@ module.exports = {
     }
 
     const ak = aliveKey(network, chanId);
+    const r = new Redis(config.redis.url);
+    const curTtl = await r.ttl(aliveKey(network, chanId));
+
+    if (curTtl === -1) {
+      // this key has been set to persist forever, so don't tickle the expiry!
+      return;
+    }
+
     const nDate = new Date();
     const alertMins = Math.floor(config.discord.privMsgChannelStalenessTimeMinutes * (1 - config.discord.privMsgChannelStalenessRemovalAlert));
     const alertKey = aliveKey(network, chanId, 'removalWarning');
@@ -326,7 +334,6 @@ module.exports = {
       }
     };
 
-    const r = new Redis(config.redis.url);
     const rc = r.pipeline();
     await rc.set(ak, JSON.stringify(setObj));
     await rc.expire(ak, config.discord.privMsgChannelStalenessTimeMinutes * 60);

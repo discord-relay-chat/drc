@@ -286,6 +286,41 @@ module.exports = async (context, chan, msg) => {
       }
     } else if (parsed.type === 'discord:requestStats:irc') {
       await pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:responseStats', stats }));
+    } else if (parsed.type === 'discord:requestCtcp:irc') {
+      const { network, nick, type, params } = parsed.data;
+      const client = connectedIRC.bots[network];
+
+      if (!client) {
+        console.error('requestCtcp -- no client!!', parsed);
+        return;
+      }
+
+      console.log(`CTCP '${type}' request on ${network} for ${nick} with params`, params);
+      client.ctcpRequest(nick, type, params);
+    } else if (parsed.type === 'discord:requestUserList:irc') {
+      const { network, channel } = parsed.data;
+      const client = connectedIRC.bots[network];
+
+      if (!client) {
+        console.error('requestUserList -- no client!!', parsed);
+        return;
+      }
+
+      client.channel(channel).updateUsers(async (updatedChannel) => {
+        const { users, name } = updatedChannel;
+        const c = new Redis(config.redis.url);
+        await c.publish(PREFIX, JSON.stringify({
+          type: 'irc:responseUserList',
+          data: {
+            channel: {
+              name,
+              users
+            },
+            network
+          }
+        }));
+        c.disconnect();
+      });
     } else if (parsed.type === 'irc:say' || parsed.type === 'irc:action') {
       const networkSpec = specServers[parsed.data.network.name];
       const [, subType] = parsed.type.split(':');
