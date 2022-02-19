@@ -96,6 +96,8 @@ module.exports = {
   irc: {
     log: {
       channelsToFile: true,
+      events: ['kick', 'ban', 'channel info', 'topic', 'invited', 'wallops',
+        'nick', 'nick in use', 'nick invalid', 'whois', 'whowas', 'motd', 'info'],
       path: './logs/irc'
     },
     ctcpVersionPrefix: 'Discord Relay Chat',

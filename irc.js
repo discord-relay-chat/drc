@@ -135,6 +135,34 @@ async function main () {
     console.log(`Connecting '${spec.nick}' to ${host}...`);
     connectedIRC.bots[host] = await connectIRCClient(spec);
 
+    const logDataToFile = (fileName, data, { isNotice = false, pathExtra = [] } = {}) => {
+      console.debug(`logDataToFile(${fileName}, , { isNotice: ${isNotice}, pathExtra: ${pathExtra.join(', ')}})`);
+      const chanFileDir = path.join(...[ircLogPath, host, ...pathExtra]);
+      const chanFilePath = path.join(chanFileDir, fileName);
+      console.debug(`logDataToFile: ${chanFilePath}`);
+
+      fs.stat(chanFileDir, async (err, _stats) => {
+        if (err && err.code === 'ENOENT') {
+          try {
+            await fs.promises.mkdir(chanFileDir, { recursive: true });
+          } catch (e) {
+            if (e.code !== 'EEXIST') {
+              throw e;
+            }
+          }
+        }
+
+        const lData = Object.assign({}, data, {
+          __drcLogTs: Number(new Date())
+        });
+
+        if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, lData);
+        const fh = await fs.promises.open(chanFilePath, 'a');
+        await fh.write(JSON.stringify(lData) + '\n');
+        fh.close();
+      });
+    };
+
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
@@ -148,11 +176,16 @@ async function main () {
           }
 
           data.__drcNetwork = host;
+          const evName = ev.replace(/\s+/g, '_');
 
           await pubClient.publish(PREFIX, JSON.stringify({
-            type: 'irc:' + ev.replace(/\s+/g, '_'),
+            type: 'irc:' + evName,
             data
           }));
+
+          if (config.irc.log.events?.includes(ev)) {
+            logDataToFile(evName, data, { pathExtra: ['event'] });
+          }
         });
       });
 
@@ -187,25 +220,8 @@ async function main () {
       const isNotice = data.target === spec.nick || data.type === 'notice';
 
       if (config.irc.log.channelsToFile) {
-        const chanFileDir = path.join(ircLogPath, host);
-        const chanFilePath = path.join(chanFileDir, isNotice && data.target === config.irc.registered[host].user.nick /* XXX:really need to keep LIVE track of our nick!! also add !nick DUH */ ? data.nick : data.target);
-
-        fs.stat(chanFileDir, async (err, _stats) => {
-          if (err && err.code === 'ENOENT') {
-            try {
-              await fs.promises.mkdir(chanFileDir);
-            } catch (e) {
-              if (e.code !== 'EEXIST') {
-                throw e;
-              }
-            }
-          }
-
-          if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, data);
-          const fh = await fs.promises.open(chanFilePath, 'a');
-          await fh.write(JSON.stringify(data) + '\n');
-          fh.close();
-        });
+        const fName = isNotice && data.target === config.irc.registered[host].user.nick /* XXX:really need to keep LIVE track of our nick!! also add !nick DUH */ ? data.nick : data.target;
+        logDataToFile(fName, data, { isNotice });
       }
 
       if (isNotice) {

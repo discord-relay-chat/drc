@@ -86,6 +86,11 @@ module.exports = async (context, data) => {
     data.content = data.content.replace('//me', '');
   }
 
+  if (data.content.indexOf('//thinking') === 0) {
+    subType = 'action';
+    data.content = `. o O ( ${data.content.replace('//thinking', '')} )`;
+  }
+
   if (data.content.match(CHANNELS_PATTERN)) {
     [...data.content.matchAll(CHANNELS_PATTERN)].forEach(([chanMatch, channelId]) => {
       const chanObj = channelsById[channelId];

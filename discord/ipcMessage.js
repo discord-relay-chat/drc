@@ -239,7 +239,7 @@ module.exports = async (context, channel, msg) => {
 
                 const ignoreList = await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork);
 
-                if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick)) {
+                if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick.replace('\\', ''))) {
                   stats.messages.ignored++;
                   if (config.user.squelchIgnored) {
                     (await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
@@ -357,7 +357,7 @@ module.exports = async (context, channel, msg) => {
       const ignoreList = await userCommands('ignore')({ redis }, e.__drcNetwork);
       let isIgnored = '';
 
-      if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick)) {
+      if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e._orig.nick)) {
         stats.messages.ignored++;
         if (config.user.squelchIgnored) {
           (await userCommands('ignore')({ redis }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
@@ -490,7 +490,7 @@ module.exports = async (context, channel, msg) => {
       const d = parsed.data;
       const network = d.__drcNetwork;
 
-      await runOneTimeHandlers(`${network}_${d.nick}`);
+      await runOneTimeHandlers(`${network}_${d._orig.nick ?? d.nick}`);
 
       // so they don't show up in the output...
       delete d.__drcNetwork;
@@ -586,7 +586,7 @@ module.exports = async (context, channel, msg) => {
         }
       } else {
         // skip our own parts, since the channel will necessarily have _already_ been deleted!
-        if (config.irc.registered[parsed.data.__drcNetwork].user.nick !== parsed.data.nick) {
+        if (config.irc.registered[parsed.data.__drcNetwork].user.nick !== (parsed.data._orig.nick ?? parsed.data.nick)) {
           if (subType === 'part') {
             sendToBotChan(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> ${parsed.data.channel} "${parsed.data.message}"`);
           }
