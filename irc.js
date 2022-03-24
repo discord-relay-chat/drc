@@ -164,14 +164,16 @@ async function main () {
     };
 
     const nickTrack = async (data) => {
-      const identStr = [data.ident, data.hostname].join('@');
-      const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
-      const rc = new Redis(config.redis.url);
       const trimData = Object.assign({}, data);
       delete trimData.__drcNetwork;
       delete trimData.tags;
-      await rc.sadd([rKey, 'uniques'].join(':'), data.nick);
-      await rc.sadd([rKey, 'uniques'].join(':'), data.new_nick);
+      trimData.hostname = trimData.hostname.replaceAll(':', '_');
+
+      const rc = new Redis(config.redis.url);
+      const identStr = [trimData.ident, trimData.hostname].join('@');
+      const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
+      await rc.sadd([rKey, 'uniques'].join(':'), trimData.nick);
+      await rc.sadd([rKey, 'uniques'].join(':'), trimData.new_nick);
       await rc.lpush([rKey, 'changes'].join(':'), JSON.stringify({
         timestamp: Number(new Date()),
         ...trimData

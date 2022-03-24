@@ -2,6 +2,7 @@
 
 const { matchNetwork, PREFIX } = require('../../util');
 const { MessageEmbed } = require('discord.js');
+const { formatKVs } = require('../common');
 
 async function f (context, ...a) {
   let [netStub, identStr] = a;
@@ -34,17 +35,12 @@ async function f (context, ...a) {
   const fetchAndSendNickTrackData = async (fullIdent) => {
     const fullKey = [PREFIX, network, 'nicktrack', fullIdent].join(':');
     const uniques = await context.redis.smembers([fullKey, 'uniques'].join(':'));
-    const lastChanges = await context.redis.lrange([fullKey, 'changes'].join(':'), 0, 4);
-
+    const lastChanges = (await context.redis.lrange([fullKey, 'changes'].join(':'), 0, 2)).map(JSON.parse);
     const em = new MessageEmbed()
       .setTitle(`Nick tracking for \`${fullIdent}\`:`)
-      .addField(`Has also been seen as the following **${uniques.length}** nicks:`, uniques.join('\n'))
-      .addField('The last 5 change events:', '```json\n' + lastChanges
-        .map(JSON.parse)
-        .map(x => JSON.stringify(x, null, 2))
-        .join('\n```\n```json\n') + '\n```');
-
-    context.sendToBotChan(em, true);
+      .addField(`Has been seen as the following ${uniques.length} nicks:`, '* ' + uniques.join('\n* '))
+      .addField('The last 3 nick-change events:', lastChanges.map(x => formatKVs(x)).join('\n\n'));
+    await context.sendToBotChan(em, true);
   };
 
   if (!directIdentExists) {

@@ -36,7 +36,8 @@ module.exports = {
     squelchReconnectChannelJoins: true,
     supressBotEmbeds: true,
     timestampMessages: true,
-    monospacePrivmsgs: false
+    monospacePrivmsgs: false,
+    showAllModeChanges: false
   },
 
   app: {

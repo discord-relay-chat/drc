@@ -260,21 +260,37 @@ module.exports = {
   },
 
   formatKVs (obj, delim = ':\t') {
-    const vFmt = (v) => {
+    const typeFmt = (v, k) => {
       switch (typeof v) {
         case 'object':
-          return '...';
+          return ['...'];
 
         case 'boolean':
-          return v ? ':white_check_mark:' : ':x:';
+          return [v ? ':white_check_mark:' : ':x:'];
+
+        case 'number':
+        {
+          const nv = Number(v);
+
+          if (k.match(/^t(?:ime)?s(?:tamp)?$/ig)) {
+            return [new Date(nv).toLocaleString(), Number(nv)];
+          }
+
+          return [nv];
+        }
 
         default:
-          return v;
+          return [v];
       }
     };
 
+    const vFmt = (v, k) => {
+      const [primary, secondary] = typeFmt(v, k);
+      return `**${primary}**${secondary ? ` (_${secondary}_)` : ''}`;
+    };
+
     const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
-    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}**${vFmt(obj[k])}**`).join('\n');
+    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(obj[k], k)}`).join('\n');
   },
 
   generatePerChanListManagementUCExport (commandName, additionalCommands) {

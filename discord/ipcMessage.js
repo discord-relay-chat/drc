@@ -97,7 +97,13 @@ module.exports = async (context, channel, msg) => {
     } else if (type === 'irc' && subType === 'mode') {
       console.debug('MODE RAW!', parsed);
       if (parsed.data.raw_modes !== '+l') {
-        sendToBotChan(`**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on \`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
+        const ourNick = config.irc.registered[parsed.data.__drcNetwork]?.user.nick;
+
+        if (config.user.showAllModeChanges || (ourNick && parsed.data.raw_params.some(x => x.includes(ourNick)))) {
+          sendToBotChan(`**${parsed.data.nick}** set \`${parsed.data.raw_modes}\` on ` +
+            `\`${parsed.data.__drcNetwork}\`/**${parsed.data.target}**` +
+            `${parsed.data.raw_params.length ? ` for **${parsed.data.raw_params.join('**, **')}**` : ''}`);
+        }
       }
     } else if (type === 'http' && subType === 'get-req' && subSubType) {
       runOneTimeHandlers(subSubType);
@@ -147,9 +153,12 @@ module.exports = async (context, channel, msg) => {
         throw new Error(`Bad Discord channel id ${joined.id}`, joined);
       }
 
-      msgChan.__drcSend = (s) => msgChan.send(
-        (config.user.timestampMessages ? '`' + new Date().toLocaleTimeString() + '` ' : '') + s
-      ).catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack, parsed, JSON.stringify(err)));
+      msgChan.__drcSend = (s, raw = false) => {
+        msgChan.send(
+          raw ? s : (config.user.timestampMessages ? '`' + new Date().toLocaleTimeString() + '` ' : '') + s
+        )
+          .catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack, parsed, JSON.stringify(err)));
+      };
 
       const newClient = new Redis(config.redis.url);
       const ignoreClient = new Redis(config.redis.url);

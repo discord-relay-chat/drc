@@ -122,7 +122,7 @@ console.log(`${PREFIX} Discord controller starting...`);
 
 const formatForAllowedSpeakerResponse = (s, raw = false) =>
   (!raw
-    ? (config.user.timestampMessages ? `(*${new Date().toLocaleTimeString()}*) ` : '') + s
+    ? (config.user.timestampMessages ? `\`[${new Date().toLocaleTimeString()}]\` ` : '') + s
     : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
 client.once('ready', async () => {
@@ -242,16 +242,23 @@ client.once('ready', async () => {
           let localSender = sendToBotChan;
 
           if (toChanId) {
-            localSender = async (msg, raw) => {
-              const msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
+            localSender = async (msg, raw = false) => {
+              let msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
               const chan = client.channels.cache.get(toChanId);
 
               try {
-                if (chan.__drcSend) {
-                  return await chan.__drcSend(msgFormatted);
+                const _realSender = chan.__drcSend || chan.send.bind(chan);
+                const privMsg = '_(Only visible to you)_';
+
+                if (!raw) {
+                  msgFormatted = `${privMsg} ${msgFormatted}`;
                 }
 
-                return await chan.send(msgFormatted);
+                await _realSender(msgFormatted, raw);
+
+                if (raw) {
+                  await _realSender(privMsg);
+                }
               } catch (err) {
                 try {
                   console.warn('send failed, falling back to bot chan', err);
