@@ -163,6 +163,22 @@ async function main () {
       });
     };
 
+    const nickTrack = async (data) => {
+      const identStr = [data.ident, data.hostname].join('@');
+      const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
+      const rc = new Redis(config.redis.url);
+      const trimData = Object.assign({}, data);
+      delete trimData.__drcNetwork;
+      delete trimData.tags;
+      await rc.sadd([rKey, 'uniques'].join(':'), data.nick);
+      await rc.sadd([rKey, 'uniques'].join(':'), data.new_nick);
+      await rc.lpush([rKey, 'changes'].join(':'), JSON.stringify({
+        timestamp: Number(new Date()),
+        ...trimData
+      }));
+      rc.disconnect();
+    };
+
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
@@ -185,6 +201,10 @@ async function main () {
 
           if (config.irc.log.events?.includes(ev)) {
             logDataToFile(evName, data, { pathExtra: ['event'] });
+          }
+
+          if (evName === 'nick') {
+            nickTrack(data);
           }
         });
       });

@@ -50,6 +50,14 @@ async function f (context, ...a) {
     }
 
     if (regular.length) {
+      if (!context.options.full) {
+        sender(new MessageEmbed()
+          .setTitle(`_${name}_ on \`${network}\` has **${regular.length}** regular users.`)
+          .setTimestamp());
+
+        return;
+      }
+
       const SL = 100;
       let sStart = 0;
       let pg = 1;

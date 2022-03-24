@@ -4,39 +4,30 @@ const config = require('config');
 const userCommands = require('../userCommands');
 const { senderNickFromMessage, messageIsFromAllowedSpeaker } = require('../common');
 
-async function whois (context, data) {
-  context.argObj = {
-    _: [ /// XXX fix this
-      context.channelsById[context.channelsById[data?.message.channelId].parent].name,
-      senderNickFromMessage(data?.message)
-    ]
-  };
+function createArgObjOnContext (context, data, subaction) {
+  const tmplArr = [
+    context.channelsById[context.channelsById[data?.message.channelId].parent]?.name,
+    senderNickFromMessage(data?.message)
+  ];
 
-  return userCommands('whois')(context, ...context.argObj._);
+  if (subaction) {
+    tmplArr.splice(1, 0, subaction);
+  }
+
+  context.argObj = { _: tmplArr };
+  return tmplArr;
+}
+
+async function whois (context, data) {
+  return userCommands('whois')(context, ...createArgObjOnContext(context, data));
 }
 
 async function ignoreAdd (context, data) {
-  context.argObj = {
-    _: [ /// XXX fix this
-      context.channelsById[context.channelsById[data?.message.channelId].parent].name,
-      'add',
-      senderNickFromMessage(data?.message)
-    ]
-  };
-
-  return userCommands('ignore')(context, ...context.argObj._);
+  return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'add'));
 }
 
 async function ignoreRemove (context, data) {
-  context.argObj = {
-    _: [ /// XXX fix this
-      context.channelsById[context.channelsById[data?.message.channelId].parent].name,
-      'remove',
-      senderNickFromMessage(data?.message)
-    ]
-  };
-
-  return userCommands('ignore')(context, ...context.argObj._);
+  return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'remove'));
 }
 
 const allowedReactions = {

@@ -52,7 +52,7 @@ function simpleEscapeForDiscord (s) {
   return accum;
 }
 
-function generateListManagementUCExport (commandName, additionalCommands) {
+function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
 
@@ -76,7 +76,10 @@ function generateListManagementUCExport (commandName, additionalCommands) {
         await context.redis.sadd(key, argStr());
         break;
       case 'clear':
-        await context.redis.del(key);
+        // this really should be a button for confirmation instead of hardcoded!
+        if (!disallowClear) {
+          await context.redis.del(key);
+        }
         break;
       case 'remove':
         await context.redis.srem(key, argStr());
@@ -199,7 +202,7 @@ module.exports = {
   },
 
   // this and ^servePage should be refactored together, they're very similar
-  async serveMessages (context, data, callback) {
+  async serveMessages (context, data, opts = {}) {
     const name = nanoid();
 
     if (!data.length) {
@@ -217,13 +220,9 @@ module.exports = {
         }
       }));
       r.disconnect();
-
-      if (callback) {
-        callback(context);
-      }
     });
 
-    const options = Object.assign({}, context.options);
+    const options = Object.assign(opts, context.options);
     delete options._;
 
     await context.publish({

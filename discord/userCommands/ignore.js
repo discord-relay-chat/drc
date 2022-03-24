@@ -19,6 +19,11 @@ module.exports = generateListManagementUCExport('ignore', {
     context.sendToBotChan(`Have ${msgs.length} sequelched messages on ` +
       `\`${context.network}\`${context.options.clear ? ' (cleared!)' : ''}:`);
 
+    if (msgs.length > 10) {
+      context.sendToBotChan("That's too many messages! Use `digest` instead.");
+      return;
+    }
+
     msgs.forEach((msg) => {
       const e = msg.data;
       let eHead = '<';
@@ -38,12 +43,12 @@ module.exports = generateListManagementUCExport('ignore', {
   digest: async (context, ...a) => {
     const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
 
-    await serveMessages(context, data);
+    await serveMessages(context, data, { ttl: 1440 });
 
-    if (context.options.clear) {
+    if (!context.options.keep) {
       clearSquelched(context);
     }
   },
 
   clearSquelched
-});
+}, true);
