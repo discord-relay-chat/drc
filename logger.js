@@ -18,7 +18,7 @@ function disableLevel (l) {
 
 let logger;
 
-function initialize (processName = process.title, overrideConsole = true) {
+function initialize (processName = process.title, overrideConsole = true, onlyToFile = false) {
   if (!logger) {
     if (!fs.existsSync(config.app.log.path)) {
       fs.mkdirSync(config.app.log.path);
@@ -36,8 +36,10 @@ function initialize (processName = process.title, overrideConsole = true) {
       }
 
       const dstrArr = [new Date(), `<${APP_NAMEVER}/${level}>`, ...a];
-      _console[level](dsMapper(dstrArr, true));
       _outStream.write(dsMapper([{ level }, ...dstrArr, '\n']));
+      if (!onlyToFile) {
+        _console[level](dsMapper(dstrArr, true));
+      }
     };
 
     logger = LEVELS.reduce((a, lvl) => ({ [lvl]: _emit.bind(logger, lvl), ...a }), { APP_NAMEVER });

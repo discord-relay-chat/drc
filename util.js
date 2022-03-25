@@ -5,6 +5,7 @@ const _ = require('lodash');
 const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
+const Redis = require('ioredis');
 const readline = require('readline');
 const { fetch } = require('undici');
 const dns = require('dns').promises;
@@ -627,6 +628,13 @@ function expiryFromOptions (options) {
   return Number(new Date()) + expiryDurationFromOptions(options);
 }
 
+async function scopedRedisClient (scopeCb) {
+  const scopeClient = new Redis(config.redis.url);
+  const retVal = await scopeCb(scopeClient);
+  await scopeClient.disconnect();
+  return retVal;
+}
+
 module.exports = {
   ircEscapeStripSet,
   ENV,
@@ -658,10 +666,9 @@ module.exports = {
   findFixedNonZero,
   replaceIrcEscapes,
   xxd,
-
   expiryFromOptions,
-
   expiryDurationFromOptions,
+  scopedRedisClient,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

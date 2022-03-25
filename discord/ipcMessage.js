@@ -507,8 +507,28 @@ module.exports = async (context, channel, msg) => {
 
       const lookupHost = d.actual_ip || d.actual_hostname || d.hostname;
       const ipInf = await ipInfo(lookupHost);
-      sendToBotChan('`whois` on `' + network + '` \n' + formatKVs(d) +
-        (ipInf ? `\n\nIP info for **${lookupHost}**:\n` + formatKVs(ipInf) : ''));
+
+      const ident = `${d.ident}@${d.hostname}`;
+      const identData = await userCommands('nickTracking').identLookup(network, ident);
+      console.debug('whois ident lookup result', network, ident, identData);
+
+      const embed = new MessageEmbed()
+        .setColor('#2c759c')
+        .setTitle(`WHOIS \`${d.nick}\` on \`${network}\`?`)
+        .setDescription(formatKVs(d));
+
+      if (ipInf) {
+        embed.addField(`IP info for \`${lookupHost}\`:`, formatKVs(ipInf));
+      }
+
+      if (identData) {
+        embed.addField(`Known aliases of <\`${identData.fullIdent}\`>:`, '`' + identData.uniques.join('`\n`') + '`');
+        if (identData.lastChanges.length) {
+          embed.setFooter(`Last nick change was ${fmtDuration(identData.lastChanges[0].timestamp)} ago.`);
+        }
+      }
+
+      sendToBotChan(embed, true);
     } else if (parsed.type === 'irc:responseWhois:nmap') {
       const wd = parsed.data.whoisData;
 

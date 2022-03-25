@@ -160,6 +160,10 @@ module.exports = {
     token: null
   },
 
+  cli: {
+    nickColors: ['cyan', 'magenta', 'red', 'blue', 'yellow'] /* no green! that's our color */
+  },
+
   toJSON () {
     return replace(this, [
       'discord.botId',

@@ -4,6 +4,10 @@ const config = require('config');
 const Redis = require('ioredis');
 const { PREFIX } = require('./util');
 const { screen, mainTitle, createMainBoxWithLabel, mainBox, inputBox, netList, chanList } = require('./cli/elements');
+const logging = require('./logger');
+
+const logger = logging('cli', false, true);
+logging.enableLevel('debug');
 
 const redisClient = new Redis(config.redis.url);
 const publishClient = new Redis(config.redis.url);
@@ -11,18 +15,19 @@ const track = {};
 let curFgBox = mainBox;
 
 function tsFmted () {
-  return `{blue-fg}{bold}[${new Date().toLocaleTimeString()}]{/}`;
+  return `{grey-fg}{bold}[${new Date().toLocaleTimeString()}]{/}`;
 }
 
-function _message (fStr) {
+function _message (fStr, level = 'log') {
   mainBox.insertBottom(`${tsFmted()} ${fStr}`);
   mainBox.scrollTo(100);
   screen.render();
+  logger[level]('(_message) ' + fStr);
 }
 
-const debugMessage = (msgStr) => _message(`{cyan-fg}${msgStr}{/}`);
+const debugMessage = (msgStr) => _message(`{cyan-fg}${msgStr}{/}`, 'debug');
 const systemMessage = (msgStr) => _message(`{yellow-fg}${msgStr}{/}`);
-const errorMessage = (msgStr) => _message(`{red-fg}{bold}${msgStr}{/}`);
+const errorMessage = (msgStr) => _message(`{red-fg}{bold}${msgStr}{/}`, 'error');
 
 function toggleInputBox () {
   if (inputBox.__drcHidden) {
@@ -47,6 +52,7 @@ function toggleInputBox () {
 function fgWinIsChannel () {
   const selChan = chanList.value?.split(/\s+/g)[0];
 
+  logger.debug(`fgWinIsChannel: selChan=${selChan} curFgBox=${curFgBox.__drcChanName} eq?=${curFgBox === mainBox}`);
   if (curFgBox !== mainBox && (selChan === '' || selChan === curFgBox.__drcChanName)) {
     return [curFgBox.__drcNetwork, curFgBox.__drcChanName];
   }
@@ -56,20 +62,23 @@ function fgWinIsChannel () {
 
 function chanListUpdate (networkName) {
   const net = track[networkName];
-  const prevSel = chanList.value?.split(/\s+/g)[0];
+  const prevSel = curFgBox !== mainBox && curFgBox.__drcNetwork === networkName ? curFgBox.__drcChanName : undefined;
 
   if (net) {
     const keysSorted = Object.keys(net).sort((a, b) =>
       a.replaceAll('#', '').localeCompare(b.replaceAll('#', '')));
     chanList.clearItems();
     chanList.setItems(keysSorted.map((k) =>
-      `${k}${net[k].unread ? ` (${net[k].unread})` : ''}`));
+      `${k}${net[k].unread ? ` (${net[k].has_mention ? '*' : ''}${net[k].unread})` : ''}`));
 
     if (prevSel) {
+      logger.debug(`chanListUpdate: re-selecting prevSel=${prevSel}`);
       chanList.select(keysSorted.indexOf(prevSel));
     }
 
-    screen.render();
+    chanList.render();
+  } else {
+    logger.error(`chanListUpdate: bad network!? "${networkName}"`);
   }
 }
 
@@ -85,8 +94,12 @@ function chanSelect (network, chanName) {
     chan.box.show();
     chan.box.focus();
     chan.unread = 0;
+    chan.has_mention = false;
     curFgBox = chan.box;
-    chanListUpdate(netList.value); // calls screen.render()
+    curFgBox.scrollTo(100);
+    chanListUpdate(netList.value);
+    screen.render();
+    logger.debug(`chanSelect: selected ${network} ${chanName}`);
   } else {
     errorMessage(`BAD CHAN SELECT ${chanName} / ${network}`);
   }
@@ -119,10 +132,13 @@ inputBox.on('submit', (input) => {
   }
 });
 
-netList.on('select', (box) => chanListUpdate(box.parent.value));
+netList.on('select', (box) => {
+  logger.log(`netList#select [${box.parent.value}]`);
+  chanListUpdate(box.parent.value);
+});
 
 chanList.on('select', (box) => {
-  debugMessage('SLECT ' + box.parent.value);
+  logger.log(`chanList#select [${netList.value}] [${box.parent.value}]`);
   chanSelect(netList.value, box.parent.value.split(/\s+/g)[0]);
 });
 
@@ -134,9 +150,16 @@ screen.key(['C-up'], () => chanList.up(1));
 screen.key(['C-down'], () => chanList.down(1));
 screen.key(['C-l'], () => chanList.pick(() => debugMessage('picked!')));
 
+screen.on('resize', () => {
+  logger.log('screen#resize ', screen.width, screen.height);
+  curFgBox.scrollTo(100);
+});
+
+let lastChanBox;
 screen.key(['C-s'], () => {
   if (curFgBox !== mainBox) {
     curFgBox.setBack();
+    lastChanBox = curFgBox;
     curFgBox = mainBox;
     curFgBox.hide();
     mainBox.focus();
@@ -144,7 +167,10 @@ screen.key(['C-s'], () => {
     mainBox.setFront();
     screen.render();
   } else {
-    chanSelect(netList.value, chanList.value.split(/\s+/g)[0]);
+    if (lastChanBox) {
+      chanSelect(netList.value, lastChanBox.__drcChanName);
+      lastChanBox = null;
+    }
   }
 });
 
@@ -164,6 +190,7 @@ redisClient.on('pmessage', (_pattern, _channel, dataJson) => {
     }
 
     netList.setItems(Object.keys(track));
+    netList.render();
 
     if (nc && data.target) {
       let chan = nc[data.target];
@@ -171,6 +198,7 @@ redisClient.on('pmessage', (_pattern, _channel, dataJson) => {
         chan = nc[data.target] = {
           total: 0,
           unread: 0,
+          has_mention: false,
           box: createMainBoxWithLabel(`${mainTitle}{bold}${data.target}{/bold} on ${data.__drcNetwork} `)
         };
 
@@ -180,6 +208,10 @@ redisClient.on('pmessage', (_pattern, _channel, dataJson) => {
         chan.box.setBack();
         chan.box.__drcNetwork = data.__drcNetwork;
         chan.box.__drcChanName = data.target;
+        chan.box.__drcNickColors = {
+          next: 0,
+          nicks: {}
+        };
       }
 
       chan.total++;
@@ -196,11 +228,27 @@ redisClient.on('pmessage', (_pattern, _channel, dataJson) => {
 
       if (type === 'irc:message') {
         const ourName = config.irc.registered[data.__drcNetwork]?.user.nick;
+        const pLen = data.message.length;
         data.message = data.message.replaceAll(ourName, `{#55ff33-fg}${ourName}{/}`);
+        chan.has_mention = pLen !== data.message.length && curFgBox.__drcChanName !== data.target;
+
         if (data.nick === ourName) {
           data.nick = data.nick.replaceAll(ourName, `{#55ff33-fg}${ourName}{/}`);
         }
-        chan.box.insertBottom(`${tsFmted()} <{cyan-fg}{bold}${data.nick}{/}> {bold}${data.message}{/}`);
+
+        let nickColor = chan.box.__drcNickColors.nicks[data.nick];
+
+        if (!nickColor) {
+          nickColor = chan.box.__drcNickColors.nicks[data.nick] = config.cli.nickColors[chan.box.__drcNickColors.next++];
+
+          if (chan.box.__drcNickColors.next >= config.cli.nickColors.length) {
+            chan.box.__drcNickColors.next = 0;
+          }
+
+          logger.debug(`Assigned new nick color ${nickColor} to ${data.nick} in ${data.target}/${data.__drcNetwork} (next=${chan.box.__drcNickColors.next})`);
+        }
+
+        chan.box.insertBottom(`${tsFmted()} <{${nickColor}-fg}{bold}${data.nick}{/}> ${data.message}`);
         chan.box.scrollTo(100);
         screen.render();
       } else {

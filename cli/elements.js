@@ -21,7 +21,7 @@ const mainBoxTmpl = {
     fg: 'white',
     bg: 'black',
     border: {
-      fg: '#f0f0f0'
+      fg: 'cyan'
     },
     scrollbar: {
       bg: 'red',
@@ -29,7 +29,8 @@ const mainBoxTmpl = {
     }
   },
   scrollable: true,
-  alwaysScroll: true
+  alwaysScroll: true,
+  mouse: false
 };
 
 function createMainBoxWithLabel (label) {
@@ -78,7 +79,7 @@ const chanList = blessed.list({
   right: '0',
   top: '20%',
   width: '15%',
-  height: '80%',
+  height: '80%+1',
   border: {
     type: 'line'
   },

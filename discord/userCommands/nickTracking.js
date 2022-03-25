@@ -1,8 +1,26 @@
 'use strict';
 
-const { matchNetwork, PREFIX } = require('../../util');
+const { matchNetwork, PREFIX, scopedRedisClient } = require('../../util');
 const { MessageEmbed } = require('discord.js');
 const { formatKVs } = require('../common');
+
+async function identLookup (network, identStr) {
+  const rKey = [PREFIX, network, 'nicktrack', identStr].join(':');
+  const uniqKey = [rKey, 'uniques'].join(':');
+  const chKey = [rKey, 'changes'].join(':');
+
+  return scopedRedisClient(async (rc) => {
+    if (Boolean(await rc.exists(uniqKey)) && Boolean(await rc.exists(chKey))) {
+      return {
+        fullIdent: identStr,
+        uniques: await rc.smembers([rKey, 'uniques'].join(':')),
+        lastChanges: (await rc.lrange([rKey, 'changes'].join(':'), 0, 2)).map(JSON.parse)
+      };
+    }
+
+    return null;
+  });
+}
 
 async function f (context, ...a) {
   let [netStub, identStr] = a;
@@ -25,17 +43,7 @@ async function f (context, ...a) {
     return;
   }
 
-  const rKey = [PREFIX, network, 'nicktrack', identStr].join(':');
-  const uniqKey = [rKey, 'uniques'].join(':');
-  const chKey = [rKey, 'changes'].join(':');
-
-  let directIdentExists = Boolean(await context.redis.exists(uniqKey)) &&
-    Boolean(await context.redis.exists(chKey));
-
-  const fetchAndSendNickTrackData = async (fullIdent) => {
-    const fullKey = [PREFIX, network, 'nicktrack', fullIdent].join(':');
-    const uniques = await context.redis.smembers([fullKey, 'uniques'].join(':'));
-    const lastChanges = (await context.redis.lrange([fullKey, 'changes'].join(':'), 0, 2)).map(JSON.parse);
+  const sendNickTrackData = async ({ fullIdent, uniques, lastChanges }) => {
     const em = new MessageEmbed()
       .setTitle(`Nick tracking for \`${fullIdent}\`:`)
       .addField(`Has been seen as the following ${uniques.length} nicks:`, '* ' + uniques.join('\n* '))
@@ -43,7 +51,9 @@ async function f (context, ...a) {
     await context.sendToBotChan(em, true);
   };
 
-  if (!directIdentExists) {
+  let identData = await identLookup(network, identStr);
+
+  if (!identData) {
     const searchKey = [PREFIX, network, 'nicktrack', '*' + identStr + '*'].join(':');
     const foundKeys = await context.redis.keys(searchKey);
 
@@ -59,17 +69,18 @@ async function f (context, ...a) {
         return;
       }
 
-      identStr = uniqIdents[0];
-      directIdentExists = true;
+      identData = await identLookup(network, (identStr = uniqIdents[0]));
       context.sendToBotChan(`Found matching ident <\`${identStr}\`>...`);
     }
   }
 
-  if (directIdentExists) {
-    await fetchAndSendNickTrackData(identStr);
+  if (identData) {
+    console.debug('ident data', network, identStr, identData);
+    await sendNickTrackData(identData);
   } else {
     context.sendToBotChan(`No known ident \`${identStr}\`, and could not find any matching.`);
   }
 }
 
+f.identLookup = identLookup;
 module.exports = f;
