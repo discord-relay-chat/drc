@@ -11,6 +11,7 @@
   "author": "Ed Fletcher, Sector T137 <https://github.com/edfletcher>",
   "license": "MIT",
   "dependencies": {
+    "blessed": "^0.1.81",
     "config": "^3.3.6",
     "date-fns": "^2.25.0",
     "discord.js": "^13.3.1",
