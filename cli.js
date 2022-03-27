@@ -1,273 +1,64 @@
+#!/usr/bin/env node
+
 'use strict';
 
-const config = require('config');
-const Redis = require('ioredis');
-const { PREFIX } = require('./util');
-const { screen, mainTitle, createMainBoxWithLabel, mainBox, inputBox, netList, chanList } = require('./cli/elements');
 const logging = require('./logger');
-
 const logger = logging('cli', false, true);
-logging.enableLevel('debug');
+const { hideBin } = require('yargs/helpers');
+const argv = require('yargs/yargs')(hideBin(process.argv))
+  .usage('Usage: $0 [command] [options]')
+  .usage('When command is not specified, runs a simple IRC frontend.')
+  .usage('All options listed below apply *only* to inspector mode.')
+  .command('inspector', 'Run in inspector mode')
+  .alias('e', 'event')
+  .nargs('e', 1)
+  .describe('e', 'The event (regex) to listen to in inspector mode')
+  .alias('p', 'path')
+  .nargs('p', 1)
+  .describe('p', 'Require property "path" is defined in event data')
+  .alias('v', 'value')
+  .nargs('v', 1)
+  .describe('v', 'Expect property "path" to have "value" (regex)')
+  .alias('o', 'optionalPath')
+  .nargs('o', 1)
+  .describe('o', 'Extract (if available) the optionalPath from event data; multiple -o specifications are allowed')
+  .alias('q', 'quiet')
+  .nargs('q', 0)
+  .describe('q', 'Quiet mode, do not emit the entire event object')
+  .alias('t', 'terse')
+  .nargs('t', 0)
+  .describe('t', 'Emit event object on one line, not pretty-printed')
+  .alias('l', 'long')
+  .nargs('l', 0)
+  .describe('l', 'Emit extracted paths in long form')
+  .alias('i', 'insensitive')
+  .nargs('i', 0)
+  .describe('i', 'Regexs are case-insensitive')
+  .help('h')
+  .alias('h', 'help')
+  .argv;
 
-const redisClient = new Redis(config.redis.url);
-const publishClient = new Redis(config.redis.url);
-const track = {};
-let curFgBox = mainBox;
-
-function tsFmted () {
-  return `{grey-fg}{bold}[${new Date().toLocaleTimeString()}]{/}`;
+if (argv.debug) {
+  logging.enableLevel('debug');
+  logger.debug('Debug logging enabled');
 }
 
-function _message (fStr, level = 'log') {
-  mainBox.insertBottom(`${tsFmted()} ${fStr}`);
-  mainBox.scrollTo(100);
-  screen.render();
-  logger[level]('(_message) ' + fStr);
-}
-
-const debugMessage = (msgStr) => _message(`{cyan-fg}${msgStr}{/}`, 'debug');
-const systemMessage = (msgStr) => _message(`{yellow-fg}${msgStr}{/}`);
-const errorMessage = (msgStr) => _message(`{red-fg}{bold}${msgStr}{/}`, 'error');
-
-function toggleInputBox () {
-  if (inputBox.__drcHidden) {
-    inputBox.clearValue();
-    inputBox.show();
-    inputBox.focus();
-    inputBox.setFront();
-    curFgBox.height = '95%';
-    curFgBox.scrollTo(100);
-  } else {
-    inputBox.hide();
-    inputBox.setBack();
-    mainBox.focus();
-    curFgBox.height = '100%';
-    curFgBox.scrollTo(100);
-  }
-
-  inputBox.__drcHidden = !inputBox.__drcHidden;
-  screen.render();
-}
-
-function fgWinIsChannel () {
-  const selChan = chanList.value?.split(/\s+/g)[0];
-
-  logger.debug(`fgWinIsChannel: selChan=${selChan} curFgBox=${curFgBox.__drcChanName} eq?=${curFgBox === mainBox}`);
-  if (curFgBox !== mainBox && (selChan === '' || selChan === curFgBox.__drcChanName)) {
-    return [curFgBox.__drcNetwork, curFgBox.__drcChanName];
-  }
-
-  return [];
-}
-
-function chanListUpdate (networkName) {
-  const net = track[networkName];
-  const prevSel = curFgBox !== mainBox && curFgBox.__drcNetwork === networkName ? curFgBox.__drcChanName : undefined;
-
-  if (net) {
-    const keysSorted = Object.keys(net).sort((a, b) =>
-      a.replaceAll('#', '').localeCompare(b.replaceAll('#', '')));
-    chanList.clearItems();
-    chanList.setItems(keysSorted.map((k) =>
-      `${k}${net[k].unread ? ` (${net[k].has_mention ? '*' : ''}${net[k].unread})` : ''}`));
-
-    if (prevSel) {
-      logger.debug(`chanListUpdate: re-selecting prevSel=${prevSel}`);
-      chanList.select(keysSorted.indexOf(prevSel));
-    }
-
-    chanList.render();
-  } else {
-    logger.error(`chanListUpdate: bad network!? "${networkName}"`);
-  }
-}
-
-function chanSelect (network, chanName) {
-  let chan = track[network]?.[chanName];
-
-  if (!chan && Object.values(track[network]).length) {
-    chan = Object.values(track[network])[0];
-  }
-
-  if (chan) {
-    chan.box.setFront();
-    chan.box.show();
-    chan.box.focus();
-    chan.unread = 0;
-    chan.has_mention = false;
-    curFgBox = chan.box;
-    curFgBox.scrollTo(100);
-    chanListUpdate(netList.value);
-    screen.render();
-    logger.debug(`chanSelect: selected ${network} ${chanName}`);
-  } else {
-    errorMessage(`BAD CHAN SELECT ${chanName} / ${network}`);
-  }
-}
-
-inputBox.on('submit', (input) => {
-  toggleInputBox();
-
-  if (!input.length || input.match(/^\s*$/g)) {
-    return;
-  }
-
-  if (input.charAt(0) === '/') {
-    systemMessage('COMMAND! ' + input);
-    return;
-  }
-
-  const [network, channel] = fgWinIsChannel();
-  if (network && channel) {
-    publishClient.publish(PREFIX, JSON.stringify({
-      type: 'irc:say',
-      data: {
-        network: {
-          name: network
-        },
-        channel: channel.replace(/^#/, ''),
-        message: input
-      }
-    }));
-  }
-});
-
-netList.on('select', (box) => {
-  logger.log(`netList#select [${box.parent.value}]`);
-  chanListUpdate(box.parent.value);
-});
-
-chanList.on('select', (box) => {
-  logger.log(`chanList#select [${netList.value}] [${box.parent.value}]`);
-  chanSelect(netList.value, box.parent.value.split(/\s+/g)[0]);
-});
-
-screen.key(['escape', 'q', 'C-c'], () => process.exit(0));
-
-screen.key(['C-`', 'enter'], toggleInputBox);
-
-screen.key(['C-up'], () => chanList.up(1));
-screen.key(['C-down'], () => chanList.down(1));
-screen.key(['C-l'], () => chanList.pick(() => debugMessage('picked!')));
-
-screen.on('resize', () => {
-  logger.log('screen#resize ', screen.width, screen.height);
-  curFgBox.scrollTo(100);
-});
-
-let lastChanBox;
-screen.key(['C-s'], () => {
-  if (curFgBox !== mainBox) {
-    curFgBox.setBack();
-    lastChanBox = curFgBox;
-    curFgBox = mainBox;
-    curFgBox.hide();
-    mainBox.focus();
-    mainBox.show();
-    mainBox.setFront();
-    screen.render();
-  } else {
-    if (lastChanBox) {
-      chanSelect(netList.value, lastChanBox.__drcChanName);
-      lastChanBox = null;
-    }
-  }
-});
-
-redisClient.on('pmessage', (_pattern, _channel, dataJson) => {
+(async function () {
+  const inspectorMode = argv._[0] === 'inspector';
   try {
-    const { type, data } = JSON.parse(dataJson);
-
-    let nc = track[data?.__drcNetwork];
-    if (!nc && data?.__drcNetwork) {
-      nc = track[data.__drcNetwork] = {};
-      debugMessage(`New network: {bold}${data.__drcNetwork}{/bold}`);
-
-      // this is the first network! select it straightaway
-      if (Object.keys(track).length === 1) {
-        chanListUpdate(data.__drcNetwork);
+    if (inspectorMode) {
+      if (!argv.event) {
+        throw new Error('No event given for inspector mode');
       }
+
+      return await require('./cli/inspector')(argv);
     }
 
-    netList.setItems(Object.keys(track));
-    netList.render();
-
-    if (nc && data.target) {
-      let chan = nc[data.target];
-      if (!chan) {
-        chan = nc[data.target] = {
-          total: 0,
-          unread: 0,
-          has_mention: false,
-          box: createMainBoxWithLabel(`${mainTitle}{bold}${data.target}{/bold} on ${data.__drcNetwork} `)
-        };
-
-        debugMessage(`New channel on ${data.__drcNetwork}: {bold}${data.target}{/bold}`);
-        screen.append(chan.box);
-        chan.box.hide();
-        chan.box.setBack();
-        chan.box.__drcNetwork = data.__drcNetwork;
-        chan.box.__drcChanName = data.target;
-        chan.box.__drcNickColors = {
-          next: 0,
-          nicks: {}
-        };
-      }
-
-      chan.total++;
-
-      // don't incr unread if we're looking at this channel!
-      if (curFgBox.__drcChanName !== data.target) {
-        chan.unread++;
-      }
-
-      // make sure to update the channel list if this is the selected network
-      if (netList.value === data.__drcNetwork) {
-        chanListUpdate(data.__drcNetwork);
-      }
-
-      if (type === 'irc:message') {
-        const ourName = config.irc.registered[data.__drcNetwork]?.user.nick;
-        const pLen = data.message.length;
-        data.message = data.message.replaceAll(ourName, `{#55ff33-fg}${ourName}{/}`);
-        chan.has_mention = pLen !== data.message.length && curFgBox.__drcChanName !== data.target;
-
-        if (data.nick === ourName) {
-          data.nick = data.nick.replaceAll(ourName, `{#55ff33-fg}${ourName}{/}`);
-        }
-
-        let nickColor = chan.box.__drcNickColors.nicks[data.nick];
-
-        if (!nickColor) {
-          nickColor = chan.box.__drcNickColors.nicks[data.nick] = config.cli.nickColors[chan.box.__drcNickColors.next++];
-
-          if (chan.box.__drcNickColors.next >= config.cli.nickColors.length) {
-            chan.box.__drcNickColors.next = 0;
-          }
-
-          logger.debug(`Assigned new nick color ${nickColor} to ${data.nick} in ${data.target}/${data.__drcNetwork} (next=${chan.box.__drcNickColors.next})`);
-        }
-
-        chan.box.insertBottom(`${tsFmted()} <{${nickColor}-fg}{bold}${data.nick}{/}> ${data.message}`);
-        chan.box.scrollTo(100);
-        screen.render();
-      } else {
-        systemMessage(`(${_channel}) Unhandled message of type "${type}" in channel ${data.target} on ${data.__drcNetwork}: ${JSON.stringify(data)}`);
-      }
-    } else {
-      const ignoreTypes = ['irc:join', 'irc:nick', 'irc:quit', 'irc:mode', 'irc:part'];
-      if (!ignoreTypes.includes(type)) {
-        systemMessage(`(${_channel}) Unhandled message of type "${type}" on ${data?.__drcNetwork}: ${dataJson}`);
-      }
+    await require('./cli/main')();
+  } catch (err) {
+    logger.error('cli/main threw', err);
+    if (inspectorMode) {
+      console.error(err);
     }
-  } catch (e) {
-    errorMessage(e.message + '\n' + e.stack);
   }
-});
-
-inputBox.__drcHidden = true;
-inputBox.hide();
-mainBox.focus();
-screen.render();
-
-redisClient.psubscribe(PREFIX + '*');
+})();

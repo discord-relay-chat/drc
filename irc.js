@@ -7,7 +7,7 @@ const irc = require('irc-framework');
 const inq = require('inquirer');
 const Redis = require('ioredis');
 const redisClient = new Redis(config.redis.url);
-const { PREFIX, CTCPVersion } = require('./util');
+const { PREFIX, CTCPVersion, scopedRedisClient } = require('./util');
 const ipcMessageHandler = require('./irc/ipcMessage');
 
 require('./logger')('irc');
@@ -168,17 +168,16 @@ async function main () {
       delete trimData.__drcNetwork;
       delete trimData.tags;
       trimData.hostname = trimData.hostname.replaceAll(':', '_');
-
-      const rc = new Redis(config.redis.url);
-      const identStr = [trimData.ident, trimData.hostname].join('@');
-      const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
-      await rc.sadd([rKey, 'uniques'].join(':'), trimData.nick);
-      await rc.sadd([rKey, 'uniques'].join(':'), trimData.new_nick);
-      await rc.lpush([rKey, 'changes'].join(':'), JSON.stringify({
-        timestamp: Number(new Date()),
-        ...trimData
-      }));
-      rc.disconnect();
+      await scopedRedisClient(async (rc) => {
+        const identStr = [trimData.ident, trimData.hostname].join('@');
+        const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
+        await rc.sadd([rKey, 'uniques'].join(':'), trimData.nick);
+        await rc.sadd([rKey, 'uniques'].join(':'), trimData.new_nick);
+        await rc.lpush([rKey, 'changes'].join(':'), JSON.stringify({
+          timestamp: Number(new Date()),
+          ...trimData
+        }));
+      });
     };
 
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',

@@ -8,9 +8,9 @@ const Redis = require('ioredis');
 const yargs = require('yargs');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
-const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError } = require('./util');
+const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, scopedRedisClient } = require('./util');
 const userCommands = require('./discord/userCommands');
-const { formatKVs, aliveKey, ticklePmChanExpiry } = require('./discord/common');
+const { formatKVs, aliveKey, ticklePmChanExpiry, plotMpmData } = require('./discord/common');
 const eventHandlers = require('./discord/events');
 
 require('./logger')('discord');
@@ -347,9 +347,7 @@ client.once('ready', async () => {
     client.on(eventName, (...a) => handler(eventHandlerContext, ...a));
   });
 
-  const cfgClient = new Redis(config.redis.url);
-  const uCfg = await userCommands('config')({ redis: cfgClient }, 'load');
-  cfgClient.disconnect();
+  const uCfg = await scopedRedisClient(async (redis) => userCommands('config')({ redis }, 'load'));
 
   if (uCfg.error) {
     sendToBotChan(`\nReloading user configuration failed:\n\n**${uCfg.error.message}**\n`);
@@ -392,17 +390,17 @@ client.once('ready', async () => {
 
   if (config.discord.privMsgCategoryId) {
     const toDel = Object.entries(channelsById).filter(([, { parent }]) => parent === config.discord.privMsgCategoryId);
-
-    const aliveClient = new Redis(config.redis.url);
-    const realDel = [];
-    for (const [chanId, o] of toDel) {
-      const network = PrivmsgMappings.findNetworkForKey(chanId);
-      // only delete channels that have expired in Redis (assuming here that we've missed the keyspace notification for some reason)
-      if (!(await aliveClient.get(aliveKey(network, chanId)))) {
-        realDel.push([chanId, o]);
+    const realDel = await scopedRedisClient(async (aliveClient) => {
+      const realDel = [];
+      for (const [chanId, o] of toDel) {
+        const network = PrivmsgMappings.findNetworkForKey(chanId);
+        // only delete channels that have expired in Redis (assuming here that we've missed the keyspace notification for some reason)
+        if (!(await aliveClient.get(aliveKey(network, chanId)))) {
+          realDel.push([chanId, o]);
+        }
       }
-    }
-    aliveClient.disconnect();
+      return realDel;
+    });
 
     if (realDel.length) {
       const rmEmbed = new MessageEmbed()
@@ -623,17 +621,26 @@ client.once('ready', async () => {
 
     const _persist = async () => {
       console.log(`Auto-persisting stats at ${config.app.statsSilentPersistFreqMins}-minute frequency`);
-      const redis = new Redis(config.redis.url);
-      await userCommands('stats')({
-        stats,
-        options: {
-          silent: true
-        },
-        registerOneTimeHandler,
-        redis,
-        publish: (o) => redis.publish(PREFIX, JSON.stringify(o))
+      await scopedRedisClient(async (redis) => {
+        await userCommands('stats')({
+          stats,
+          options: {
+            silent: true
+          },
+          registerOneTimeHandler,
+          redis,
+          publish: (o) => redis.publish(PREFIX, JSON.stringify(o))
+        });
+
+        const { chatMsgsMpm, totMsgsMpm } = stats.lastCalcs;
+        await redis.lpush(`${PREFIX}:mpmtrack`, JSON.stringify({
+          chatMsgsMpm,
+          totMsgsMpm,
+          timestamp: Number(new Date())
+        }));
+
+        await plotMpmData();
       });
-      redis.disconnect();
     };
 
     const silentStatsPersist = () => {
@@ -658,16 +665,16 @@ client.once('ready', async () => {
         .setTimestamp();
       sendToBotChan(embed, true);
 
-      const rClient = new Redis(config.redis.url);
-      for (const { network } of readyRes.readyData) {
-        const onConnectCmds = await userCommands('onConnect')({ redis: rClient }, network);
+      await scopedRedisClient(async (rClient) => {
+        for (const { network } of readyRes.readyData) {
+          const onConnectCmds = await userCommands('onConnect')({ redis: rClient }, network);
 
-        for (const connectCmd of onConnectCmds) {
-          console.log(await sendToBotChan(`Running connect command for \`${network}\`: \`${connectCmd}\``));
-          await allowedSpeakerCommandHandler({ content: connectCmd });
+          for (const connectCmd of onConnectCmds) {
+            console.log(await sendToBotChan(`Running connect command for \`${network}\`: \`${connectCmd}\``));
+            await allowedSpeakerCommandHandler({ content: connectCmd });
+          }
         }
-      }
-      rClient.disconnect();
+      });
     } else {
       sendToBotChan(new MessageEmbed()
         .setColor(config.app.stats.embedColors.irc.ipcReconnect)

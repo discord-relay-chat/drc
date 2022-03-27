@@ -3,7 +3,7 @@
 const config = require('config');
 const Redis = require('ioredis');
 const { spawn } = require('child_process');
-const { PREFIX, resolveNameForIRC, floodProtect } = require('../util');
+const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient } = require('../util');
 
 let haveJoinedChannels = false;
 const children = {};
@@ -65,12 +65,10 @@ module.exports = async (context, chan, msg) => {
             chanSpec.userCount = channel.users.length;
             chanSpec.operators = channel.users.filter(x => x.modes.includes('o')).map(x => x.nick);
 
-            const newPubC = new Redis(config.redis.url);
-            await newPubC.publish(PREFIX, JSON.stringify({
+            await scopedRedisClient(async (newPubC) => newPubC.publish(PREFIX, JSON.stringify({
               type: 'irc:channelJoined',
               data: chanSpec
-            }));
-            newPubC.disconnect();
+            })));
 
             resolve(chanSpec);
           });
@@ -252,10 +250,9 @@ module.exports = async (context, chan, msg) => {
 
                 console.log(`nmap of ${whoisData.hostname} finished`);
 
-                const endClient = new Redis(config.redis.url);
                 const stdout = collectors.stdout.join('\n');
                 const stderr = collectors.stderr.join('\n');
-                await endClient.publish(PREFIX, JSON.stringify({
+                await scopedRedisClient(async (endClient) => endClient.publish(PREFIX, JSON.stringify({
                   type: 'irc:responseWhois:nmap',
                   data: {
                     whoisData,
@@ -263,8 +260,7 @@ module.exports = async (context, chan, msg) => {
                     stdout,
                     stderr
                   }
-                }));
-                endClient.disconnect();
+                })));
               });
 
               children[proc.pid] = {
@@ -308,8 +304,7 @@ module.exports = async (context, chan, msg) => {
 
       client.channel(channel).updateUsers(async (updatedChannel) => {
         const { users, name } = updatedChannel;
-        const c = new Redis(config.redis.url);
-        await c.publish(PREFIX, JSON.stringify({
+        await scopedRedisClient(async (c) => c.publish(PREFIX, JSON.stringify({
           type: 'irc:responseUserList',
           data: {
             channel: {
@@ -318,8 +313,7 @@ module.exports = async (context, chan, msg) => {
             },
             network
           }
-        }));
-        c.disconnect();
+        })));
       });
     } else if (parsed.type === 'irc:say' || parsed.type === 'irc:action') {
       const networkSpec = specServers[parsed.data.network.name];

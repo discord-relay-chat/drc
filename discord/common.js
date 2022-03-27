@@ -1,14 +1,77 @@
 'use strict';
 
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const config = require('config');
 const Redis = require('ioredis');
 const { nanoid } = require('nanoid');
-const { PREFIX, matchNetwork, fmtDuration } = require('../util');
+const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
-function dynRequireFrom (dir, addedCb) {
+async function plotMpmData () {
+  let maxY = 0;
+  const nowNum = Number(new Date());
+  const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, -1)))
+    .map(JSON.parse)
+    .map((x) => {
+      maxY = Math.max(x.chatMsgsMpm, x.totMsgsMpm, maxY);
+      return [Number((nowNum - x.timestamp) / (1000 * 60 * 60)).toFixed(1), x.chatMsgsMpm, x.totMsgsMpm];
+    })
+    .reverse();
+
+  if (data?.length) {
+    const fName = config.app.stats.mpmPlotOutputPath;
+    const tName = path.join(os.tmpdir(), `drc-mpmplot.${nanoid()}.dat`);
+    await fs.promises.writeFile(tName, data.map(x => x.join(' ')).join('\n'));
+
+    const xtics = [];
+    for (let i = 0; i < data.length; i += 5) {
+      xtics.push(`"${data[i][0]}" ${i}`);
+    }
+
+    const gnuplotCmds = [
+      'set grid',
+      `set yrange [0:${Math.ceil(maxY * 1.1)}]`,
+      'set tics nomirror',
+      `set xtics(${xtics.join(', ')})`,
+      'set xlabel "⬅️ the past (time, in hours) now ➡️"',
+      'set key Left left reverse box samplen 2 width 2',
+      'set grid x lt 1 lw .75 lc "gray40"',
+      `set title 'Messages per minute as of ${new Date().toLocaleString()}' textcolor rgb "white"`,
+      'set border lw 3 lc rgb "white"',
+      'set xlabel textcolor rgb "white"',
+      'set ylabel textcolor rgb "white"',
+      'set key textcolor rgb "white"',
+      'set terminal pngcairo transparent enhanced font "helvetica, 11" fontscale 1.0',
+      `set output '${fName}'`,
+      'set style fill transparent solid 0.6 noborder',
+      'plot ' + [
+        `'${tName}' using 0:3 with filledcurve y1=0 lc rgb "web-blue" title 'Total'`,
+        `'${tName}' using 0:2 with filledcurve y1=0 lc rgb "dark-turquoise" title 'Chat'`
+      ].join(', ')
+    ].join('\n');
+
+    return new Promise((resolve, reject) => {
+      const gnuplot = spawn('gnuplot');
+
+      gnuplot.on('close', () => {
+        fs.unlinkSync(tName);
+        resolve(fName);
+      });
+
+      gnuplot.on('error', reject);
+
+      gnuplot.stdin.write(gnuplotCmds, 'utf8');
+      gnuplot.stdin.end();
+    });
+  }
+
+  return null;
+}
+
+function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
   return fs.readdirSync(dir).reduce((a, dirEnt) => {
     const fPath = path.join(dir, dirEnt);
     const fParsed = path.parse(fPath);
@@ -16,6 +79,10 @@ function dynRequireFrom (dir, addedCb) {
     if (!fs.statSync(fPath).isDirectory() && fParsed.ext === '.js' && fParsed.name !== 'index') {
       if (addedCb) {
         addedCb(fPath);
+      }
+
+      if (opts.pathReplace) {
+        fParsed.name = fParsed.name.replaceAll(opts.pathReplace.from, opts.pathReplace.to);
       }
 
       return {
@@ -126,15 +193,16 @@ const aliveKey = (network, chanId, event = 'aliveness', type = 'pmchan') => `${P
 const persistOrClearPmChan = async (network, chanId, persist = true) => {
   const ak = aliveKey(network, chanId);
   const alertKey = aliveKey(network, chanId, 'removalWarning');
-  const r = new Redis(config.redis.url);
-  const rc = r.pipeline();
-  await (persist ? rc.persist(ak) : rc.del(ak));
-  await rc.del(alertKey);
-  await rc.exec();
-  r.disconnect();
+  await scopedRedisClient(async (r) => {
+    const rc = r.pipeline();
+    await (persist ? rc.persist(ak) : rc.del(ak));
+    await rc.del(alertKey);
+    await rc.exec();
+  });
 };
 
 module.exports = {
+  plotMpmData,
   dynRequireFrom,
   simpleEscapeForDiscord,
   generateListManagementUCExport,
@@ -174,16 +242,16 @@ module.exports = {
     const name = nanoid();
 
     context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
-      const r = new Redis(config.redis.url);
-      await r.publish(PREFIX, JSON.stringify({
-        type: 'http:get-res:' + name,
-        data
-      }));
-      r.disconnect();
+      await scopedRedisClient(async (r) => {
+        await r.publish(PREFIX, JSON.stringify({
+          type: 'http:get-res:' + name,
+          data
+        }));
 
-      if (callback) {
-        callback(context);
-      }
+        if (callback) {
+          callback(context);
+        }
+      });
     });
 
     const options = Object.assign({}, context.options);
@@ -211,15 +279,15 @@ module.exports = {
     }
 
     context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
-      const r = new Redis(config.redis.url);
-      await r.publish(PREFIX, JSON.stringify({
-        type: 'http:get-res:' + name,
-        data: {
-          network: context.network,
-          elements: data
-        }
-      }));
-      r.disconnect();
+      await scopedRedisClient(async (r) => {
+        await r.publish(PREFIX, JSON.stringify({
+          type: 'http:get-res:' + name,
+          data: {
+            network: context.network,
+            elements: data
+          }
+        }));
+      });
     });
 
     const options = Object.assign(opts, context.options);
@@ -249,14 +317,14 @@ module.exports = {
       return;
     }
 
-    const rClient = new Redis(config.redis.url);
-    key = [key, messageType, network, 'stream'].join(':');
-    const msgKey = ':' + [Number(msgObj.timestamp), nanoid()].join(':');
-    const fullKey = key + msgKey;
-    const msgId = await rClient.xadd(key, '*', 'message', msgKey);
-    await rClient.set(fullKey, JSON.stringify({ __drcMsgId: msgId, ...msgObj }));
-    rClient.disconnect();
-    return { msgId, msgKey };
+    return scopedRedisClient(async (rClient) => {
+      key = [key, messageType, network, 'stream'].join(':');
+      const msgKey = ':' + [Number(msgObj.timestamp), nanoid()].join(':');
+      const fullKey = key + msgKey;
+      const msgId = await rClient.xadd(key, '*', 'message', msgKey);
+      await rClient.set(fullKey, JSON.stringify({ __drcMsgId: msgId, ...msgObj }));
+      return { msgId, msgKey };
+    });
   },
 
   formatKVs (obj, delim = ':\t') {
@@ -349,13 +417,14 @@ module.exports = {
       }
     };
 
-    const rc = r.pipeline();
-    await rc.set(ak, JSON.stringify(setObj));
-    await rc.expire(ak, config.discord.privMsgChannelStalenessTimeMinutes * 60);
-    await rc.set(alertKey, chanId);
-    await rc.expire(alertKey, alertMins * 60);
-    await rc.exec();
-    r.disconnect();
+    await scopedRedisClient(async (rc) =>
+      rc.multi()
+        .set(ak, JSON.stringify(setObj))
+        .expire(ak, config.discord.privMsgChannelStalenessTimeMinutes * 60)
+        .set(alertKey, chanId)
+        .expire(alertKey, alertMins * 60)
+        .exec()
+    );
 
     console.log('ticklePmChanExpiry', chanId, network, ak, 'expires',
       new Date(Number(nDate) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toLocaleString());

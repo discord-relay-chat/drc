@@ -6,6 +6,12 @@
 
 const _ = require('lodash');
 const os = require('os');
+const path = require('path');
+
+const PROJECT_DIR = path.resolve(path.join(__dirname, '..'));
+const HTTP_STATIC_PATH_NAME = 'static';
+const MPM_PLOT_FILE_NAME = 'mpmplot.png';
+const HTTP_STATIC_DIR = path.join(PROJECT_DIR, 'http', HTTP_STATIC_PATH_NAME);
 
 function replace (obj, keys, replacement) {
   const result = _.cloneDeep(obj);
@@ -20,7 +26,7 @@ function replace (obj, keys, replacement) {
   return result;
 }
 
-module.exports = {
+const _config = {
   user: {
     autoCaptureOnMention: true,
     deleteDiscordWithEchoMessageOn: true,
@@ -49,7 +55,7 @@ module.exports = {
     timeout: 30,
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
-    statsSilentPersistFreqMins: 30,
+    statsSilentPersistFreqMins: 5,
     // the above three really need to move into the struct below
     // but i'm way too lazy to go through and do that right now
     stats: {
@@ -62,7 +68,9 @@ module.exports = {
           privMsg: '#bc04fb',
           networkJoined: '#22aaaa'
         }
-      }
+      },
+      MPM_PLOT_FILE_NAME,
+      mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME)
     },
     render: {
       message: {
@@ -146,7 +154,8 @@ module.exports = {
     port: 4242,
     proto: 'https',
     fqdn: os.hostname(),
-    ttlSecs: 30 * 60
+    ttlSecs: 30 * 60,
+    staticDir: HTTP_STATIC_DIR
   },
 
   capture: {
@@ -175,3 +184,7 @@ module.exports = {
     ], '*');
   }
 };
+
+_config.app.stats.getMpmPlotFqdn = () => `${require('config').http.proto ?? 'https'}://${require('config').http.fqdn}/${HTTP_STATIC_PATH_NAME}/${MPM_PLOT_FILE_NAME}`;
+
+module.exports = _config;

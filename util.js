@@ -57,7 +57,6 @@ class JsonMapper {
     }
 
     this.path = path.resolve(resolvePath);
-    console.log(`${this._name} resolved config file path to: ${this.path}`);
   }
 
   _load () {
@@ -635,6 +634,23 @@ async function scopedRedisClient (scopeCb) {
   return retVal;
 }
 
+function isObjPathExtant (obj, path) {
+  if (typeof path === 'string') {
+    if (path.search('.') === -1) {
+      throw new Error(`isObjPathExtant: malformed path "${path}"`);
+    }
+
+    path = path.split('.');
+  }
+
+  if (obj[path[0]]) {
+    const pathMut = Array.from(path);
+    return isObjPathExtant(obj[pathMut.shift()], pathMut);
+  }
+
+  return !path.length ? obj : null;
+}
+
 module.exports = {
   ircEscapeStripSet,
   ENV,
@@ -669,6 +685,7 @@ module.exports = {
   expiryFromOptions,
   expiryDurationFromOptions,
   scopedRedisClient,
+  isObjPathExtant,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

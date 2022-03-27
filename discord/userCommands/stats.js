@@ -4,7 +4,7 @@ const _ = require('lodash');
 const os = require('os');
 const config = require('config');
 const { execSync } = require('child_process');
-const { MessageEmbed } = require('discord.js');
+const { MessageEmbed, MessageAttachment } = require('discord.js');
 const { servePage } = require('../common');
 const { banner } = require('../figletBanners');
 const {
@@ -89,8 +89,10 @@ async function f (context) {
     quitsCt,
     totalChatMsgs,
     chatMsgsDelta,
+    chatMsgsMpm: Number((chatMsgsDelta / durationInS) * 60).toFixed(1),
     durationInS,
     totMsgsDelta,
+    totMsgsMpm: Number((totMsgsDelta / durationInS) * 60).toFixed(1),
     banner: await banner('Stats'),
     memoryAvailablePercent: Number((stats.sinceLast.memUsage.free / stats.sinceLast.memUsage.total) * 100).toFixed(2),
     lastAnnounceFormatted: fmtDuration(stats.lastAnnounce),
@@ -116,14 +118,20 @@ async function f (context) {
     logsSizeInMB: logsSizeInBytes / 1024 / 1024
   };
 
-  console.debug('channelsCountProcessed', stats.lastCalcs.channelsCountProcessed);
-
   if (!context.options.silent && !context.options.reload) {
-    const name = await servePage(context, context.stats, 'stats');
+    const serveOpts = {
+      mpmPlotFqdn: config.app.stats.getMpmPlotFqdn(),
+      ...context.stats
+    };
+
+    const name = await servePage(context, serveOpts, 'stats');
+
+    const mpmPlotAttach = new MessageAttachment(serveOpts.mpmPlotFqdn);
     const embed = new MessageEmbed()
       .setColor(config.app.stats.embedColors.main)
-      .setTitle('System Stats')
-      .setURL(`https://${config.http.fqdn}/${name}`);
+      .setTitle('Runtime Stats')
+      .setURL(`https://${config.http.fqdn}/${name}`)
+      .setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
 
     if (stats.errors > 0) {
       embed.addField('Bot ERRORS', `${stats.errors}`);
@@ -133,8 +141,6 @@ async function f (context) {
       embed.addField('IRC ERRORS', `${stats.irc.errors}`);
     }
 
-    console.debug('STATS', stats);
-
     const ksMiss = Number(stats.redis.stats.keyspace_misses);
     const ksHit = Number(stats.redis.stats.keyspace_hits);
 
@@ -142,12 +148,14 @@ async function f (context) {
       .addFields(
         { name: 'Bot uptime', value: stats.lastCalcs.uptimeFormatted, inline: true },
         { name: 'IRC uptime', value: stats.irc.uptime, inline: true },
-        { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true },
+        { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true }
+      );
+
+    if (context.options.long) {
+      embed.addFields(
         { name: 'Memory available', value: stats.lastCalcs.memoryAvailablePercent + '%', inline: true },
         { name: 'Load averages', value: stats.sinceLast.loadavg.join(', '), inline: true },
-        { name: 'Log size', value: `${Number(stats.lastCalcs.logsSizeInMB).toLocaleString(undefined, { maximumFractionDigits: 2 })}MB`, inline: true }
-      )
-      .addFields(
+        { name: 'Log size', value: `${Number(stats.lastCalcs.logsSizeInMB).toLocaleString(undefined, { maximumFractionDigits: 2 })}MB`, inline: true },
         { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true },
         {
           name: 'Redis memory (used/rss/peak)',
@@ -156,20 +164,23 @@ async function f (context) {
           inline: true
         },
         { name: 'Redis CHR', value: Number(ksMiss / (ksMiss + ksHit)).toFixed(4).toString(), inline: true }
-      )
+      );
+    }
+
+    embed
       .addField('Lag', '(_milliseconds_)')
       .addFields(...stats.lastCalcs.lagAsEmbedFields)
       .addField('Messaging', '(_counts_)')
       .addFields(
-        { name: 'Total', value: `${Number(stats.messages.total).toLocaleString()}\n(+${totMsgsDelta}, ${Number((totMsgsDelta / durationInS) * 60).toFixed(1)}mpm)`, inline: true },
-        { name: 'IRC Total', value: `${Number(totalChatMsgs).toLocaleString()}\n(+${chatMsgsDelta}, ${Number((chatMsgsDelta / durationInS) * 60).toFixed(1)}mpm)`, inline: true }
+        { name: 'Total', value: `${Number(stats.messages.total).toLocaleString()}\n(+${totMsgsDelta}, ${stats.lastCalcs.totMsgsMpm}mpm)`, inline: true },
+        { name: 'Just chat', value: `${Number(totalChatMsgs).toLocaleString()}\n(+${chatMsgsDelta}, ${stats.lastCalcs.chatMsgsMpm}mpm)`, inline: true }
       )
       .setTimestamp()
       .setFooter(`Last calculated ${stats.lastCalcs.lastAnnounceFormatted} ago`);
 
-    await context.sendToBotChan(embed, true);
+    await context.sendToBotChan({ embeds: [embed], files: [mpmPlotAttach] }, true);
 
-    if (context.options.long) {
+    if (context.options.counts) {
       Object.entries(stats.lastCalcs.channelsCountProcessed).forEach(([network, channels]) => {
         let total = 0;
         const sorter = context.options.sortByCount ? (a, b) => b.count - a.count : (a, b) => b.mpm - a.mpm;

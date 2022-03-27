@@ -1,9 +1,8 @@
 'use strict';
 
 const config = require('config');
-const { PREFIX, PrivmsgMappings } = require('../../util');
+const { PREFIX, PrivmsgMappings, scopedRedisClient } = require('../../util');
 const { removePmChan } = require('../common');
-const Redis = require('ioredis');
 
 module.exports = async (context, data) => {
   const {
@@ -21,16 +20,16 @@ module.exports = async (context, data) => {
   }
 
   if (!deletedBeforeJoin[name]) {
-    const c = new Redis(config.redis.url);
-    await c.publish(PREFIX, JSON.stringify({
-      type: 'discord:deleteChannel',
-      data: {
-        name,
-        network: parentCat.name,
-        isPrivMsgChannel: parentId === config.discord.privMsgCategoryId
-      }
-    }));
-    c.disconnect();
+    await scopedRedisClient(async (c) => {
+      await c.publish(PREFIX, JSON.stringify({
+        type: 'discord:deleteChannel',
+        data: {
+          name,
+          network: parentCat.name,
+          isPrivMsgChannel: parentId === config.discord.privMsgCategoryId
+        }
+      }));
+    });
   } else {
     console.log(`Removed channel ${name} (ID: ${deletedBeforeJoin[name]}) before join`);
     delete deletedBeforeJoin[name];

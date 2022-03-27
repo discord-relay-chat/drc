@@ -1,9 +1,8 @@
 'use strict';
 
 const config = require('config');
-const { PREFIX, ChannelXforms } = require('../../util');
+const { PREFIX, ChannelXforms, scopedRedisClient } = require('../../util');
 const crypto = require('crypto');
-const Redis = require('ioredis');
 const { MessageActionRow, MessageButton, MessageEmbed } = require('discord.js');
 
 module.exports = async (context, data) => {
@@ -80,18 +79,16 @@ module.exports = async (context, data) => {
       listenedToMutate.addOne();
     });
 
-    const c = new Redis(config.redis.url);
-
-    await c.publish(PREFIX, JSON.stringify({
-      type: 'discord:requestJoinChannel:irc',
-      data: {
-        name,
-        id,
-        parentId
-      }
-    }));
-
-    c.disconnect();
+    await scopedRedisClient(async (c) => {
+      await c.publish(PREFIX, JSON.stringify({
+        type: 'discord:requestJoinChannel:irc',
+        data: {
+          name,
+          id,
+          parentId
+        }
+      }));
+    });
   });
 
   registerButtonHandler(buttonId + '-del', (interaction) => {

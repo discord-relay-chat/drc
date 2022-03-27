@@ -49,3 +49,27 @@ test('replaceIrcEscapes', () => {
 
   expect(util.replaceIrcEscapes('\x02[rizon]\x02 <\x0309cpucake_13\x03>')).toEqual('**[rizon]** <cpucake_13>');
 })
+
+test('isObjPathExtant', () => {
+  const x = {
+    foo: {
+      bar: {
+        baz: 42
+      }
+    },
+    buz: {
+      bit: []
+    }
+  };
+
+  expect({
+    bar: {
+      baz: 42
+    }
+  }).toEqual(util.isObjPathExtant(x, ['foo']))
+  expect(null).toEqual(util.isObjPathExtant(x, ['foo', 'baz']))
+  expect({
+    baz: 42
+  }).toEqual(util.isObjPathExtant(x, ['foo', 'bar']))
+  expect(42).toEqual(util.isObjPathExtant(x, ['foo', 'bar', 'baz']))
+})

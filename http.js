@@ -55,6 +55,25 @@ redisListener.subscribe(PREFIX, (err) => {
 
   const reqPubClient = new Redis(config.redis.url);
 
+  app.get('/static/:name', async (req, res) => {
+    try {
+      await fs.promises.mkdir(config.http.staticDir);
+    } catch (e) {
+      if (e.code !== 'EEXIST') {
+        console.error(e);
+      }
+    }
+
+    const assetPath = path.join(config.http.staticDir, req.params.name);
+
+    try {
+      return res.send(await fs.promises.readFile(assetPath));
+    } catch (e) {
+      console.error(`failed to send ${assetPath}:`, e);
+      return res.status(404).send();
+    }
+  });
+
   app.get('/:id', async (req, res) => {
     console.debug(`GET /${req.params.id}`, req.params, req.query);
     const handler = registered.get[req.params.id];

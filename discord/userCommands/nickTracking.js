@@ -4,6 +4,17 @@ const { matchNetwork, PREFIX, scopedRedisClient } = require('../../util');
 const { MessageEmbed } = require('discord.js');
 const { formatKVs } = require('../common');
 
+async function findUniqueIdents (network, identStr) {
+  const searchKey = [PREFIX, network, 'nicktrack', '*' + identStr + '*'].join(':');
+  const foundKeys = await scopedRedisClient((redis) => redis.keys(searchKey));
+
+  if (foundKeys.length) {
+    return [...new Set(foundKeys.map(x => x.split(':')[3]))];
+  }
+
+  return [];
+}
+
 async function identLookup (network, identStr) {
   const rKey = [PREFIX, network, 'nicktrack', identStr].join(':');
   const uniqKey = [rKey, 'uniques'].join(':');
@@ -54,24 +65,19 @@ async function f (context, ...a) {
   let identData = await identLookup(network, identStr);
 
   if (!identData) {
-    const searchKey = [PREFIX, network, 'nicktrack', '*' + identStr + '*'].join(':');
-    const foundKeys = await context.redis.keys(searchKey);
+    const uniqIdents = await findUniqueIdents(network, identStr);
 
-    if (foundKeys.length) {
-      const uniqIdents = [...new Set(foundKeys.map(x => x.split(':')[3]))];
+    if (uniqIdents.length > 1) {
+      const em = new MessageEmbed()
+        .setTitle(`Multiple possible idents found for \`${identStr}\`:`)
+        .setDescription('`' + uniqIdents.join('`\n`') + '`');
 
-      if (foundKeys.length !== 2) {
-        const em = new MessageEmbed()
-          .setTitle(`Multiple possible idents found for \`${identStr}\`:`)
-          .setDescription('`' + uniqIdents.join('`\n`') + '`');
-
-        context.sendToBotChan(em, true);
-        return;
-      }
-
-      identData = await identLookup(network, (identStr = uniqIdents[0]));
-      context.sendToBotChan(`Found matching ident <\`${identStr}\`>...`);
+      context.sendToBotChan(em, true);
+      return;
     }
+
+    identData = await identLookup(network, (identStr = uniqIdents[0]));
+    context.sendToBotChan(`Found matching ident <\`${identStr}\`>...`);
   }
 
   if (identData) {
@@ -83,4 +89,5 @@ async function f (context, ...a) {
 }
 
 f.identLookup = identLookup;
+f.findUniqueIdents = findUniqueIdents;
 module.exports = f;

@@ -1,9 +1,7 @@
 'use strict';
 
-const { shodanHostLookup, matchNetwork } = require('../../util');
+const { shodanHostLookup, matchNetwork, scopedRedisClient } = require('../../util');
 const { PREFIX } = require('../../util');
-const Redis = require('ioredis');
-const config = require('config');
 
 module.exports = async function (context, ...a) {
   if (a.length < 2) {
@@ -38,12 +36,10 @@ module.exports = async function (context, ...a) {
 
   if (reqObj.data.options?.shodan) {
     context.registerOneTimeHandler('irc:whois', `${network}_${nick}`, async (data) => {
-      const r = new Redis(config.redis.url);
-      await r.publish(PREFIX, JSON.stringify({
+      await scopedRedisClient(async (r) => r.publish(PREFIX, JSON.stringify({
         type: 'discord:shodan:host',
         data: await shodanHostLookup(data.hostname)
-      }));
-      r.disconnect();
+      })));
     });
   }
 
