@@ -162,8 +162,14 @@ module.exports = async (context, _channel, msg) => {
               ? (config.user.joinsToBotChannel ? ` #${parsed.data.channel}: "${parsed.data.message}"` : ': "' + parsed.data.message + '"')
   : ''}`);
           } else if (subType === 'kick') {
-            msgChan.__drcSend(`**${parsed.data.kicked}** was kicked by **${parsed.data.nick}**: "${parsed.data.message}"`);
-            sendToBotChan(`**${parsed.data.kicked}** was kicked from **${parsed.data.channel}** by **${parsed.data.nick}**: "${parsed.data.message}"`);
+            const { kicked, channel, ident, hostname, message, __drcNetwork } = parsed.data;
+            await scopedRedisClient(async (redis, prefix) => {
+              const zsetKey = `${prefix}:kicks:${__drcNetwork}`;
+              await redis.zincrby(zsetKey + ':kickee', 1, kicked);
+              await redis.zincrby(zsetKey + ':kicker', 1, `${ident}@${hostname}`);
+              await redis.zincrby(zsetKey + ':chans', 1, channel);
+              await redis.zincrby(zsetKey + ':reasons', 1, message);
+            });
           } else if (subType === 'topic' && parsed.data.topic) {
             msgChan.setTopic(parsed.data.topic);
           }

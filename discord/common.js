@@ -10,11 +10,13 @@ const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
-async function plotMpmData () {
+async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHours) {
   let maxY = 0;
   const nowNum = Number(new Date());
+  const timeLimit = nowNum - timeLimitHours * 60 * 60 * 1000;
   const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, -1)))
     .map(JSON.parse)
+    .filter((x) => x.timestamp >= timeLimit)
     .map((x) => {
       maxY = Math.max(x.chatMsgsMpm, x.totMsgsMpm, maxY);
       return [Number((nowNum - x.timestamp) / (1000 * 60 * 60)).toFixed(1), x.chatMsgsMpm, x.totMsgsMpm];
@@ -27,19 +29,21 @@ async function plotMpmData () {
     await fs.promises.writeFile(tName, data.map(x => x.join(' ')).join('\n'));
 
     const xtics = [];
-    for (let i = 0; i < data.length; i += 5) {
+    const gapSize = Math.ceil(data.length / 10);
+    for (let i = 0; i < data.length; i += gapSize) {
       xtics.push(`"${data[i][0]}" ${i}`);
     }
 
     const gnuplotCmds = [
       'set grid',
-      `set yrange [0:${Math.ceil(maxY * 1.1)}]`,
+      `set yrange [2:${Math.ceil(maxY * 1.05)}]`,
       'set tics nomirror',
+      'set logscale y',
       `set xtics(${xtics.join(', ')})`,
       'set xlabel "⬅️ the past (time, in hours) now ➡️"',
       'set key Left left reverse box samplen 2 width 2',
       'set grid x lt 1 lw .75 lc "gray40"',
-      `set title 'Messages per minute as of ${new Date().toLocaleString()}' textcolor rgb "white"`,
+      `set title "Messages per minute, sample size: ${data.length}\\nAs of ${new Date().toLocaleString()}" textcolor rgb "white"`,
       'set border lw 3 lc rgb "white"',
       'set xlabel textcolor rgb "white"',
       'set ylabel textcolor rgb "white"',

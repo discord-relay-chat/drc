@@ -629,7 +629,7 @@ function expiryFromOptions (options) {
 
 async function scopedRedisClient (scopeCb) {
   const scopeClient = new Redis(config.redis.url);
-  const retVal = await scopeCb(scopeClient);
+  const retVal = await scopeCb(scopeClient, PREFIX);
   await scopeClient.disconnect();
   return retVal;
 }

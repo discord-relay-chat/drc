@@ -55,7 +55,7 @@ const _config = {
     timeout: 30,
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
-    statsSilentPersistFreqMins: 5,
+    statsSilentPersistFreqMins: 15,
     // the above three really need to move into the struct below
     // but i'm way too lazy to go through and do that right now
     stats: {
@@ -70,7 +70,8 @@ const _config = {
         }
       },
       MPM_PLOT_FILE_NAME,
-      mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME)
+      mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
+      mpmPlotTimeLimitHours: 72
     },
     render: {
       message: {
@@ -185,6 +186,8 @@ const _config = {
   }
 };
 
-_config.app.stats.getMpmPlotFqdn = () => `${require('config').http.proto ?? 'https'}://${require('config').http.fqdn}/${HTTP_STATIC_PATH_NAME}/${MPM_PLOT_FILE_NAME}`;
+_config.app.stats.getMpmPlotFqdn = () =>
+  `${require('config').http.proto ?? 'https'}://` +
+  `${require('config').http.fqdn}/${HTTP_STATIC_PATH_NAME}/${MPM_PLOT_FILE_NAME}`;
 
 module.exports = _config;
