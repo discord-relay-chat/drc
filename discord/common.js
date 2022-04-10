@@ -14,7 +14,8 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
   let maxY = 0;
   const nowNum = Number(new Date());
   const timeLimit = nowNum - timeLimitHours * 60 * 60 * 1000;
-  const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, -1)))
+  const queryLim = (timeLimitHours / (config.app.statsSilentPersistFreqMins / 60)) * 2; // double it to be safe, in case config.app.statsSilentPersistFreqMins wasn't always what it is now
+  const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, queryLim)))
     .map(JSON.parse)
     .filter((x) => x.timestamp >= timeLimit)
     .map((x) => {

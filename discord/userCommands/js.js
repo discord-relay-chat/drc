@@ -14,7 +14,10 @@ async function _run (context, runStr) {
       logger,
       config,
       PREFIX,
+      common: require('../common'),
+      util: require('../../util'),
       src: scopedRedisClient,
+      stbc: context.sendToBotChan,
       setTimeout,
       ...context
     });
@@ -48,7 +51,7 @@ async function runSnippet (context, ...a) {
   const snippet = await scopedRedisClient((r) => r.hget(RKEY, name));
 
   if (snippet) {
-    console.warn(name, '<WANT TO RUN>', snippet);
+    console.warn('runSnippet:', name, '<WANT TO RUN>', snippet);
     return run(context, snippet);
   }
 
