@@ -3,6 +3,7 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const { hrtime } = require('process');
 const { spawn } = require('child_process');
 const config = require('config');
 const Redis = require('ioredis');
@@ -14,7 +15,9 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
   let maxY = 0;
   const nowNum = Number(new Date());
   const timeLimit = nowNum - timeLimitHours * 60 * 60 * 1000;
-  const queryLim = (timeLimitHours / (config.app.statsSilentPersistFreqMins / 60)) * 2; // double it to be safe, in case config.app.statsSilentPersistFreqMins wasn't always what it is now
+  // double it to be safe, in case config.app.statsSilentPersistFreqMins wasn't always what it is now
+  const queryLim = (timeLimitHours / (config.app.statsSilentPersistFreqMins / 60)) * 2;
+  const startTime = hrtime.bigint();
   const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, queryLim)))
     .map(JSON.parse)
     .filter((x) => x.timestamp >= timeLimit)
@@ -23,6 +26,10 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
       return [Number((nowNum - x.timestamp) / (1000 * 60 * 60)).toFixed(1), x.chatMsgsMpm, x.totMsgsMpm];
     })
     .reverse();
+
+  console.log(`plotMpmData: querying ${queryLim} elements & filtering into ${data.length} ` +
+    `took ${(Number(hrtime.bigint() - startTime) / 1e6).toFixed(2)}ms ` +
+    `(timeLimitHours=${timeLimitHours}, statsSilentPersistFreqMins=${config.app.statsSilentPersistFreqMins})`);
 
   if (data?.length) {
     const fName = config.app.stats.mpmPlotOutputPath;
@@ -35,8 +42,14 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
       xtics.push(`"${data[i][0]}" ${i}`);
     }
 
-    const gnuplotCmds = [
-      'set grid',
+    let gnuplotCmds = ['set grid'];
+
+    if (maxY > 100) { // TODO: stddev
+      gnuplotCmds.push('set logscale y');
+    }
+
+    gnuplotCmds = [
+      ...gnuplotCmds,
       `set yrange [2:${Math.ceil(maxY * 1.05)}]`,
       'set tics nomirror',
       'set logscale y',

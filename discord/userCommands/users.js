@@ -15,7 +15,6 @@ async function f (context, ...a) {
     channel = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
   }
 
-  const { sendToBotChan } = context;
   context.registerOneTimeHandler('irc:responseUserList', channel, async (data) => {
     const { channel: { name, users }, network } = data;
 
@@ -28,7 +27,6 @@ async function f (context, ...a) {
     const joiner = ', ';
 
     const sender = (e) => {
-      sendToBotChan(e, true);
       data.__othHelpers.msgChan.send({ embeds: [e] });
     };
 
