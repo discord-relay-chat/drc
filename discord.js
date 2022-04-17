@@ -185,8 +185,16 @@ client.once('ready', async () => {
 
   if (config.irc.quitMsgChanId) {
     sendToBotChan = async (s, raw = false) => {
+      if (!s || (typeof s === 'string' && !s?.length)) {
+        console.error('sendToBotChan called without message!', s, raw);
+        return;
+      }
+
+      let truncTail;
       if (!raw && s.length > config.discord.maxMsgLength) {
-        console.error('MSG TOO LARGE -- TRUNCATING!!\n', s);
+        console.error('MSG TOO LARGE -- TRUNCATING:');
+        console.debug(s);
+        truncTail = s.slice(config.discord.maxMsgLength - 50);
         s = s.slice(0, config.discord.maxMsgLength - 50) + ' [TRUNCATED]';
       }
 
@@ -199,13 +207,14 @@ client.once('ready', async () => {
         toSend = formatForAllowedSpeakerResponse(s, raw);
         await client.channels.cache.get(config.irc.quitMsgChanId).send(toSend);
       } catch (e) {
-        console.error('sendToBotChan .send() threw!', e, s);
+        console.error('sendToBotChan .send() threw!', e);
+        console.debug(s);
         ++stats.errors;
 
         setTimeout(() => sendToBotChan(`\`ERROR\` Discord send failure! "${e.message}"\n>>> ` + e.stack), 150);
       }
 
-      return toSend;
+      return (truncTail ? sendToBotChan(truncTail, raw) : toSend);
     };
   }
 

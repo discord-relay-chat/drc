@@ -20,9 +20,12 @@ function f (context) {
 
   if (!toSend) {
     context.sendToBotChan('_Available commands, **bolded** have further help available via `!help [command]`_: ' +
-      Object.keys(reReq.__functions).sort().map((fk) =>
-        reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
-      ).join(', ') + '\n');
+      Object.keys(reReq.__functions)
+        .filter((fk) => fk.indexOf('_') !== 0)
+        .sort()
+        .map((fk) =>
+          reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
+        ).join(', ') + '\n');
   } else {
     if (typeof toSend === 'string') {
       toSend = '```\n' + toSend + '\n```';

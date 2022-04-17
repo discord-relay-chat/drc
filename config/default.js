@@ -56,6 +56,7 @@ const _config = {
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
     statsSilentPersistFreqMins: 15,
+    maxNumKicks: 5,
     // the above three really need to move into the struct below
     // but i'm way too lazy to go through and do that right now
     stats: {
@@ -71,7 +72,7 @@ const _config = {
       },
       MPM_PLOT_FILE_NAME,
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
-      mpmPlotTimeLimitHours: 72
+      mpmPlotTimeLimitHours: 120 // 5 days
     },
     render: {
       message: {

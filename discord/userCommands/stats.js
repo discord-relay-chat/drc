@@ -13,7 +13,8 @@ const {
   channelsCountProcessed,
   fmtDuration,
   parseRedisInfoSection,
-  sizeAtPath
+  sizeAtPath,
+  scopedRedisClient
 } = require('../../util');
 
 async function f (context) {
@@ -32,6 +33,7 @@ async function f (context) {
   const { stats } = context;
 
   if (context.options.reload) {
+    console.log(`Reloading stats, current keyset: ${Object.keys(stats).join(', ')}`);
     const statsPersist = await context.redis.get([PREFIX, 'stats'].join(':'));
     console.debug('RELOAD STATS?', statsPersist);
 
@@ -40,6 +42,7 @@ async function f (context) {
       Object.entries(JSON.parse(statsPersist)).forEach(([key, value]) => {
         stats[key] = value;
       });
+      console.log(`Reloaded stats, new keyset: ${Object.keys(stats).join(', ')}`);
       console.debug('STATS RELOAD after', stats);
     }
   }
@@ -59,6 +62,34 @@ async function f (context) {
     : 0;
   const durationInS = (new Date() - stats.lastAnnounce) / 1000;
   const totMsgsDelta = stats.messages.total - stats.messagesLastAnnounce.total;
+
+  // partly an awful band-aid for the stat-wipe bug, partly a remind to move
+  // away from a bulk-key model and into a smaller key-per-datum one...
+  const realCounts = Object.fromEntries(await scopedRedisClient(async (rc, pfx) => {
+    return Promise.all(
+      [
+        ['total', totMsgsDelta, stats.messages.total],
+        ['chat', chatMsgsDelta, totalChatMsgs]
+      ].map(async ([tPfx, delta, tt]) => {
+        const rKey = [pfx, 'overallMessageCounts'].join(':');
+        let nextVal = Number(await rc.zincrby(rKey, delta, tPfx));
+
+        if (Number.isNaN(nextVal)) {
+          console.error('BAD nextVal', nextVal);
+          return;
+        }
+
+        if (tt && nextVal < tt) {
+          console.error(tPfx, delta, 'MESSAGES MOVED BACKWARDS -- STATS PERSIST WILL LIKELY WIPE!!', nextVal, tt);
+          await rc.zincrby(rKey, (tt - nextVal), tPfx);
+          nextVal = tt;
+        }
+
+        return [tPfx, nextVal.toLocaleString()];
+      }));
+  }));
+
+  console.log('realCounts', realCounts);
 
   let systemUptime = execSync('uptime -p').toString().replace(/^up\s+/, '').replace(/,/g, '');
 
@@ -172,8 +203,8 @@ async function f (context) {
       .addFields(...stats.lastCalcs.lagAsEmbedFields)
       .addField('Messaging', '(_counts_)')
       .addFields(
-        { name: 'Total', value: `${Number(stats.messages.total).toLocaleString()}\n(+${totMsgsDelta}, ${stats.lastCalcs.totMsgsMpm}mpm)`, inline: true },
-        { name: 'Just chat', value: `${Number(totalChatMsgs).toLocaleString()}\n(+${chatMsgsDelta}, ${stats.lastCalcs.chatMsgsMpm}mpm)`, inline: true }
+        { name: 'Total', value: `${realCounts.total}\n(+${totMsgsDelta}, ${stats.lastCalcs.totMsgsMpm}mpm) [${Number(stats.messages.total).toLocaleString()}]`, inline: true },
+        { name: 'Just chat', value: `${realCounts.chat}\n(+${chatMsgsDelta}, ${stats.lastCalcs.chatMsgsMpm}mpm) [${Number(totalChatMsgs).toLocaleString()}]`, inline: true }
       )
       .setTimestamp()
       .setFooter(`Last calculated ${stats.lastCalcs.lastAnnounceFormatted} ago`);

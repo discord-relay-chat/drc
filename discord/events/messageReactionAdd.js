@@ -5,9 +5,11 @@ const userCommands = require('../userCommands');
 const { senderNickFromMessage, messageIsFromAllowedSpeaker } = require('../common');
 
 function createArgObjOnContext (context, data, subaction) {
+  const network = context.channelsById[context.channelsById[data?.message.channelId].parent]?.name;
   const tmplArr = [
-    context.channelsById[context.channelsById[data?.message.channelId].parent]?.name,
-    senderNickFromMessage(data?.message)
+    network,
+    senderNickFromMessage(data?.message), // nick
+    data?.message.channelId // discord channel id
   ];
 
   if (subaction) {
@@ -15,6 +17,7 @@ function createArgObjOnContext (context, data, subaction) {
   }
 
   context.argObj = { _: tmplArr };
+  console.log('createArgObjOnContext', context.argObj);
   return tmplArr;
 }
 

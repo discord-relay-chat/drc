@@ -8,9 +8,11 @@ const inq = require('inquirer');
 const Redis = require('ioredis');
 const redisClient = new Redis(config.redis.url);
 const { PREFIX, CTCPVersion, scopedRedisClient } = require('./util');
-const ipcMessageHandler = require('./irc/ipcMessage');
+let ipcMessageHandler = require('./irc/ipcMessage');
+let genEvHandler = require('./irc/genEvHandler');
 
-require('./logger')('irc');
+const logger = require('./logger');
+logger('irc');
 
 const connectedIRC = {
   bots: {},
@@ -30,6 +32,17 @@ let allowsBotReconnect = false;
 const chanPrefixes = {};
 
 const categories = {};
+
+const children = {};
+
+let _haveJoinedChannels = false;
+const haveJoinedChannels = (set) => {
+  if (set !== undefined && set !== null) {
+    _haveJoinedChannels = !!set;
+  }
+
+  return _haveJoinedChannels;
+};
 
 async function connectIRCClient (connSpec) {
   if (connSpec.account && !connSpec.account.password) {
@@ -92,6 +105,7 @@ async function connectIRCClient (connSpec) {
 async function main () {
   console.log(`${PREFIX} IRC bridge started.`);
   const pubClient = new Redis(config.redis.url);
+  const c2Listener = new Redis(config.redis.url); // TODO: use this more!
   const specServers = {};
   const ircLogPath = path.join(__dirname, config.irc.log.path);
 
@@ -99,15 +113,51 @@ async function main () {
     fs.mkdirSync(ircLogPath);
   }
 
-  redisClient.on('message', ipcMessageHandler.bind(null, {
-    connectedIRC,
-    msgHandlers,
-    specServers,
-    categories,
-    chanPrefixes,
-    stats,
-    allowsBotReconnect: () => allowsBotReconnect
-  }));
+  c2Listener.on('pmessage', (_, chan, msg) => {
+    const [, subroute] = chan.split('::');
+    const [srEntity, srType] = subroute?.split(':');
+
+    if (srEntity === 'irc') {
+      if (srType === 'reload') {
+        delete require.cache[require.resolve('./irc/ipcMessage')];
+        delete require.cache[require.resolve('./irc/genEvHandler')];
+
+        ipcMessageHandler = require(require.resolve('./irc/ipcMessage'));
+        genEvHandler = require(require.resolve('./irc/genEvHandler'));
+
+        scopedRedisClient((rc, pfx) => rc.publish(pfx, JSON.stringify({
+          type: '__c2::irc:reload',
+          data: 'response'
+        })));
+
+        console.log('Reloaded ipcMessage and genEvHandler');
+      } else if (srType === 'debug_on') {
+        logger.enableLevel('debug');
+        console.debug('Debug logging ENABLED via C2 message');
+      } else if (srType === 'debug_off') {
+        logger.disableLevel('debug');
+        console.log('Debug logging DISABLED via C2 message');
+      } else {
+        console.warn(`Unhandled IRC C2 "${srType}"`, msg);
+      }
+    }
+  });
+
+  c2Listener.psubscribe(PREFIX + ':__c2::*');
+
+  redisClient.on('message', (...a) => {
+    return ipcMessageHandler({
+      connectedIRC,
+      msgHandlers,
+      specServers,
+      categories,
+      chanPrefixes,
+      stats,
+      haveJoinedChannels,
+      children,
+      allowsBotReconnect: () => allowsBotReconnect
+    }, ...a);
+  });
 
   await redisClient.subscribe(PREFIX);
 
@@ -163,50 +213,15 @@ async function main () {
       });
     };
 
-    const nickTrack = async (data) => {
-      const trimData = Object.assign({}, data);
-      delete trimData.__drcNetwork;
-      delete trimData.tags;
-      trimData.hostname = trimData.hostname.replaceAll(':', '_');
-      await scopedRedisClient(async (rc) => {
-        const identStr = [trimData.ident, trimData.hostname].join('@');
-        const rKey = [PREFIX, host, 'nicktrack', identStr].join(':');
-        await rc.sadd([rKey, 'uniques'].join(':'), trimData.nick);
-        await rc.sadd([rKey, 'uniques'].join(':'), trimData.new_nick);
-        await rc.lpush([rKey, 'changes'].join(':'), JSON.stringify({
-          timestamp: Number(new Date()),
-          ...trimData
-        }));
-      });
-    };
-
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
       'whois', 'whowas', 'motd', 'info', 'help', 'mode']
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
-          console.debug('<IRC EVENT>', ev, data);
-          if (typeof data !== 'object') {
-            console.warn('non-object data!', data);
-            return;
-          }
-
-          data.__drcNetwork = host;
-          const evName = ev.replace(/\s+/g, '_');
-
-          await pubClient.publish(PREFIX, JSON.stringify({
-            type: 'irc:' + evName,
-            data
-          }));
-
-          if (config.irc.log.events?.includes(ev)) {
-            logDataToFile(evName, data, { pathExtra: ['event'] });
-          }
-
-          if (evName === 'nick') {
-            nickTrack(data);
-          }
+          return genEvHandler(host, ev, data, {
+            logDataToFile
+          });
         });
       });
 

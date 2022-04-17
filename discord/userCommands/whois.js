@@ -12,7 +12,13 @@ module.exports = async function (context, ...a) {
     context.argObj.nmap = context.argObj.nmap.split(/\s+/g);
   }
 
-  const [netStub, nick] = a;
+  // for when '!whois' is issued from a normal channel, rather than as a reaction
+  // (which already adds channel ID to the `a` array in messageReactionAdd.js)
+  if (context.toChanId && a.length === 2) {
+    a.push(context.toChanId);
+  }
+
+  const [netStub, nick, channel] = a;
   const { network } = matchNetwork(netStub);
 
   const reqObj = {
@@ -20,6 +26,7 @@ module.exports = async function (context, ...a) {
     data: {
       network,
       nick,
+      channel,
       options: context.argObj
     }
   };
@@ -35,7 +42,7 @@ module.exports = async function (context, ...a) {
   }
 
   if (reqObj.data.options?.shodan) {
-    context.registerOneTimeHandler('irc:whois', `${network}_${nick}`, async (data) => {
+    context.registerOneTimeHandler('irc:responseWhois:full', `${network}_${nick}`, async (data) => {
       await scopedRedisClient(async (r) => r.publish(PREFIX, JSON.stringify({
         type: 'discord:shodan:host',
         data: await shodanHostLookup(data.hostname)
@@ -43,6 +50,6 @@ module.exports = async function (context, ...a) {
     });
   }
 
-  console.log('whois PUB', reqObj);
+  console.debug('whois PUB', reqObj);
   await context.publish(reqObj);
 };

@@ -3,7 +3,7 @@
 const path = require('path');
 const uuid = require('uuid');
 const { nanoid } = require('nanoid');
-const { PREFIX, AmbiguousMatchResultError, matchNetwork } = require('../util');
+const { PREFIX, AmbiguousMatchResultError, matchNetwork, scopedRedisClient } = require('../util');
 const { dynRequireFrom, generateListManagementUCExport } = require('./common');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
@@ -101,12 +101,14 @@ resolver.__functions = {
     if (context.argObj._[0]) {
       require('../logger').enableLevel('debug');
       console.debug('Debug logging enabled by user!');
+      scopedRedisClient((rc, pfx) => rc.publish(pfx + ':__c2::irc:debug_on', JSON.stringify({ type: 'debug_on' })));
     } else {
       require('../logger').disableLevel('debug');
       prefix = 'Dis';
+      scopedRedisClient((rc, pfx) => rc.publish(pfx + ':__c2::irc:debug_off', JSON.stringify({ type: 'debug_off' })));
     }
 
-    return `**${prefix}abled** debug logging for the Discord bot.`;
+    return `**${prefix}abled** debug logging.`;
   }
 };
 

@@ -5,9 +5,6 @@ const Redis = require('ioredis');
 const { spawn } = require('child_process');
 const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient } = require('../util');
 
-let haveJoinedChannels = false;
-const children = {};
-
 module.exports = async (context, chan, msg) => {
   let {
     connectedIRC,
@@ -15,7 +12,9 @@ module.exports = async (context, chan, msg) => {
     specServers,
     categories,
     chanPrefixes,
-    stats
+    stats,
+    haveJoinedChannels,
+    children
   } = context;
 
   const pubClient = new Redis(config.redis.url);
@@ -85,14 +84,15 @@ module.exports = async (context, chan, msg) => {
 
     const discordChannelsHandler = async (isReconnect) => {
       if (Object.entries(specServers).length) {
-        console.error('Rx\'ed discord:channels but servers are already speced!', specServers);
+        console.error('Rx\'ed discord:channels but servers are already speced!');
+        console.debug(specServers);
         return;
       }
 
       const { categoriesByName } = parsed.data;
       categories = context.categories = parsed.data.categories;
 
-      Object.entries(connectedIRC.bots).forEach(([server, client]) => {
+      Object.entries(connectedIRC.bots).forEach(([server, _client]) => {
         if (categoriesByName[server]) {
           const id = categoriesByName[server];
           specServers[server] = {
@@ -150,7 +150,7 @@ module.exports = async (context, chan, msg) => {
         }));
 
         if (isReconnect) {
-          if (!haveJoinedChannels) {
+          if (!haveJoinedChannels()) {
             console.error('isReconnect but not !haveJoinedChannels!?');
           }
 
@@ -158,7 +158,7 @@ module.exports = async (context, chan, msg) => {
           await pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:ready', data: { isReconnect: true } }));
         }
 
-        haveJoinedChannels = true;
+        haveJoinedChannels(true);
       }
     };
 
@@ -217,56 +217,65 @@ module.exports = async (context, chan, msg) => {
         retObj.error = 'Bad arguments';
       } else {
         const client = connectedIRC.bots[parsed.data.network];
+        retObj.requestData = parsed.data;
 
         if (client) {
           // should probably use the callback to do all the delivery to the user but right now
           // the 'whois' event is wired up and that is taking care of the response to the user
-          let whoisCallback = () => {};
+          let whoisCallback = async (whoisData) => {
+            return scopedRedisClient(async (endClient, pfx) => endClient.publish(pfx, JSON.stringify({
+              type: 'irc:responseWhois:full',
+              data: { whoisData, ...retObj }
+            })));
+          };
 
           if (parsed.data.options?.nmap) {
+            const fullCb = whoisCallback;
             whoisCallback = (whoisData) => {
-              if (!whoisData.hostname) {
-                // should check more here maybe?
-                return;
-              }
+              fullCb(whoisData).then(() => {
+                if (!whoisData.hostname) {
+                  // should check more here maybe?
+                  return;
+                }
 
-              const collectors = { stdout: [], stderr: [] };
-              let opts = ['nmap', ...config.nmap.defaultOptions];
+                const collectors = { stdout: [], stderr: [] };
+                let opts = ['nmap', ...config.nmap.defaultOptions];
 
-              if (Array.isArray(parsed.data.options.nmap)) {
-                opts = [...opts, ...parsed.data.options.nmap];
-              }
+                if (Array.isArray(parsed.data.options.nmap)) {
+                  opts = [...opts, ...parsed.data.options.nmap];
+                }
 
-              opts.push(whoisData.hostname);
-              console.log('Initiaing: ' + opts.join(' '));
-              const proc = spawn('sudo', opts);
+                opts.push(whoisData.hostname);
+                console.log('Initiaing: ' + opts.join(' '));
+                const proc = spawn('sudo', opts);
 
-              proc.stdout.on('data', (d) => collectors.stdout.push(d.toString('utf8')));
-              proc.stderr.on('data', (d) => collectors.stderr.push(d.toString('utf8')));
+                proc.stdout.on('data', (d) => collectors.stdout.push(d.toString('utf8')));
+                proc.stderr.on('data', (d) => collectors.stderr.push(d.toString('utf8')));
 
-              proc.on('close', async () => {
-                const started = children[proc.pid].started;
-                delete children[proc.pid];
+                proc.on('close', async () => {
+                  const started = children[proc.pid].started;
+                  delete children[proc.pid];
 
-                console.log(`nmap of ${whoisData.hostname} finished`);
+                  console.log(`nmap of ${whoisData.hostname} finished`);
 
-                const stdout = collectors.stdout.join('\n');
-                const stderr = collectors.stderr.join('\n');
-                await scopedRedisClient(async (endClient) => endClient.publish(PREFIX, JSON.stringify({
-                  type: 'irc:responseWhois:nmap',
-                  data: {
-                    whoisData,
-                    started,
-                    stdout,
-                    stderr
-                  }
-                })));
+                  const stdout = collectors.stdout.join('\n');
+                  const stderr = collectors.stderr.join('\n');
+                  await scopedRedisClient(async (endClient) => endClient.publish(PREFIX, JSON.stringify({
+                    type: 'irc:responseWhois:nmap',
+                    data: {
+                      whoisData,
+                      started,
+                      stdout,
+                      stderr
+                    }
+                  })));
+                });
+
+                children[proc.pid] = {
+                  started: new Date(),
+                  proc
+                };
               });
-
-              children[proc.pid] = {
-                started: new Date(),
-                proc
-              };
             };
           }
 
@@ -331,9 +340,11 @@ module.exports = async (context, chan, msg) => {
         console.error('Bad SAY', parsed);
       }
     } else if (parsed.type === 'discord:channels') {
+      console.log('\n\n\n!!! ', parsed.type);
       await discordChannelsHandler(false);
     } else if (parsed.type === 'discord:startup') {
-      if (!haveJoinedChannels) {
+      console.log('\n\n\n!!! ', parsed.type);
+      if (!haveJoinedChannels()) {
         console.log('Got discord:startup but !haveJoinedChannels, running startup sequence...');
         await discordChannelsHandler(true);
         return;

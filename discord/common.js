@@ -90,8 +90,9 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
 }
 
 function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
-  return fs.readdirSync(dir).reduce((a, dirEnt) => {
-    const fPath = path.join(dir, dirEnt);
+  const paths = {};
+  const retObj = fs.readdirSync(dir).reduce((a, dirEnt) => {
+    const fPath = path.resolve(path.join(dir, dirEnt));
     const fParsed = path.parse(fPath);
 
     if (!fs.statSync(fPath).isDirectory() && fParsed.ext === '.js' && fParsed.name !== 'index') {
@@ -103,6 +104,8 @@ function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
         fParsed.name = fParsed.name.replaceAll(opts.pathReplace.from, opts.pathReplace.to);
       }
 
+      paths[fParsed.name] = fPath;
+
       return {
         [fParsed.name]: require(fPath),
         ...a
@@ -111,6 +114,16 @@ function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
 
     return a;
   }, {});
+
+  retObj.__resolver = (name) => require.cache[require.resolve(paths[name])];
+  retObj.__refresh = () => {
+    Object.values(paths).forEach((modPath) => {
+      delete require.cache[require.resolve(modPath)];
+      require(require.resolve(modPath));
+    });
+  };
+
+  return retObj;
 }
 
 const discordEscapeRx = /([*_`])/g;
@@ -218,6 +231,52 @@ const persistOrClearPmChan = async (network, chanId, persist = true) => {
     await rc.exec();
   });
 };
+
+const formatKVsWithOptsDefaults = { delim: ':\t' };
+
+function formatKVsWithOpts (obj, opts) {
+  opts = { ...formatKVsWithOptsDefaults, ...opts };
+  const { delim, sortByValue } = opts;
+  const typeFmt = (v, k) => {
+    switch (typeof v) {
+      case 'object':
+        return ['...'];
+
+      case 'boolean':
+        return [v ? ':white_check_mark:' : ':x:'];
+
+      case 'number':
+      {
+        const nv = Number(v);
+
+        if (k.match(/^t(?:ime)?s(?:tamp)?$/ig)) {
+          return [new Date(nv).toLocaleString(), Number(nv)];
+        }
+
+        return [nv];
+      }
+
+      default:
+        return [v];
+    }
+  };
+
+  const vFmt = (v, k) => {
+    const [primary, secondary] = typeFmt(v, k);
+    return `**${primary}**${secondary ? ` (_${secondary}_)` : ''}`;
+  };
+
+  const sorter = (a, b) => {
+    if (typeof sortByValue === 'number') {
+      return a[1] + (b[1] * sortByValue);
+    }
+
+    return a[0].localeCompare(b[0]);
+  };
+
+  const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
+  return Object.entries(obj).sort(sorter).map(([k, v]) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(v, k)}`).join('\n');
+}
 
 module.exports = {
   plotMpmData,
@@ -345,38 +404,10 @@ module.exports = {
     });
   },
 
+  formatKVsWithOpts,
+
   formatKVs (obj, delim = ':\t') {
-    const typeFmt = (v, k) => {
-      switch (typeof v) {
-        case 'object':
-          return ['...'];
-
-        case 'boolean':
-          return [v ? ':white_check_mark:' : ':x:'];
-
-        case 'number':
-        {
-          const nv = Number(v);
-
-          if (k.match(/^t(?:ime)?s(?:tamp)?$/ig)) {
-            return [new Date(nv).toLocaleString(), Number(nv)];
-          }
-
-          return [nv];
-        }
-
-        default:
-          return [v];
-      }
-    };
-
-    const vFmt = (v, k) => {
-      const [primary, secondary] = typeFmt(v, k);
-      return `**${primary}**${secondary ? ` (_${secondary}_)` : ''}`;
-    };
-
-    const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
-    return Object.keys(obj).sort().map((k) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(obj[k], k)}`).join('\n');
+    return formatKVsWithOpts(obj, { delim });
   },
 
   generatePerChanListManagementUCExport (commandName, additionalCommands) {

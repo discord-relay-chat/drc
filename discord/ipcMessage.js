@@ -14,6 +14,8 @@ const { MessageEmbed } = require('discord.js');
 const numerics = require('../irc/numerics');
 
 const ipcMessageHandlers = require('./ipcMessages');
+console.log(`Loaded ${Object.keys(ipcMessageHandlers).length} Discord IPC message handlers: ` +
+  `${Object.keys(ipcMessageHandlers).filter(x => x.indexOf('_') !== 0).join(', ')}`);
 
 const serialQueue = [];
 let serialLock = false;
@@ -57,7 +59,7 @@ module.exports = async (context, _channel, msg) => {
     ++stats.messages.total;
     stats.messages.types[type] = (stats.messages.types[type] ?? 0) + 1;
 
-    if (parsed.data) {
+    if (parsed.data && typeof parsed.data === 'object') {
       parsed.data._orig = {};
       ['nick', 'kicked', 'ident', 'hostname'].forEach((i) => {
         if (parsed.data[i]) {
@@ -69,6 +71,13 @@ module.exports = async (context, _channel, msg) => {
 
     const runOneTimeHandlers = runOneTimeHandlersMatchingDiscriminator.bind(this, parsed.type, parsed.data);
 
+    const [c2pfx, subroute] = parsed.type.split('::');
+    if (c2pfx === '__c2' && subroute) {
+      console.log('C2 MSG', subroute);
+      return await runOneTimeHandlers(parsed.data);
+    }
+
+    // console.log('RESOLVE!?', parsed.type, !!ipcMessageHandlers[parsed.type], Object.keys(ipcMessageHandlers));
     if (ipcMessageHandlers[parsed.type]) {
       // 'return await' to ensure we catch anything here rather than bubbling up
       return await ipcMessageHandlers[parsed.type](parsed, { runOneTimeHandlers, serialize, ...context });
@@ -186,7 +195,7 @@ module.exports = async (context, _channel, msg) => {
           }
         }
       } else if (type === 'irc') {
-        if (['say', 'join', 'pong', 'tagmsg', 'action'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
+        if (['say', 'join', 'pong', 'tagmsg', 'action', 'whois'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
           return;
         }
 

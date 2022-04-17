@@ -1,27 +1,25 @@
 'use strict';
 
+const config = require('config');
+const { formatKVsWithOpts } = require('../common');
 const { matchNetwork, scopedRedisClient } = require('../../util');
 
 async function f (context, ...a) {
   const [netStub] = a;
   const { network } = matchNetwork(netStub);
 
-  return scopedRedisClient(async (rc, prefix) => {
-    const m = {};
-
+  await scopedRedisClient(async (rc, prefix) => {
     for (const pf of ['kickee', 'kicker', 'chans', 'reasons']) {
       const k = `${prefix}:kicks:${network}:${pf}`;
-      const vals = await rc.zrangebyscore(k, 0, 'inf');
-      const vs = [];
+      const vals = await rc.zrevrangebyscore(k, 'inf', 0, 'limit', 0, config.app.maxNumKicks);
+      const vs = {};
 
       for (const v of vals) {
-        vs.push({ [v]: await rc.zscore(k, v) });
+        vs[v] = await rc.zscore(k, v);
       }
 
-      m[pf] = vs;
+      await context.sendToBotChan(`**${pf}**:\n\n` + formatKVsWithOpts(vs, { sortByValue: -1 }));
     }
-
-    return m;
   });
 }
 

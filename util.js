@@ -351,7 +351,7 @@ async function sizeAtPath (searchPath) {
 }
 
 function isIpAddress (ip) {
-  return ip.match(/^(?:\d{1,3}\.){3}\d{1,3}$/) !== null;
+  return ip?.match(/^(?:\d{1,3}\.){3}\d{1,3}$/) !== null;
 }
 
 async function ipInfo (ipOrHost) {
