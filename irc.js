@@ -192,24 +192,26 @@ async function main () {
       console.debug(`logDataToFile: ${chanFilePath}`);
 
       fs.stat(chanFileDir, async (err, _stats) => {
-        if (err && err.code === 'ENOENT') {
-          try {
+        try {
+          if (err && err.code === 'ENOENT') {
             await fs.promises.mkdir(chanFileDir, { recursive: true });
-          } catch (e) {
-            if (e.code !== 'EEXIST') {
-              throw e;
-            }
+          }
+
+          const lData = Object.assign({}, data, {
+            __drcLogTs: Number(new Date())
+          });
+
+          if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, lData);
+          const fh = await fs.promises.open(chanFilePath, 'a');
+          await fh.write(JSON.stringify(lData) + '\n');
+          fh.close();
+        } catch (e) {
+          if (e.code !== 'EEXIST') {
+            console.error(`logDataToFile(${fileName}) failed: ${e}`);
+            console.debug(e, data);
+            throw e;
           }
         }
-
-        const lData = Object.assign({}, data, {
-          __drcLogTs: Number(new Date())
-        });
-
-        if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, lData);
-        const fh = await fs.promises.open(chanFilePath, 'a');
-        await fh.write(JSON.stringify(lData) + '\n');
-        fh.close();
       });
     };
 

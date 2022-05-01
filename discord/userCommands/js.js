@@ -10,7 +10,7 @@ const RKEY = `${PREFIX}:jssaved`;
 async function _run (context, runStr) {
   try {
     console.log(`runStr> ${runStr}`);
-    const res = vm.runInNewContext(runStr, {
+    let res = vm.runInNewContext(runStr, {
       logger,
       config,
       PREFIX,
@@ -22,8 +22,14 @@ async function _run (context, runStr) {
       ...context
     });
 
-    console.log(`res>    ${res}`);
-    context.sendToBotChan('```\n' + res + '\n```\n');
+    let wasAwaited = false;
+    if (res instanceof Promise) {
+      res = await res;
+      wasAwaited = true;
+    }
+
+    console.log(`res ${wasAwaited ? '(awaited)' : ''}>    ${res}`);
+    context.sendToBotChan('```\n' + JSON.stringify(res, null, 2) + '\n```\n');
   } catch (e) {
     console.error('runInNewContext threw>', e);
     context.sendToBotChan('Compilation failed:\n\n```\n' + e.message + '\n' + e.stack + '\n```');

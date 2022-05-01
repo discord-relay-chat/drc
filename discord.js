@@ -200,6 +200,13 @@ client.once('ready', async () => {
 
       let toSend;
       try {
+        // an admission that the `raw` flag was a terrible idea, because sometimes
+        // callers don't use it but pass an object for `s` anyway. dammit.
+        if (!raw && typeof s !== 'string') {
+          console.debug(`sendToBotChan raw fixup: ${typeof s}`, s);
+          s = '```json\n' + JSON.stringify(s, null, 2) + '\n```';
+        }
+
         if (!raw) {
           s = replaceIrcEscapes(s);
         }

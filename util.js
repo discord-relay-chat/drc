@@ -573,6 +573,7 @@ function replaceIrcEscapes (message) {
   let hit = false;
   const orig = message;
 
+  console.debug(`replaceIrcEscapes> ${typeof message} message=${message}`);
   if (message.match(ircEscapeStripTester)) {
     hit = true;
     message = ircEscapeStripSet.reduce((m, esc) => m.replaceAll(esc, ''), message);
