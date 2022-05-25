@@ -49,7 +49,7 @@ const _config = {
   app: {
     log: {
       level: 'info',
-      path: './logs'
+      path: process.env?.DRC_LOG_PATH || './logs'
     },
     allowedSpeakers: [],
     timeout: 30,
@@ -71,6 +71,7 @@ const _config = {
         }
       },
       MPM_PLOT_FILE_NAME,
+      plotEnabled: false,
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
       mpmPlotTimeLimitHours: 120 // 5 days
     },
@@ -109,7 +110,7 @@ const _config = {
       channelsToFile: true,
       events: ['kick', 'ban', 'channel info', 'topic', 'invited', 'wallops',
         'nick', 'nick in use', 'nick invalid', 'whois', 'whowas', 'motd', 'info'],
-      path: './logs/irc'
+      path: process.env?.DRC_LOG_PATH ? path.join(process.env.DRC_LOG_PATH, 'irc') : './logs/irc'
     },
     ctcpVersionPrefix: 'Discord Relay Chat',
     ctcpVersionUrl: 'https://discordrc.com',

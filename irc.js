@@ -107,7 +107,7 @@ async function main () {
   const pubClient = new Redis(config.redis.url);
   const c2Listener = new Redis(config.redis.url); // TODO: use this more!
   const specServers = {};
-  const ircLogPath = path.join(__dirname, config.irc.log.path);
+  const ircLogPath = path.resolve(config.irc.log.path);
 
   if (!fs.existsSync(ircLogPath)) {
     fs.mkdirSync(ircLogPath);

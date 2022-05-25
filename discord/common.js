@@ -12,6 +12,10 @@ const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../uti
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHours) {
+  if (!config.app.stats.plotEnabled) {
+    return;
+  }
+
   let maxY = 0;
   const nowNum = Number(new Date());
   const timeLimit = nowNum - timeLimitHours * 60 * 60 * 1000;

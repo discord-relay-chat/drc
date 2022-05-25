@@ -235,6 +235,21 @@ client.once('ready', async () => {
     allowedSpeakerCommandHandler = async (data, toChanId) => {
       const trimContent = data.content.replace(/^\s+/, '');
       if (trimContent[0] === '!') {
+        // allow |> as statement separators on a single line
+        if (trimContent.indexOf('|>') !== -1) {
+          const funcs = trimContent
+            .split('|>')
+            .map((s) => s.trim())
+            .map((content) => allowedSpeakerCommandHandler.bind(null, { content }, toChanId));
+
+          // serialize
+          for (const f of funcs) {
+            await f();
+          }
+
+          return;
+        }
+
         const [command, ...args] = trimContent.slice(1).split(/\s+/);
         const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
 

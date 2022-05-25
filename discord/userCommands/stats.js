@@ -157,12 +157,16 @@ async function f (context) {
 
     const name = await servePage(context, serveOpts, 'stats');
 
-    const mpmPlotAttach = new MessageAttachment(serveOpts.mpmPlotFqdn);
+    const files = [];
     const embed = new MessageEmbed()
       .setColor(config.app.stats.embedColors.main)
       .setTitle('Runtime Stats')
-      .setURL(`https://${config.http.fqdn}/${name}`)
-      .setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
+      .setURL(`https://${config.http.fqdn}/${name}`);
+
+    if (config.app.stats.plotEnabled) {
+      embed.setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
+      files.append(new MessageAttachment(serveOpts.mpmPlotFqdn));
+    }
 
     if (stats.errors > 0) {
       embed.addField('Bot ERRORS', `${stats.errors}`);
@@ -209,7 +213,7 @@ async function f (context) {
       .setTimestamp()
       .setFooter(`Last calculated ${stats.lastCalcs.lastAnnounceFormatted} ago`);
 
-    await context.sendToBotChan({ embeds: [embed], files: [mpmPlotAttach] }, true);
+    await context.sendToBotChan({ embeds: [embed], files }, true);
 
     if (context.options.counts) {
       Object.entries(stats.lastCalcs.channelsCountProcessed).forEach(([network, channels]) => {

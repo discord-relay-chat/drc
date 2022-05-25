@@ -1,0 +1,31 @@
+services:
+  http:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: http
+    network_mode: "host"
+
+  irc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: irc
+    volumes: &default-logs-bind
+      - type: bind
+        source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
+        target: /logs
+    network_mode: "host"
+
+  discord:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: discord
+    volumes: *default-logs-bind
+    network_mode: "host"
+    restart: "on-failure"
+
+volumes:
+  logs:
+    external: true

@@ -81,14 +81,14 @@ module.exports = async (context, data) => {
   console.debug(`Emitting SAY with data.content: "${data.content}"`);
 
   let subType = 'say';
-  if (data.content.indexOf('//me') === 0) {
+  if (data.content.indexOf('~me') === 0) {
     subType = 'action';
-    data.content = data.content.replace('//me', '');
+    data.content = data.content.replace('~me', '');
   }
 
-  if (data.content.indexOf('//thinking') === 0) {
+  if (data.content.indexOf('~thinking') === 0) {
     subType = 'action';
-    data.content = `. o O ( ${data.content.replace('//thinking', '')} )`;
+    data.content = `. o O ( ${data.content.replace('~thinking', '')} )`;
   }
 
   if (data.content.match(CHANNELS_PATTERN)) {
