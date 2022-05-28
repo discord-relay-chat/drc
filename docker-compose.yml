@@ -1,6 +1,6 @@
 services:
   http:
-    build:
+    build: &default-build-spec
       context: .
       dockerfile: Dockerfile
       target: http
@@ -8,8 +8,7 @@ services:
 
   irc:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *default-build-spec
       target: irc
     volumes: &default-logs-bind
       - type: bind
@@ -19,8 +18,7 @@ services:
 
   discord:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *default-build-spec
       target: discord
     volumes: *default-logs-bind
     network_mode: "host"
