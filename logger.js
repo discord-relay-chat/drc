@@ -4,7 +4,7 @@ const util = require('util');
 const config = require('config');
 const { NAME, VERSION } = require('./util');
 
-const LEVELS = ['log', 'warn', 'error', 'debug'];
+const LEVELS = ['log', 'info', 'warn', 'error', 'debug'];
 
 const enabledLevels = new Set(LEVELS);
 

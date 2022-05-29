@@ -16,6 +16,7 @@ const {
 module.exports = async function (parsed, context) {
   const joined = parsed.data;
   const {
+    allowedSpeakersAvatars,
     stats,
     sendToBotChan,
     client,
@@ -65,25 +66,17 @@ module.exports = async function (parsed, context) {
 
         // ugh copy/pasted directly from above, need to refactor ALL OF THIS
         if (parsed.data && parsed.data.nick) {
+          parsed.data.__orig_nick = parsed.data.nick;
           parsed.data.nick = simpleEscapeForDiscord(parsed.data.nick);
         }
 
+        let avatar;
         if (parsed.type === 'irc:message') {
           const e = parsed.data;
           if (e.type === 'privmsg' || e.type === 'action') {
-            let eHead = config.app.render.message.normal.head;
-            let eFoot = config.app.render.message.normal.foot;
-            let eStyle = config.app.render.message.normal.style;
-
-            if (e.type === 'action') {
-              eHead = config.app.render.message.action.head;
-              eFoot = config.app.render.message.action.foot;
-              eStyle = config.app.render.message.action.style;
-            }
-
             // it's us (when enable_echomessage === true)
-            if (config.irc.registered[e.__drcNetwork].user.nick === e.nick) {
-              eStyle = config.app.render.message.self.style;
+            if (config.irc.registered[e.__drcNetwork].user.nick === e.nick && allowedSpeakersAvatars.length) {
+              avatar = allowedSpeakersAvatars[0];
             }
 
             const persistMsgWithAutoCapture = async (type) => {
@@ -145,7 +138,40 @@ module.exports = async function (parsed, context) {
             }
 
             try {
-              msgChan.__drcSend(`${eHead}${eStyle}${e.nick}${eStyle}${eFoot} ${replaceIrcEscapes(e.message).trim()}`);
+              const fName = [parsed.data.__orig_nick, joined.id, e.__drcNetwork].map((s) => s.replaceAll(/[^\d\w._-]+/g, '')).join('_');
+              const isUs = Boolean(avatar);
+
+              if (!avatar) {
+                avatar = `https://robohash.org/${fName}.png`;
+              }
+
+              const hooks = await msgChan.fetchWebhooks();
+              let hook;
+              console.debug(fName, joined.channel, avatar, 'HOOKS??', hooks.size);
+
+              if (hooks.size === 0) {
+                console.debug('create anew...', joined.channel);
+                hook = await msgChan.createWebhook(parsed.data.__orig_nick, { avatar });
+                console.debug('create anew...!');
+              } else {
+                hook = [...hooks.values()][0];
+
+                if (hooks.size > 1) {
+                  console.error('\n\nTOO MANY HOOKS ', joined.channel);
+                  for (const die of [...hooks.values()].slice(1)) {
+                    console.log('Killing', die);
+                    die.delete();
+                  }
+                }
+              }
+
+              console.debug('MSG send...', joined.channel, hook.id);
+              const msg = await hook.send({
+                avatarURL: avatar,
+                username: parsed.data.__orig_nick + (isUs ? ' (you!)' : ''),
+                content: replaceIrcEscapes(e.message).trim()
+              });
+              console.debug('MSG FFS', joined.channel, msg.content);
               stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
             } catch (err) {
               console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);

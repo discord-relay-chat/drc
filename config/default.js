@@ -74,23 +74,6 @@ const _config = {
       plotEnabled: false,
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
       mpmPlotTimeLimitHours: 120 // 5 days
-    },
-    render: {
-      message: {
-        normal: {
-          head: '<',
-          foot: '>',
-          style: '**'
-        },
-        action: {
-          head: '* ',
-          foot: '',
-          style: ''
-        },
-        self: {
-          style: '_'
-        }
-      }
     }
   },
 

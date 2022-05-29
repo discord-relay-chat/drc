@@ -14,7 +14,8 @@ module.exports = async (context, data) => {
     channelsById,
     categories,
     stats,
-    redisClient
+    redisClient,
+    allowedSpeakersAvatars
   } = context;
 
   if (!messageIsFromAllowedSpeaker(data, context)) {
@@ -30,6 +31,9 @@ module.exports = async (context, data) => {
 
     return;
   }
+
+  console.debug('ALLOWED messageCreate', data);
+  allowedSpeakersAvatars[0] = data.author.displayAvatarURL();
 
   let replyNick;
   if (data.type === 'REPLY') {

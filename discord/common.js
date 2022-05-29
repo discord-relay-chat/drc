@@ -289,24 +289,26 @@ module.exports = {
   generateListManagementUCExport,
 
   senderNickFromMessage (msgObj) {
-    const matchRx = new RegExp(`${config.app.render.message.normal.head}${String.raw`(?:\*\*)?(.*)(?:\*\*)`}${config.app.render.message.normal.foot}`, 'g');
-    const replyNickMatch = msgObj.content?.matchAll(matchRx);
-
-    if (replyNickMatch && !replyNickMatch.done) {
-      const replyNickArr = replyNickMatch.next().value;
-
-      if (replyNickArr && replyNickArr.length > 1) {
-        return replyNickArr[1].replace(/\\/g, '');
-      }
+    // message was sent via our username-interposing webhooks, so we can extract the nick directly
+    if (msgObj?.author.bot && msgObj?.author.discriminator === '0000') {
+      console.debug('senderNickFromMessage IS A IRC USER INTERPOSED ->', msgObj?.author.username);
+      return msgObj?.author.username;
     }
+
+    console.debug('senderNickFromMessage MISSED', msgObj);
   },
 
   messageIsFromAllowedSpeaker (data, { sendToBotChan = () => {} }) {
+    // is from a webhook "user" we created to give messages the IRC user's nickname
+    if (data?.author.bot && data?.author.discriminator === '0000' && data?.author.id === data?.webhookId) {
+      return false;
+    }
+
     if (!data.author || !config.app.allowedSpeakers.includes(data.author.id)) {
       if (data.author && data.author.id !== config.discord.botId) {
         sendToBotChan('`DISALLOWED SPEAKER` **' + data.author.username +
           '#' + data.author.discriminator + '**: ' + data.content);
-        console.error('DISALLOWED SPEAKER', data.author, data.content);
+        console.error('DISALLOWED SPEAKER', typeof data.author, data.author, data.content);
       }
 
       return false;

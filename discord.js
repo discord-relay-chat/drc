@@ -354,7 +354,9 @@ client.once('ready', async () => {
   }
 
   const deletedBeforeJoin = {};
+  const allowedSpeakersAvatars = [];
   const eventHandlerContext = {
+    allowedSpeakersAvatars,
     sendToBotChan,
     channelMessageHandlers,
     client,
@@ -608,6 +610,7 @@ client.once('ready', async () => {
   };
 
   mainSubClient.on('message', ipcMessageHandler.bind(null, {
+    allowedSpeakersAvatars,
     stats,
     runOneTimeHandlersMatchingDiscriminator,
     registerButtonHandler,
@@ -739,11 +742,20 @@ client.once('ready', async () => {
   }
 });
 
-['error', 'debug', 'userUpdate', 'warn', 'presenceUpdate', 'shardError'].forEach((eName) => {
+['error', 'debug', 'userUpdate', 'warn', 'presenceUpdate', 'shardError', 'rateLimit'].forEach((eName) => {
   client.on(eName, (...a) => {
     console.debug({ event: eName }, ...a);
-    if (eName === 'error' || eName === 'warn') {
-      const msg = `DJS PROBLEM <${eName}>: ${JSON.stringify([...a], null, 2)}`;
+    if (eName === 'error' || eName === 'warn' || eName === 'rateLimit') {
+      let msg = `Discord PROBLEM <${eName}>: ${JSON.stringify([...a], null, 2)}`;
+
+      if (eName === 'rateLimit') {
+        const id = a[0].path.split('/')[2];
+        console.log('RL!!', a[0], a[0].path, id, channelsById[id]);
+        if (channelsById[id]) {
+          msg += '\n\n' + JSON.stringify(channelsById[id], null, 2);
+        }
+      }
+
       sendToBotChan(msg);
       console.error(msg);
       ++stats.errors;
