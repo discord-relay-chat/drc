@@ -157,6 +157,7 @@ function simpleEscapeForDiscord (s) {
 function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
+    console.debug('generateListManagementUCExport', commandName, ...a);
 
     if (!netStub) {
       return `Not enough arguments! Usage: \`${commandName} [networkStub] [command] (args...)\``;

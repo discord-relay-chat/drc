@@ -8,12 +8,15 @@ function createArgObjOnContext (context, data, subaction) {
   const network = context.channelsById[context.channelsById[data?.message.channelId].parent]?.name;
   const tmplArr = [
     network,
-    senderNickFromMessage(data?.message), // nick
-    data?.message.channelId // discord channel id
+    senderNickFromMessage(data?.message) // nick
   ];
 
   if (subaction) {
-    tmplArr.splice(1, 0, subaction);
+    if (subaction === 'whois') {
+      tmplArr.push(data?.message.channelId); // discord channel ID for response
+    } else {
+      tmplArr.splice(1, 0, subaction);
+    }
   }
 
   context.argObj = { _: tmplArr };
@@ -22,7 +25,7 @@ function createArgObjOnContext (context, data, subaction) {
 }
 
 async function whois (context, data) {
-  return userCommands('whois')(context, ...createArgObjOnContext(context, data));
+  return userCommands('whois')(context, ...createArgObjOnContext(context, data, 'whois'));
 }
 
 async function ignoreAdd (context, data) {
@@ -47,8 +50,35 @@ const allowedReactions = {
   '%E2%9E%96': ignoreRemove // "➖"
 };
 
+const reactionsToRemove = [];
+let ritHandle;
+
+// serialize reaction removals because the rate limit is extremely tight
+const _removeInTime = () => {
+  if (ritHandle) {
+    return;
+  }
+
+  ritHandle = setTimeout(() => {
+    ritHandle = null;
+    const firstToRm = reactionsToRemove.shift();
+    console.debug('_removeInTime RM', firstToRm?.message.id);
+    firstToRm.remove();
+    if (reactionsToRemove.length) {
+      console.debug('_removeInTime have', reactionsToRemove.length);
+      _removeInTime();
+    }
+  }, config.discord.reactionRemovalTimeMs);
+};
+
+const removeReactionInTime = (messageReaction) => {
+  console.debug('removeReactionInTime', messageReaction?.message.id);
+  reactionsToRemove.push(messageReaction);
+  _removeInTime();
+};
+
 module.exports = async (context, messageReaction, author) => {
-  const removeInTime = () => setTimeout(() => messageReaction.remove(), config.discord.reactionRemovalTimeMs);
+  const removeInTime = removeReactionInTime.bind(null, messageReaction);
   if (author.id === config.discord.botId) {
     return removeInTime();
   }
@@ -56,8 +86,7 @@ module.exports = async (context, messageReaction, author) => {
   console.log(messageReaction.users.reaction?.emoji?.name, 'is', messageReaction.users.reaction?.emoji?.identifier);
 
   if (!messageIsFromAllowedSpeaker({ author }, context)) {
-    console.log('can NOT?! use reaction!', author);
-    messageReaction.message.react('❌');
+    console.error('can NOT?! use reaction!', author);
     return messageReaction.remove();
   }
 
@@ -67,6 +96,6 @@ module.exports = async (context, messageReaction, author) => {
     messageReaction.message.react('✅');
     removeInTime();
   } else {
-    messageReaction.remove();
+    return messageReaction.remove();
   }
 };

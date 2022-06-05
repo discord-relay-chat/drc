@@ -32,7 +32,6 @@ module.exports = async (context, data) => {
     return;
   }
 
-  console.debug('ALLOWED messageCreate', data);
   allowedSpeakersAvatars[0] = data.author.displayAvatarURL();
 
   let replyNick;

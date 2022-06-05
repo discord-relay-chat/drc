@@ -122,7 +122,7 @@ console.log(`${PREFIX} Discord controller starting...`);
 
 const formatForAllowedSpeakerResponse = (s, raw = false) =>
   (!raw
-    ? (config.user.timestampMessages ? `\`[${new Date().toLocaleTimeString()}]\` ` : '') + s
+    ? s
     : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
 client.once('ready', async () => {
@@ -184,7 +184,7 @@ client.once('ready', async () => {
   // console.debug('categories', channelsById)
 
   if (config.irc.quitMsgChanId) {
-    sendToBotChan = async (s, raw = false) => {
+    const __sendToBotChan = async (s, raw = false) => {
       if (!s || (typeof s === 'string' && !s?.length)) {
         console.error('sendToBotChan called without message!', s, raw);
         return;
@@ -223,6 +223,21 @@ client.once('ready', async () => {
 
       return (truncTail ? sendToBotChan(truncTail, raw) : toSend);
     };
+
+    // serialize bot-chan sends to a cadence of 1Hz, to avoid rate limits
+    const stbcQueue = [];
+    const stbcServicer = async () => {
+      if (stbcQueue.length > 0) {
+        const [s, raw] = stbcQueue.shift();
+        await __sendToBotChan(s, raw);
+      }
+
+      setTimeout(stbcServicer, 1000);
+    };
+
+    sendToBotChan = async (s, raw = false) => stbcQueue.push([s, raw]);
+
+    stbcServicer();
   }
 
   sendToBotChan('\n```\n' + (await banner('Hello!')) + '\n```\n\n');
@@ -590,6 +605,100 @@ client.once('ready', async () => {
     ircReady.reject = rr.bind(null, reject);
   });
 
+  let ircHeartbeatListener;
+  let ircHeartbeatHandle;
+  const ircReadyHandler = async (readyRes) => {
+    console.log('Got irc:ready!', readyRes);
+
+    _isReconnect = readyRes && readyRes.isReconnect;
+
+    if (readyRes.readyData) {
+      const embed = new MessageEmbed()
+        .setTitle('IRC is ready!')
+        .setColor(config.app.stats.embedColors.irc.ready)
+        .setDescription('Speaking as:')
+        .addFields(...readyRes.readyData.map(x => ({ name: x.network, value: x.nickname, inline: true })))
+        .setTimestamp();
+
+      if (stats?.lastCalcs?.lagAsEmbedFields.length > 0) {
+        embed.addField('Lag', '(in milliseconds)')
+          .addFields(...stats.lastCalcs.lagAsEmbedFields);
+      }
+
+      sendToBotChan(embed, true);
+
+      await scopedRedisClient(async (rClient) => {
+        for (const { network } of readyRes.readyData) {
+          const onConnectCmds = await userCommands('onConnect')({ redis: rClient }, network);
+
+          for (const connectCmd of onConnectCmds) {
+            console.log(await sendToBotChan(`Running connect command for \`${network}\`: \`${connectCmd}\``));
+            await allowedSpeakerCommandHandler({ content: connectCmd });
+          }
+        }
+      });
+    } else {
+      const embed = new MessageEmbed()
+        .setColor(config.app.stats.embedColors.irc.ipcReconnect)
+        .setTitle('IRC is reconnected!')
+        .addFields(
+          { name: 'IRC uptime', value: stats.irc?.uptime, inline: true },
+          { name: 'Redis uptime', value: stats.lastCalcs?.redisUptime, inline: true },
+          { name: 'System uptime', value: stats.lastCalcs?.systemUptime, inline: true },
+          { name: 'Bot reconnects', value: String(stats.irc?.discordReconnects), inline: true },
+          { name: 'Memory available', value: stats.lastCalcs?.memoryAvailablePercent + '%', inline: true },
+          { name: 'Load averages', value: stats.sinceLast?.loadavg.join(', '), inline: true },
+          { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true }
+        )
+        .setTimestamp();
+
+      if (stats?.lastCalcs?.lagAsEmbedFields.length > 0) {
+        embed.addField('Lag', '(in milliseconds)')
+          .addFields(...stats.lastCalcs.lagAsEmbedFields);
+      }
+
+      sendToBotChan(embed, true);
+    }
+
+    if (!readyRes || !readyRes.isReconnect) {
+      redisClient.publish(PREFIX, JSON.stringify({
+        type: 'discord:channels',
+        data: { categories, channelsById, categoriesByName }
+      }));
+    } else {
+      console.log('Re-connected!');
+    }
+
+    const HB_FUDGE_FACTOR = 1.01;
+    let ircLastHeartbeat = Number(new Date());
+    ircHeartbeatListener = new Redis(config.redis.url);
+    ircHeartbeatListener.on('message', (...a) => {
+      const nowNum = Number(new Date());
+      if (nowNum - ircLastHeartbeat > (config.irc.heartbeatFrequencyMs * HB_FUDGE_FACTOR)) {
+        console.error('ircHeartbeatListener IRC heartbeat is late!', nowNum - ircLastHeartbeat);
+      }
+      ircLastHeartbeat = nowNum;
+    });
+    let numLates = 0;
+    ircHeartbeatHandle = setInterval(() => {
+      if (Number(new Date()) - ircLastHeartbeat > (config.irc.heartbeatFrequencyMs * HB_FUDGE_FACTOR)) {
+        console.error('IRC heartbeat is late!', Number(new Date()) - ircLastHeartbeat);
+        if (++numLates > 3) {
+          const msg = `Looks like we lost IRC! Last hearbeat was ${Number(new Date()) - ircLastHeartbeat}ms ago (${numLates})`;
+          console.error(msg);
+          sendToBotChan(msg);
+          clearInterval(ircHeartbeatHandle);
+          ircHeartbeatListener.disconnect();
+        }
+      } else {
+        numLates = 0;
+      }
+    }, config.irc.heartbeatFrequencyMs);
+    ircHeartbeatListener.subscribe(PREFIX + ':heartbeats:irc');
+
+    client.user.setStatus('online');
+  };
+
   const runOneTimeHandlersMatchingDiscriminator = async (type, data, discrim) => {
     console.debug('runOneTimeHandlersMatchingDiscriminator', type, discrim, data, oneTimeMsgHandlers);
     if (oneTimeMsgHandlers[type] && oneTimeMsgHandlers[type][discrim]) {
@@ -616,6 +725,7 @@ client.once('ready', async () => {
     registerButtonHandler,
     sendToBotChan,
     ircReady,
+    ircReadyHandler,
     client,
     channelsById,
     captureSpecs,
@@ -626,7 +736,8 @@ client.once('ready', async () => {
     categoriesByName,
     channelsByName,
     allowedSpeakerCommandHandler,
-    isReconnect
+    isReconnect,
+    setIsReconnect: (s) => (_isReconnect = s)
   }));
 
   try {
@@ -638,9 +749,7 @@ client.once('ready', async () => {
     console.log('Waiting for irc:ready...');
     sendToBotChan('Waiting for IRC bridge...');
     const readyRes = await ircReady.promise;
-    console.log('Got irc:ready!', readyRes);
-
-    _isReconnect = readyRes && readyRes.isReconnect;
+    _isReconnect = readyRes?.isReconnect;
 
     await userCommands('stats')({
       stats,
@@ -652,6 +761,8 @@ client.once('ready', async () => {
       redis: redisClient,
       publish: (o) => redisClient.publish(PREFIX, JSON.stringify(o))
     });
+
+    await ircReadyHandler(readyRes);
 
     const _persist = async () => {
       console.log(`Auto-persisting stats at ${config.app.statsSilentPersistFreqMins}-minute frequency`);
@@ -687,72 +798,28 @@ client.once('ready', async () => {
     };
 
     silentStatsPersist();
-
-    if (readyRes.readyData) {
-      const embed = new MessageEmbed()
-        .setTitle('IRC is ready!')
-        .setColor(config.app.stats.embedColors.irc.ready)
-        .setDescription('Speaking as:')
-        .addFields(...readyRes.readyData.map(x => ({ name: x.network, value: x.nickname, inline: true })))
-        .addField('Lag', '(in milliseconds)')
-        .addFields(...stats.lastCalcs.lagAsEmbedFields)
-        .setTimestamp();
-      sendToBotChan(embed, true);
-
-      await scopedRedisClient(async (rClient) => {
-        for (const { network } of readyRes.readyData) {
-          const onConnectCmds = await userCommands('onConnect')({ redis: rClient }, network);
-
-          for (const connectCmd of onConnectCmds) {
-            console.log(await sendToBotChan(`Running connect command for \`${network}\`: \`${connectCmd}\``));
-            await allowedSpeakerCommandHandler({ content: connectCmd });
-          }
-        }
-      });
-    } else {
-      sendToBotChan(new MessageEmbed()
-        .setColor(config.app.stats.embedColors.irc.ipcReconnect)
-        .setTitle('IRC is reconnected!')
-        .addFields(
-          { name: 'IRC uptime', value: stats.irc.uptime, inline: true },
-          { name: 'Redis uptime', value: stats.lastCalcs.redisUptime, inline: true },
-          { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true },
-          { name: 'Memory available', value: stats.lastCalcs.memoryAvailablePercent + '%', inline: true },
-          { name: 'Load averages', value: stats.sinceLast.loadavg.join(', '), inline: true },
-          { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true }
-        )
-        .addField('Lag', '(in milliseconds)')
-        .addFields(...stats.lastCalcs.lagAsEmbedFields)
-        .setTimestamp(),
-      true);
-    }
-
-    if (!readyRes || !readyRes.isReconnect) {
-      redisClient.publish(PREFIX, JSON.stringify({
-        type: 'discord:channels',
-        data: { categories, channelsById, categoriesByName }
-      }));
-    } else {
-      console.log('Re-connected!');
-    }
-
-    client.user.setStatus('online');
   } catch (err) {
     console.error('Ready handshake failed!', err);
   }
 });
 
 ['error', 'debug', 'userUpdate', 'warn', 'presenceUpdate', 'shardError', 'rateLimit'].forEach((eName) => {
-  client.on(eName, (...a) => {
+  client.on(eName, async (...a) => {
     console.debug({ event: eName }, ...a);
     if (eName === 'error' || eName === 'warn' || eName === 'rateLimit') {
-      let msg = `Discord PROBLEM <${eName}>: ${JSON.stringify([...a], null, 2)}`;
+      let msg = `Discord PROBLEM <${eName}>: ` + '```json\n' + JSON.stringify([...a], null, 2) + '\n```\n';
 
       if (eName === 'rateLimit') {
-        const id = a[0].path.split('/')[2];
-        console.log('RL!!', a[0], a[0].path, id, channelsById[id]);
-        if (channelsById[id]) {
-          msg += '\n\n' + JSON.stringify(channelsById[id], null, 2);
+        const [_, rootPath, id] = a[0].path.split('/'); // eslint-disable-line no-unused-vars
+        console.log(rootPath, 'RL!!', a[0], a[0].path, id, channelsById[id]);
+        if (rootPath === 'webhooks') {
+          const wh = await client.fetchWebhook(id);
+          if (wh.channelId && channelsById[wh.channelId]) {
+            msg += 'Channel:```json\n' + JSON.stringify(channelsById[wh.channelId], null, 2) + '\n```\n';
+          }
+          msg += 'Webhook:```json\n' + JSON.stringify(wh, null, 2) + '\n```\n';
+        } else if (channelsById[id]) {
+          msg += 'Channel:```json\n' + JSON.stringify(channelsById[id], null, 2) + '\n```\n';
         }
       }
 

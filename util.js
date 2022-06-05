@@ -15,8 +15,8 @@ const parseDuration = require('parse-duration');
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
 const VERSION = PKGJSON.version;
 const NAME = PKGJSON.name;
-const ENV = /* process.env.NODE_ENV || */ 'dev';
-const PREFIX = [NAME, ENV].join('-');
+const ENV = process.env.NODE_ENV || 'dev';
+const PREFIX = config.redis.prefixOverride || [NAME, ENV].join('-');
 const CTCPVersion = `${config.irc.ctcpVersionPrefix} v${VERSION} <${config.irc.ctcpVersionUrl}>`;
 
 let resolverRev;
@@ -569,7 +569,7 @@ const ircEscapeStripSet = Object.freeze([
 const ircEscapeStripTester = new RegExp(`(${ircEscapeStripSet.join('|')})`);
 const ircEscapeTester = new RegExp(`(${Object.keys(ircEscapeXforms).join('|')})`);
 
-function replaceIrcEscapes (message) {
+function replaceIrcEscapes (message, stripAll = false) {
   let hit = false;
   const orig = message;
 
@@ -582,8 +582,14 @@ function replaceIrcEscapes (message) {
   }
 
   if (message.match(ircEscapeTester)) {
+    let xForms = ircEscapeXforms;
     hit = true;
-    message = Object.entries(ircEscapeXforms).reduce((m, [esc, repl]) => m.replaceAll(esc, repl), message);
+
+    if (stripAll) {
+      xForms = Object.entries(ircEscapeXforms).reduce((a, [k]) => ({ [k]: '', ...a }), {});
+    }
+
+    message = Object.entries(xForms).reduce((m, [esc, repl]) => m.replaceAll(esc, repl), message);
   }
 
   if (hit) {

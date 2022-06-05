@@ -35,7 +35,12 @@ function initialize (processName = process.title, overrideConsole = true, onlyTo
         return;
       }
 
-      const dstrArr = [new Date(), `<${APP_NAMEVER}/${level}>`, ...a];
+      const dstrArr = [
+        new Date(),
+        '[' + (config.app.log.addNameVerPrefix ? `${APP_NAMEVER}/${level}` : level) + ']',
+        ...a
+      ];
+
       _outStream.write(dsMapper([{ level }, ...dstrArr, '\n']));
       if (!onlyToFile) {
         _console[level](dsMapper(dstrArr, true));

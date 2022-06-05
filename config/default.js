@@ -41,7 +41,6 @@ const _config = {
     squelchIgnored: false,
     squelchReconnectChannelJoins: true,
     supressBotEmbeds: true,
-    timestampMessages: true,
     monospacePrivmsgs: false,
     showAllModeChanges: false
   },
@@ -49,6 +48,7 @@ const _config = {
   app: {
     log: {
       level: 'info',
+      addNameVerPrefix: false, // set this to 'true' if not using docker to deploy
       path: process.env?.DRC_LOG_PATH || './logs'
     },
     allowedSpeakers: [],
@@ -101,6 +101,7 @@ const _config = {
     quitMsgChanId: '',
     channelXformsPath: 'config/channelXforms.json',
     privmsgMappingsPath: 'config/privmsgMappings.json',
+    heartbeatFrequencyMs: 5000,
     registered: {
       /*
       "networkHostname": {

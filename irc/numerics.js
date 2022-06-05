@@ -33,7 +33,10 @@ module.exports = {
   },
   251: {
     name: 'RPL_LUSEROP',
-    parse: concatLastTwoParamsElementOrPassthru
+    parse: (s) => {
+      console.log(`WTF IS RPL_LUSEROP? ${JSON.stringify(s)}`, s);
+      return s;
+    }
   },
   252: {
     name: 'RPL_LUSERCLIENT',

@@ -62,34 +62,53 @@ async function f (context) {
     : 0;
   const durationInS = (new Date() - stats.lastAnnounce) / 1000;
   const totMsgsDelta = stats.messages.total - stats.messagesLastAnnounce.total;
+  let realCounts = {};
 
-  // partly an awful band-aid for the stat-wipe bug, partly a remind to move
-  // away from a bulk-key model and into a smaller key-per-datum one...
-  const realCounts = Object.fromEntries(await scopedRedisClient(async (rc, pfx) => {
-    return Promise.all(
-      [
-        ['total', totMsgsDelta, stats.messages.total],
-        ['chat', chatMsgsDelta, totalChatMsgs]
-      ].map(async ([tPfx, delta, tt]) => {
-        const rKey = [pfx, 'overallMessageCounts'].join(':');
-        let nextVal = Number(await rc.zincrby(rKey, delta, tPfx));
+  console.debug(`DELTAS ${chatMsgsDelta} ${totMsgsDelta}`, stats.messages, stats.messagesLastAnnounce);
 
-        if (Number.isNaN(nextVal)) {
-          console.error('BAD nextVal', nextVal);
-          return;
-        }
+  try {
+    // partly an awful band-aid for the stat-wipe bug, partly a remind to move
+    // away from a bulk-key model and into a smaller key-per-datum one...
+    realCounts = Object.fromEntries(await scopedRedisClient(async (rc, pfx) => {
+      return Promise.all(
+        [
+          ['total', totMsgsDelta, stats.messages.total],
+          ['chat', chatMsgsDelta, totalChatMsgs]
+        ].map(async ([tPfx, delta, tt]) => {
+          const rKey = [pfx, 'overallMessageCounts'].join(':');
+          const curValTuple = [tPfx, Number(await rc.zscore(rKey, tPfx)).toLocaleString()];
+          console.debug(`REAL COUNTS "${rKey} ${tPfx}" -> ${curValTuple[1]}`);
 
-        if (tt && nextVal < tt) {
-          console.error(tPfx, delta, 'MESSAGES MOVED BACKWARDS -- STATS PERSIST WILL LIKELY WIPE!!', nextVal, tt);
-          await rc.zincrby(rKey, (tt - nextVal), tPfx);
-          nextVal = tt;
-        }
+          if (typeof delta !== 'number') {
+            delta = Number.parseInt(delta);
+          }
 
-        return [tPfx, nextVal.toLocaleString()];
-      }));
-  }));
+          if (Number.isNaN(delta)) {
+            console.error(`realCounts delta is NaN! ${tPfx} ${tt}`);
+            return curValTuple;
+          }
 
-  console.log('realCounts', realCounts);
+          let nextVal = Number(await rc.zincrby(rKey, delta, tPfx));
+
+          if (Number.isNaN(nextVal)) {
+            console.error('BAD nextVal', nextVal);
+            return curValTuple;
+          }
+
+          if (tt && !Number.isNaN(tt) && !Number.isNaN(nextVal) && nextVal < tt) {
+            console.error(tPfx, delta, 'MESSAGES MOVED BACKWARDS -- STATS PERSIST WILL LIKELY WIPE!!', nextVal, tt);
+            await rc.zincrby(rKey, (tt - nextVal), tPfx);
+            nextVal = tt;
+          }
+
+          return [tPfx, nextVal.toLocaleString()];
+        }));
+    }));
+
+    console.log('realCounts', realCounts);
+  } catch (e) {
+    console.error('bad realCounts!', e);
+  }
 
   let systemUptime = execSync('uptime -p').toString().replace(/^up\s+/, '').replace(/,/g, '');
 
@@ -182,7 +201,11 @@ async function f (context) {
     embed
       .addFields(
         { name: 'Bot uptime', value: stats.lastCalcs.uptimeFormatted, inline: true },
-        { name: 'IRC uptime', value: stats.irc.uptime, inline: true },
+        {
+          name: 'IRC uptime',
+          value: stats.irc.uptime + (stats.irc?.discordReconnects ? `\n(${stats.irc?.discordReconnects} bot reconnects)` : ''),
+          inline: true
+        },
         { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true }
       );
 
@@ -207,8 +230,8 @@ async function f (context) {
       .addFields(...stats.lastCalcs.lagAsEmbedFields)
       .addField('Messaging', '(_counts_)')
       .addFields(
-        { name: 'Total', value: `${realCounts.total}\n(+${totMsgsDelta}, ${stats.lastCalcs.totMsgsMpm}mpm) [${Number(stats.messages.total).toLocaleString()}]`, inline: true },
-        { name: 'Just chat', value: `${realCounts.chat}\n(+${chatMsgsDelta}, ${stats.lastCalcs.chatMsgsMpm}mpm) [${Number(totalChatMsgs).toLocaleString()}]`, inline: true }
+        { name: 'Total', value: `${realCounts?.total}\n(+${totMsgsDelta}, ${stats.lastCalcs.totMsgsMpm}mpm) [${Number(stats.messages.total).toLocaleString()}]`, inline: true },
+        { name: 'Just chat', value: `${realCounts?.chat}\n(+${chatMsgsDelta}, ${stats.lastCalcs.chatMsgsMpm}mpm) [${Number(totalChatMsgs).toLocaleString()}]`, inline: true }
       )
       .setTimestamp()
       .setFooter(`Last calculated ${stats.lastCalcs.lastAnnounceFormatted} ago`);

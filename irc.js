@@ -30,9 +30,6 @@ const stats = {
 
 let allowsBotReconnect = false;
 const chanPrefixes = {};
-
-const categories = {};
-
 const children = {};
 
 let _haveJoinedChannels = false;
@@ -145,17 +142,18 @@ async function main () {
 
   c2Listener.psubscribe(PREFIX + ':__c2::*');
 
+  const disconnectedBots = {};
   redisClient.on('message', (...a) => {
     return ipcMessageHandler({
       connectedIRC,
       msgHandlers,
       specServers,
-      categories,
       chanPrefixes,
       stats,
       haveJoinedChannels,
       children,
-      allowsBotReconnect: () => allowsBotReconnect
+      allowsBotReconnect: () => allowsBotReconnect,
+      disconnectedBots
     }, ...a);
   });
 
@@ -173,7 +171,7 @@ async function main () {
     }
 
     if (connectedIRC.bots[host]) {
-      throw new Error('dupliate server spec', serverObj);
+      throw new Error('duplicate server spec', serverObj);
     }
 
     const spec = {
@@ -209,7 +207,6 @@ async function main () {
           if (e.code !== 'EEXIST') {
             console.error(`logDataToFile(${fileName}) failed: ${e}`);
             console.debug(e, data);
-            throw e;
           }
         }
       });
@@ -218,7 +215,7 @@ async function main () {
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
-      'whois', 'whowas', 'motd', 'info', 'help', 'mode']
+      'whois', 'whowas', 'motd', 'info', 'help', 'mode', 'loggedin', 'account']
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
           return genEvHandler(host, ev, data, {
@@ -226,6 +223,29 @@ async function main () {
           });
         });
       });
+
+    connectedIRC.bots[host].on('socket close', () => {
+      if (!disconnectedBots[host]) {
+        delete specServers[host];
+        disconnectedBots[host] = new Date();
+        console.log(`SOCKET CLOSED on ${host}!! WAITING FOR MOTD?`);
+
+        connectedIRC.bots[host].on('motd', () => {
+          console.log(`IRC ${host} reconnected after ${new Date() - disconnectedBots[host]}`);
+          delete disconnectedBots[host];
+          pubClient.publish(PREFIX, JSON.stringify({
+            type: 'irc:ready',
+            data: {
+              readyData: [{
+                network: host,
+                nickname: spec.nick,
+                userModes: connectedIRC.bots[host].user.modes
+              }]
+            }
+          }));
+        });
+      }
+    });
 
     connectedIRC.bots[host].on('pong', (data) => {
       const nowNum = Number(new Date());
@@ -252,6 +272,7 @@ async function main () {
 
     const noticePubClient = new Redis(config.redis.url);
     connectedIRC.bots[host].on('message', (data) => {
+      console.debug('RAW IRC MESSAGE:', data);
       data.__drcIrcRxTs = Number(new Date());
       data.__drcNetwork = host;
 
@@ -298,7 +319,18 @@ async function main () {
     });
   }
 
+  const heartbeatHandle = setInterval(async () => {
+    await scopedRedisClient(async (rc, pfx) => {
+      await rc.publish(pfx + ':heartbeats:irc', JSON.stringify({
+        type: 'irc:heartbeat',
+        data: Number(new Date())
+      }));
+    });
+  }, config.irc.heartbeatFrequencyMs);
+
   process.on('SIGINT', async () => {
+    clearTimeout(heartbeatHandle);
+
     for (const [hn, client] of Object.entries(connectedIRC.bots)) {
       console.log(`quitting ${hn}`);
       let res;

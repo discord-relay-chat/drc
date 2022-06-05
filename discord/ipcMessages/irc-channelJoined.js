@@ -40,10 +40,8 @@ module.exports = async function (parsed, context) {
     throw new Error(`Bad Discord channel id ${joined.id}`, joined);
   }
 
-  msgChan.__drcSend = (s, raw = false) => {
-    msgChan.send(
-      raw ? s : (config.user.timestampMessages ? '`' + new Date().toLocaleTimeString() + '` ' : '') + s
-    )
+  msgChan.__drcSend = (s) => {
+    msgChan.send(s)
       .catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack, parsed, JSON.stringify(err)));
   };
 
@@ -56,8 +54,8 @@ module.exports = async function (parsed, context) {
       throw new Error(`bad mapping ${joined.channel}`, joined);
     }
 
+    // this is THE message handler for each mapped channel
     newClient.on('message', async (chan, msg) => {
-      // console.debug(chan, 'msg!', msg)
       try {
         const parsed = JSON.parse(msg);
         const [type] = parsed.type.split(':');
@@ -138,8 +136,18 @@ module.exports = async function (parsed, context) {
             }
 
             try {
-              const fName = [parsed.data.__orig_nick, joined.id, e.__drcNetwork].map((s) => s.replaceAll(/[^\d\w._-]+/g, '')).join('_');
-              const isUs = Boolean(avatar);
+              if (e.__drcNetwork === 'irc.libera.chat' && channelsById[joined.id].name.includes('videogames')) {
+                const strippedContent = replaceIrcEscapes(e.message, true).trim();
+                const vgProxiedMatch = strippedContent.match(/\[(.*?)\]\s+<[%@+]?(.*?)>\s+.*/);
+
+                if (vgProxiedMatch?.length === 3) {
+                  const [_, network, nick] = vgProxiedMatch; // eslint-disable-line no-unused-vars
+                  e.__orig_nick = `${nick}/${network}`;
+                  e.message = strippedContent.replace(/\[(.*?)\]\s+<[%@+]?(.*?)>/, '').trim();
+                }
+              }
+
+              const fName = [e.__orig_nick, e.__drcNetwork].map((s) => s.replaceAll(/[^\d\w._-]+/g, '')).join('_');
 
               if (!avatar) {
                 avatar = `https://robohash.org/${fName}.png`;
@@ -151,7 +159,7 @@ module.exports = async function (parsed, context) {
 
               if (hooks.size === 0) {
                 console.debug('create anew...', joined.channel);
-                hook = await msgChan.createWebhook(parsed.data.__orig_nick, { avatar });
+                hook = await msgChan.createWebhook(channelsById[joined.id].name, { avatar });
                 console.debug('create anew...!');
               } else {
                 hook = [...hooks.values()][0];
@@ -165,14 +173,24 @@ module.exports = async function (parsed, context) {
                 }
               }
 
-              console.debug('MSG send...', joined.channel, hook.id);
-              const msg = await hook.send({
-                avatarURL: avatar,
-                username: parsed.data.__orig_nick + (isUs ? ' (you!)' : ''),
-                content: replaceIrcEscapes(e.message).trim()
-              });
-              console.debug('MSG FFS', joined.channel, msg.content);
-              stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
+              let content = replaceIrcEscapes(e.message).trim();
+
+              if (e.type === 'action') {
+                content = `_${content}_`;
+              }
+
+              if (content.length === 0) {
+                console.error('empty message!!', content, e.message);
+              } else {
+                console.debug('MSG send...', joined.channel, hook.id, '[' + content + ']');
+                const msg = await hook.send({
+                  avatarURL: avatar,
+                  username: e.__orig_nick,
+                  content
+                });
+                console.debug('MSG FFS', joined.channel, msg.content);
+                stats.messages.channels[joined.channel] = (stats.messages.channels[joined.channel] ?? 0) + 1;
+              }
             } catch (err) {
               console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);
               ++stats.error;
@@ -224,6 +242,10 @@ module.exports = async function (parsed, context) {
         ++stats.errors;
       }
     });
+  });
+
+  newClient.on('close', (...a) => {
+    console.debug(`Redis client for ${joined.channel} / ${joined.id} closed!`, a);
   });
 
   subscribedChans[joined.id] = newClient;

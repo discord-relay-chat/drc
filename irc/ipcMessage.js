@@ -5,16 +5,18 @@ const Redis = require('ioredis');
 const { spawn } = require('child_process');
 const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient } = require('../util');
 
+let categories = {};
+
 module.exports = async (context, chan, msg) => {
-  let {
+  const {
     connectedIRC,
     msgHandlers,
     specServers,
-    categories,
     chanPrefixes,
     stats,
     haveJoinedChannels,
-    children
+    children,
+    disconnectedBots
   } = context;
 
   const pubClient = new Redis(config.redis.url);
@@ -26,6 +28,7 @@ module.exports = async (context, chan, msg) => {
     // returns an async function if pushTarget is null, otherwish pushes that function
     // onto pushTarget and returns an object detailing the channel specification
     const getChannelJoinFunc = (pushTarget = null, serverSpec, chan) => {
+      console.info('getChannelJoinFunc', serverSpec, chan, Object.keys(connectedIRC.bots));
       const botClient = connectedIRC.bots[serverSpec.name];
 
       if (!botClient) {
@@ -83,16 +86,25 @@ module.exports = async (context, chan, msg) => {
     };
 
     const discordChannelsHandler = async (isReconnect) => {
-      if (Object.entries(specServers).length) {
+      if (Object.entries(specServers).length && !Object.keys(disconnectedBots).length) {
         console.error('Rx\'ed discord:channels but servers are already speced!');
-        console.debug(specServers);
+        console.debug(specServers, disconnectedBots);
         return;
       }
+
+      let servers = Object.assign({}, connectedIRC.bots);
+
+      if (Object.keys(disconnectedBots).length > 0) {
+        servers = {};
+        Object.keys(disconnectedBots).forEach((db) => (servers[db] = true));
+      }
+
+      console.debug(`discordChannelsHandler with local servers keys: ${Object.keys(servers)} (${Object.keys(specServers)})`);
 
       const { categoriesByName } = parsed.data;
       categories = context.categories = parsed.data.categories;
 
-      Object.entries(connectedIRC.bots).forEach(([server, _client]) => {
+      Object.entries(servers).forEach(([server, _client]) => {
         if (categoriesByName[server]) {
           const id = categoriesByName[server];
           specServers[server] = {
@@ -126,7 +138,7 @@ module.exports = async (context, chan, msg) => {
           throw new Error(`!botClient ${serverSpec.name}`);
         }
 
-        console.log('Joining channels...');
+        console.log(`Joining channels on ${serverSpec.name}...`);
 
         const joinFuncs = [];
         chanPrefixes[serverSpec.name] = serverSpec.channels.map(getChannelJoinFunc.bind(null, joinFuncs, serverSpec), []);
@@ -247,34 +259,38 @@ module.exports = async (context, chan, msg) => {
 
                 opts.push(whoisData.hostname);
                 console.log('Initiaing: ' + opts.join(' '));
-                const proc = spawn('sudo', opts);
+                try {
+                  const proc = spawn('sudo', opts);
 
-                proc.stdout.on('data', (d) => collectors.stdout.push(d.toString('utf8')));
-                proc.stderr.on('data', (d) => collectors.stderr.push(d.toString('utf8')));
+                  proc.stdout.on('data', (d) => collectors.stdout.push(d.toString('utf8')));
+                  proc.stderr.on('data', (d) => collectors.stderr.push(d.toString('utf8')));
 
-                proc.on('close', async () => {
-                  const started = children[proc.pid].started;
-                  delete children[proc.pid];
+                  proc.on('close', async () => {
+                    const started = children[proc.pid].started;
+                    delete children[proc.pid];
 
-                  console.log(`nmap of ${whoisData.hostname} finished`);
+                    console.log(`nmap of ${whoisData.hostname} finished`);
 
-                  const stdout = collectors.stdout.join('\n');
-                  const stderr = collectors.stderr.join('\n');
-                  await scopedRedisClient(async (endClient) => endClient.publish(PREFIX, JSON.stringify({
-                    type: 'irc:responseWhois:nmap',
-                    data: {
-                      whoisData,
-                      started,
-                      stdout,
-                      stderr
-                    }
-                  })));
-                });
+                    const stdout = collectors.stdout.join('\n');
+                    const stderr = collectors.stderr.join('\n');
+                    await scopedRedisClient(async (endClient) => endClient.publish(PREFIX, JSON.stringify({
+                      type: 'irc:responseWhois:nmap',
+                      data: {
+                        whoisData,
+                        started,
+                        stdout,
+                        stderr
+                      }
+                    })));
+                  });
 
-                children[proc.pid] = {
-                  started: new Date(),
-                  proc
-                };
+                  children[proc.pid] = {
+                    started: new Date(),
+                    proc
+                  };
+                } catch (e) {
+                  console.error('failed to launch nmap (expected if in docker)', e);
+                }
               });
             };
           }

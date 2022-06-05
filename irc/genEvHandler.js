@@ -20,6 +20,29 @@ const nickTrack = async (host, data) => {
   });
 };
 
+/*
+{
+  data: {
+    target: '#linux',
+    nick: 'Furor',
+    modes: [ [Object] ],
+    raw_modes: '+b',
+    raw_params: [ '*!*@vps-9233b576.vps.ovh.ca' ],
+    tags: { account: 'Sauvin' },
+    __drcNetwork: 'irc.libera.chat'
+  }
+}
+*/
+const banTrack = async (host, data) => {
+  // TODO: more here!
+  await scopedRedisClient(async (rc, pfx) => {
+    await rc.publish(pfx, JSON.stringify({
+      type: 'irc:ban',
+      data
+    }));
+  });
+};
+
 module.exports = async function (host, ev, data, context) {
   const {
     logDataToFile
@@ -46,6 +69,10 @@ module.exports = async function (host, ev, data, context) {
 
   if (evName === 'nick') {
     nickTrack(host, data);
+  }
+
+  if (evName === 'mode' && data.raw_modes?.includes('+b')) {
+    banTrack(host, data);
   }
 
   if (data?.ident) {

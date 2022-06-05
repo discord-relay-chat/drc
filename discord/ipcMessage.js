@@ -38,17 +38,22 @@ setInterval(() => {
 
 const serialize = (op) => serialQueue.push(op);
 
+let isIrcConnected = false;
+
 module.exports = async (context, _channel, msg) => {
   const {
     stats,
     runOneTimeHandlersMatchingDiscriminator,
     sendToBotChan,
     ircReady,
+    ircReadyHandler,
     client,
     categories,
     categoriesByName,
     channelsByName,
-    listenedToMutate
+    listenedToMutate,
+    subscribedChans,
+    setIsReconnect
   } = context;
 
   ++stats.messages.total;
@@ -93,8 +98,9 @@ module.exports = async (context, _channel, msg) => {
       } else if (type === 'irc' && subType === 'responsePs') {
         sendToBotChan('\n\n' + parsed.data.map((psObj) => `\`${psObj.pid}\`\t\`${psObj.started}\`\t\`${psObj.args.join(' ')}\``).join('\n\t'));
       } else if (type === 'irc' && subType === 'ready') {
+        isIrcConnected = true;
         console.debug('IRC is ready!', parsed.data);
-        ircReady.resolve(parsed.data);
+        (ircReady.resolve || ircReadyHandler)(parsed.data);
       } else if (parsed.type === 'irc:joined') {
         const embed = new MessageEmbed()
           .setColor(config.app.stats.embedColors.irc.networkJoined)
@@ -109,11 +115,29 @@ module.exports = async (context, _channel, msg) => {
         if (config.user.showQuits) {
           sendToBotChan(`\`QUIT\` **${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> quit: "${replaceIrcEscapes(parsed.data.message)}"`);
         }
-      } else if (parsed.type === 'irc:exit') {
-        console.error('IRC daemon exited!');
-        client.user.setStatus('idle');
-        client.user.setActivity(`nothing since I lost IRC connection at ${new Date()}`, { type: 'LISTENING' });
-        sendToBotChan(`Lost IRC at **${new Date()}**!`);
+      } else if (parsed.type === 'irc:exit' || parsed.type === 'irc:socket_close' || parsed.type === 'irc:reconnecting') {
+        const { __drcNetwork } = parsed.data;
+        if (isIrcConnected) {
+          sendToBotChan(`Lost IRC connection to **${__drcNetwork}** at **${new Date()}**! (\`${parsed.type}\`)`);
+        }
+
+        if (parsed.type === 'irc:reconnecting') {
+          const { attempt, max_retries, wait } = parsed.data; // eslint-disable-line camelcase
+          setIsReconnect(true);
+          sendToBotChan(`Reconnect attempt ${attempt} of ${max_retries}, trying again in ${Math.round(Number(wait / 1000))} seconds...`); // eslint-disable-line camelcase
+        }
+
+        if (!isIrcConnected) {
+          return;
+        }
+
+        isIrcConnected = false;
+
+        for (const [chanId, client] of Object.entries(subscribedChans)) {
+          await client.disconnect();
+          delete subscribedChans[chanId];
+          console.debug(`closed ${chanId} redis client`);
+        }
       } else if (type === 'irc' && subType === 'nick') {
         if (config.user.showNickChanges) {
           sendToBotChan(`**${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> changed nickname to **${parsed.data.new_nick}** on \`${parsed.data.__drcNetwork}\``);
@@ -195,7 +219,7 @@ module.exports = async (context, _channel, msg) => {
           }
         }
       } else if (type === 'irc') {
-        if (['say', 'join', 'pong', 'tagmsg', 'action', 'whois'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
+        if (['say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
           return;
         }
 

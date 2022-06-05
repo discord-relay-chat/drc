@@ -45,14 +45,21 @@ module.exports = async function (parsed, context) {
   e.message = replaceIrcEscapes(e.message);
 
   if (!e.nick || e.nick.length === 0) {
-    console.error('BAD NICK!', e);
-    return;
+    e.nick = 'Server';
   }
 
   if (config.discord.privMsgCategoryId) {
     serialize(async () => {
       let chanId = Object.entries(PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
       let newChan, created;
+
+      if (chanId) {
+        const extantChan = await client.channels.cache.get(chanId);
+        if (!extantChan) {
+          PrivmsgMappings.remove(e.__drcNetwork, chanId);
+          chanId = null;
+        }
+      }
 
       if (!chanId) {
         const netTrunc = e.__drcNetwork.split('.');
@@ -135,7 +142,7 @@ module.exports = async function (parsed, context) {
       const msg = msChar + isIgnored + e.message + isIgnored + msChar;
       if (msg.length && !e.message.match(/^\s*$/g)) {
         try {
-          await client.channels.cache.get(chanId).send(msg);
+          await client.channels.cache.get(chanId)?.send(msg);
         } catch (err) {
           console.error('send err', '[', msg, ']', msg.length, err);
         }
