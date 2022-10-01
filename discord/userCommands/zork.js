@@ -14,7 +14,7 @@ module.exports = async function (context, ...a) {
 
       const proc = spawn('zork');
       const channel = await context.createGuildChannel(chanName, {
-        topic: `Zork game #${newGameId}, started ${new Date().toLocaleString()} (PID: ${proc.pid})`
+        topic: `Zork game #${newGameId}, started ${new Date().toDRCString()} (PID: ${proc.pid})`
       });
 
       const sendPaged = (prefix, d) => {

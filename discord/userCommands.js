@@ -4,7 +4,7 @@ const path = require('path');
 const uuid = require('uuid');
 const { nanoid } = require('nanoid');
 const { PREFIX, AmbiguousMatchResultError, matchNetwork, scopedRedisClient } = require('../util');
-const { dynRequireFrom, generateListManagementUCExport } = require('./common');
+const { dynRequireFrom, generateListManagementUCExport, generatePerChanListManagementUCExport, simpleEscapeForDiscord } = require('./common');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
@@ -58,10 +58,16 @@ resolver.__functions = {
 
   onConnect: generateListManagementUCExport('onConnect'),
 
-  diediedie: () => {
-    console.warn('Got DIE DIE DIE!');
-    process.exit(0);
-  },
+  notes: generatePerChanListManagementUCExport('notes', {
+    listAll: async (context, ...a) => scopedRedisClient(async (client, prefix) => {
+      console.log('listAll', context.network, `${prefix}:notes_${context.network}_*`);
+      const netList = await client.keys(`${prefix}:notes_${context.network}_*`);
+      console.log(`got list of ${netList.length}`);
+      return 'Full list of notes:\n\n• ' + netList.map(x => simpleEscapeForDiscord(x.split(':')[1].split('_').slice(2).join('_'))).join('\n• ');
+    })
+  }, false),
+
+  killmenow: () => process.exit(-1),
 
   async ping (context) {
     const [netStub] = context.options._;
@@ -96,7 +102,7 @@ resolver.__functions = {
     return Buffer.from(Array.from({ length }, () => Math.floor(Math.random() * 0xFF))).toString(fmt);
   },
 
-  debugLogging (context) {
+  logging (context) {
     let prefix = 'En';
     if (context.argObj._[0]) {
       require('../logger').enableLevel('debug');
@@ -109,6 +115,16 @@ resolver.__functions = {
     }
 
     return `**${prefix}abled** debug logging.`;
+  },
+
+  digest: (context) => {
+    if (context.argObj._.length !== 2) {
+      return;
+    }
+
+    const [network, minutes] = context.argObj._;
+    context.argObj._ = [network, 'digest', minutes];
+    return resolver('logs')(context);
   }
 };
 

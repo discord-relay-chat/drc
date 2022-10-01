@@ -24,6 +24,7 @@ module.exports = async function (context, ...a) {
   const reqObj = {
     type: 'discord:requestWhois:irc',
     data: {
+      txTs: Number(new Date()),
       network,
       nick,
       channel,

@@ -95,12 +95,12 @@ const _config = {
         'nick', 'nick in use', 'nick invalid', 'whois', 'whowas', 'motd', 'info'],
       path: process.env?.DRC_LOG_PATH ? path.join(process.env.DRC_LOG_PATH, 'irc') : './logs/irc'
     },
+    ctcpVersionOverride: null,
     ctcpVersionPrefix: 'Discord Relay Chat',
     ctcpVersionUrl: 'https://discordrc.com',
     floodProtectWaitMs: 500,
     quitMsgChanId: '',
     channelXformsPath: 'config/channelXforms.json',
-    privmsgMappingsPath: 'config/privmsgMappings.json',
     heartbeatFrequencyMs: 5000,
     registered: {
       /*
@@ -158,6 +158,14 @@ const _config = {
 
   cli: {
     nickColors: ['cyan', 'magenta', 'red', 'blue', 'yellow'] /* no green! that's our color */
+  },
+
+  siteCheck: {
+    sites: [],
+    frequencyMinutes: {
+      slow: 30,
+      fast: 3
+    }
   },
 
   toJSON () {

@@ -64,7 +64,7 @@ module.exports = async function (host, ev, data, context) {
     })));
 
   if (config.irc.log.events?.includes(ev)) {
-    logDataToFile(evName, data, { pathExtra: ['event'] });
+    logDataToFile(evName, data, { pathExtra: ['event'], isEvent: true });
   }
 
   if (evName === 'nick') {

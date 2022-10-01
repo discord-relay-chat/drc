@@ -116,9 +116,8 @@ module.exports = async (context, _channel, msg) => {
           sendToBotChan(`\`QUIT\` **${parsed.data.nick}** <_${parsed.data.ident}@${parsed.data.hostname}_> quit: "${replaceIrcEscapes(parsed.data.message)}"`);
         }
       } else if (parsed.type === 'irc:exit' || parsed.type === 'irc:socket_close' || parsed.type === 'irc:reconnecting') {
-        const { __drcNetwork } = parsed.data;
         if (isIrcConnected) {
-          sendToBotChan(`Lost IRC connection to **${__drcNetwork}** at **${new Date()}**! (\`${parsed.type}\`)`);
+          sendToBotChan(`Lost IRC connection to **${parsed?.data.__drcNetwork}** at **${new Date()}**! (\`${parsed.type}\`)`);
         }
 
         if (parsed.type === 'irc:reconnecting') {
@@ -219,7 +218,7 @@ module.exports = async (context, _channel, msg) => {
           }
         }
       } else if (type === 'irc') {
-        if (['say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
+        if (['ban', 'say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
           return;
         }
 

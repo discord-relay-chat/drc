@@ -7,7 +7,6 @@ COPY util.js .
 COPY config/default.js ./config/
 COPY config/local-prod.json ./config/
 COPY config/channelXforms-prod.json ./config/
-COPY config/privmsgMappings-prod.json ./config/
 STOPSIGNAL SIGINT
 
 FROM base as http

@@ -6,35 +6,62 @@ const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
 const Redis = require('ioredis');
-const readline = require('readline');
 const { fetch } = require('undici');
 const dns = require('dns').promises;
 const shodan = require('shodan-client');
 const parseDuration = require('parse-duration');
+const sqlite3 = require('sqlite3');
 
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
 const VERSION = PKGJSON.version;
 const NAME = PKGJSON.name;
 const ENV = process.env.NODE_ENV || 'dev';
 const PREFIX = config.redis.prefixOverride || [NAME, ENV].join('-');
-const CTCPVersion = `${config.irc.ctcpVersionPrefix} v${VERSION} <${config.irc.ctcpVersionUrl}>`;
+const CTCPVersion = config.irc.ctcpVersionOverride || `${config.irc.ctcpVersionPrefix} v${VERSION} <${config.irc.ctcpVersionUrl}>`;
+const SearchFileTypes = Object.freeze({
+  sqlite: '.sqlite3'
+});
 
 let resolverRev;
 
+Date.prototype.toDRCString = function () { // eslint-disable-line no-extend-native
+  return this.toString().replace(/\sGMT.*/, '');
+};
+
 class JsonMapper {
-  constructor (path, name, { createOnNotFound = true, createNetworksOnNotFound = false } = {}) {
+  constructor (path, name, { createOnNotFound = true, createNetworksOnNotFound = false, redisBacked = false } = {}) {
     this._path = path;
     this._name = name;
     this._options = {
       createOnNotFound,
-      createNetworksOnNotFound
+      createNetworksOnNotFound,
+      redisBacked
     };
+    this._ioops = null;
 
-    this._resolve();
-    this._load();
+    if (!this._options.redisBacked) {
+      this._ioops = {
+        read: async () => fs.promises.readFile(this.path),
+        write: async (data) => fs.promises.writeFile(this.path, JSON.stringify(data))
+      };
+    } else {
+      const rkeyPostfix = `JsonMapper::${name}`;
+      console.log(`JsonMapper for ${name} created with redis backing ${rkeyPostfix}`);
+      this._ioops = {
+        read: async () => scopedRedisClient((client, PREFIX) => client.get(`${PREFIX}:${rkeyPostfix}`)),
+        write: async (data) => scopedRedisClient((client, PREFIX) => client.set(`${PREFIX}:${rkeyPostfix}`, JSON.stringify(data)))
+      };
+    }
+
+    this._initialized = false;
+    this._resolve().then(() => this._load());
   }
 
-  _resolve () {
+  async _resolve () {
+    if (this._options.redisBacked) {
+      return this._ioops.write({});
+    }
+
     let resolvePath = this._path;
 
     if (process.env.NODE_ENV) {
@@ -49,7 +76,7 @@ class JsonMapper {
 
         if (this._options.createOnNotFound) {
           resolvePath = this.path;
-          fs.writeFileSync(this.path, JSON.stringify({}));
+          await this._ioops.write({});
         } else {
           resolvePath = this._path;
         }
@@ -59,11 +86,16 @@ class JsonMapper {
     this.path = path.resolve(resolvePath);
   }
 
-  _load () {
-    this.cache = JSON.parse(fs.readFileSync(this.path));
+  async _load () {
+    this.cache = JSON.parse(await this._ioops.read());
+    this._initialized = true;
   }
 
   async _mutate (network, key, value) {
+    if (!this._initialized) {
+      await this._load();
+    }
+
     if (!this.cache[network]) {
       if (!this._options.createNetworksOnNotFound) {
         return null;
@@ -84,13 +116,11 @@ class JsonMapper {
       delete net[key];
     }
 
-    return fs.promises.writeFile(this.path, JSON.stringify(this.cache, null, 2));
+    return this._ioops.write(this.cache);
   }
 
   forNetwork (network) {
-    this._load();
-
-    if (this.cache[network]) {
+    if (this.cache?.[network]) {
       return _.cloneDeep(this.cache[network]);
     }
 
@@ -98,7 +128,6 @@ class JsonMapper {
   }
 
   findNetworkForKey (key) {
-    this._load();
     return Object.entries(this.cache).find(([, netMap]) => Object.entries(netMap).find(([k]) => k === key))?.[0] ?? {};
   }
 
@@ -113,7 +142,8 @@ class JsonMapper {
 
 const ChannelXforms = new JsonMapper(config.irc.channelXformsPath, 'ChannelXforms');
 const PrivmsgMappings = new JsonMapper(config.irc.privmsgMappingsPath, 'PrivmsgMappings', {
-  createNetworksOnNotFound: true
+  createNetworksOnNotFound: true,
+  redisBacked: true
 });
 
 function resolveNameForIRC (network, name) {
@@ -388,7 +418,7 @@ const getLogsFormats = {
   txt: (x) => `[${new Date(x.__drcIrcRxTs).toISOString()}] <${x.nick}> ${x.message}`
 };
 
-async function getLogs (network, channel, { from, to, format = 'json', filterByNick } = {}) {
+function getLogsSetup (network, channel, { from, to, format = 'json', filterByNick } = {}) {
   const logCfg = config.irc.log;
 
   if (!logCfg || !logCfg.channelsToFile) {
@@ -422,44 +452,130 @@ async function getLogs (network, channel, { from, to, format = 'json', filterByN
   });
 
   const expectedPath = path.resolve(path.join(logCfg.path, network, channel));
-  let rl;
-  try {
-    rl = readline.createInterface({ input: fs.createReadStream(expectedPath) });
-  } catch (e) {
-    console.error(`Logs failed to open ${expectedPath}`, e);
-    return;
+  return {
+    formatter,
+    fromTime,
+    toTime,
+    expectedPath,
+    filterByNick
+  };
+}
+
+function _queryBuilder (options, fromTime, toTime) {
+  const params = [];
+  const logicOp = (options.or || options.ored) ? 'OR' : 'AND';
+  const columns = options.columns || '*';
+  const distinct = options.distinct ? 'DISTINCT ' : '';
+  const stringComp = options.strictStrings === true ? '=' : 'LIKE';
+  let selectClause = `${distinct}${columns}`;
+
+  if (options.max) {
+    selectClause = `MAX(${options.max})`;
   }
 
-  const retList = [];
-  let lc = 1;
+  if (options.min) {
+    selectClause = `MIN(${options.min})`;
+  }
 
-  for await (const line of rl) {
-    try {
-      const pLine = JSON.parse(line);
-
-      if (!pLine.__drcIrcRxTs) {
-        throw new Error('missing __drcIrcRxTs');
-      }
-
-      const tsDate = new Date(pLine.__drcIrcRxTs);
-
-      if ((fromTime && tsDate < fromTime) || (toTime && tsDate > toTime)) {
-        continue;
-      }
-
-      if (filterByNick && !filterByNick.includes(pLine.nick)) {
-        continue;
-      }
-
-      retList.push(formatter(pLine));
-    } catch (e) {
-      console.debug(`getLogs(${network}, ${channel})> failed parse ${expectedPath}:${lc}, "${e.message}":`, line);
-    } finally {
-      lc++;
+  let query = [
+    [options.message, `message ${stringComp}`],
+    [options.nick, `nick ${stringComp}`],
+    [options.channel, `target ${stringComp}`],
+    [options.target, `target ${stringComp}`],
+    [options.host, `hostname ${stringComp}`],
+    [options.hostname, `hostname ${stringComp}`],
+    [options.ident, `ident ${stringComp}`],
+    [options.type, 'type ='],
+    [fromTime, '__drcIrcRxTs >='],
+    [toTime, '__drcIrcRxTs <=']
+  ].reduce((q, [val, clause]) => {
+    if (val) {
+      params.push(val);
+      return `${q}${params.length - 1 ? ` ${logicOp}` : ' WHERE'} ${clause} ?`;
     }
+
+    return q;
+  }, `SELECT ${selectClause} FROM channel`);
+
+  if (options.from_server) {
+    query += `${params.length ? ` ${logicOp}` : ' WHERE'} from_server = 1`;
   }
 
-  return retList;
+  return [query, params];
+}
+
+async function _userXSeen (network, options, isLast) {
+  const opWord = isLast ? 'MAX' : 'MIN';
+  const opCol = isLast ? options.max : options.min;
+  const sorter = isLast ? (a, b) => b[1] - a[1] : (a, b) => a[1] - b[1];
+  const op = `${opWord}(${opCol})`;
+
+  const { totalLines, searchResults } = await searchLogs(network, options, async (network, channel, options) => {
+    options.or = true;
+    options.max = '__drcIrcRxTs';
+    const { expectedPath } = getLogsSetup(network, channel, options);
+    const [query, params] = _queryBuilder(options);
+    const db = new sqlite3.Database(expectedPath);
+    return new Promise((resolve, reject) => {
+      db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error(`This query failed: ${query}`);
+          return reject(err);
+        }
+
+        resolve([channel.replace(SearchFileTypes.sqlite, ''), rows]);
+      });
+    });
+  });
+
+  if (totalLines > 0) {
+    return Object.entries(searchResults)
+      .filter(([, [{ [op]: max }]]) => Boolean(max))
+      .map(([channel, [{ [op]: max }]]) => ([channel, max]))
+      .sort(sorter)
+      .map(([channel, max]) => ([channel, new Date(max).toDRCString()]));
+  }
+
+  return [];
+}
+
+async function userLastSeen (network, options) {
+  return _userXSeen(network, Object.assign({
+    or: true,
+    max: '__drcIrcRxTs'
+  }, options), true);
+}
+
+async function userFirstSeen (network, options) {
+  return _userXSeen(network, Object.assign({
+    or: true,
+    min: '__drcIrcRxTs'
+  }, options), false);
+}
+
+async function getLogsSqlite (network, channel, options) {
+  let {
+    fromTime,
+    toTime,
+    expectedPath
+  } = getLogsSetup(network, channel, options);
+
+  if (path.parse(expectedPath).ext === '') {
+    expectedPath += SearchFileTypes.sqlite;
+  }
+
+  const [query, params] = _queryBuilder(options, fromTime, toTime);
+  const db = new sqlite3.Database(expectedPath);
+  return new Promise((resolve, reject) => {
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        console.error(`This query failed: ${query}`);
+        return reject(err);
+      }
+
+      resolve([channel.replace(SearchFileTypes.sqlite, ''), rows]);
+    });
+  });
 }
 
 const checkValAgainst_regexCache = {}; // eslint-disable-line camelcase
@@ -494,7 +610,28 @@ function findFixedNonZero (num, depth = 1, maxDepth = 10) {
   return Number(chk) ? chk : findFixedNonZero(num, depth + 1);
 }
 
-async function searchLogs (network, options) {
+async function searchLogsSqlite (network, networkFiles, options, singleProcFunc) {
+  const searchResults = (await Promise.all(networkFiles.map((file) =>
+    singleProcFunc(network, file.name, options)
+      .catch((e) => {
+        console.error(`Searching ${file.name} failed: `, e);
+        return [file, []];
+      }))))
+    .reduce((a, [chan, rows]) => {
+      if (!rows.length) {
+        return a;
+      }
+
+      return { [chan]: rows, ...a };
+    }, {}); // whyTF did I chose a map for this? a list of tuples was BETTER!
+
+  return {
+    totalLines: Object.values(searchResults).reduce((a, x) => a + x.length, 0),
+    searchResults
+  };
+}
+
+async function searchLogs (network, options, singleProcFunc = getLogsSqlite) {
   const logCfg = config.irc.log;
 
   if (!logCfg || !logCfg.channelsToFile) {
@@ -502,40 +639,21 @@ async function searchLogs (network, options) {
   }
 
   const expectedPath = path.resolve(path.join(logCfg.path, network));
+  const searchExt = SearchFileTypes?.[options.filetype] ?? '.sqlite3';
   let networkFiles = (await fs.promises.readdir(expectedPath, { withFileTypes: true }))
-    .filter((fEnt) => fEnt.isFile());
+    .filter((fEnt) => fEnt.isFile() && fEnt.name.endsWith(searchExt));
 
   if (!options.everything) {
     networkFiles = networkFiles.filter((fEnt) => fEnt.name.indexOf('#') === 0);
   }
 
-  if (!options.nick && !options.message) {
-    console.error(options);
-    throw new Error('no search option given');
+  try {
+    console.debug('SEARCH LIST:', networkFiles.map(x => x.name).join(', '));
+    return await searchLogsSqlite(network, networkFiles, options, singleProcFunc);
+  } catch (err) {
+    console.error(`searchLogsSqlite(${network}) failed:`, err);
+    return { totalLines: 0, searchResults: [], error: err };
   }
-
-  let totalLines = 0;
-  const searchResults = Object.fromEntries((await Promise.all(networkFiles.map((f) => new Promise((resolve) => {
-    getLogs(network, f.name, options).then((logLines) => resolve([f.name, logLines]));
-  }))))
-    .map(([channel, lines]) => {
-      totalLines += lines.length;
-
-      return [channel, lines.filter((l) => {
-        if (options.nick && !checkValAgainst(options.nick, l.nick)) {
-          return false;
-        }
-
-        if (options.message && !checkValAgainst(options.message, l.message)) {
-          return false;
-        }
-
-        return true;
-      })];
-    })
-    .filter(([, lines]) => !!lines.length));
-
-  return { totalLines, searchResults };
 }
 
 // ref: https://modern.ircdocs.horse/formatting.html#characters
@@ -683,8 +801,10 @@ module.exports = {
   sizeAtPath,
   isIpAddress,
   ipInfo,
-  getLogs,
+  getLogsSqlite,
   searchLogs,
+  userLastSeen,
+  userFirstSeen,
   checkValAgainst,
   findFixedNonZero,
   replaceIrcEscapes,

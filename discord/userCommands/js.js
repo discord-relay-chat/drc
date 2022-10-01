@@ -19,6 +19,10 @@ async function _run (context, runStr) {
       src: scopedRedisClient,
       stbc: context.sendToBotChan,
       setTimeout,
+      console: {
+        log: context.sendToBotChan,
+        error: context.sendToBotChan
+      },
       ...context
     });
 

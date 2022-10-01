@@ -51,7 +51,9 @@ module.exports = async function (parsed, context) {
   console.log(`Mapping channel ${joined.channel} to Discord ID ${joined.id}`);
   newClient.subscribe(joined.channel, (err, count) => {
     if (err) {
-      throw new Error(`bad mapping ${joined.channel}`, joined);
+      console.error(`bad mapping ${joined.channel}`, joined);
+      sendToBotChan(`bad mapping ${joined.channel}`);
+      return;
     }
 
     // this is THE message handler for each mapped channel
@@ -124,8 +126,9 @@ module.exports = async function (parsed, context) {
             }
 
             const ignoreList = await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork);
+            console.debug('ignoreList', e.nick, e.nick.replaceAll('\\', ''), ignoreList.includes(e.nick.replaceAll('\\', '')));
 
-            if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick.replace('\\', ''))) {
+            if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick.replaceAll('\\', ''))) {
               stats.messages.ignored++;
               if (config.user.squelchIgnored) {
                 (await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });

@@ -28,7 +28,6 @@ module.exports = async (context, chan, msg) => {
     // returns an async function if pushTarget is null, otherwish pushes that function
     // onto pushTarget and returns an object detailing the channel specification
     const getChannelJoinFunc = (pushTarget = null, serverSpec, chan) => {
-      console.info('getChannelJoinFunc', serverSpec, chan, Object.keys(connectedIRC.bots));
       const botClient = connectedIRC.bots[serverSpec.name];
 
       if (!botClient) {
@@ -58,7 +57,7 @@ module.exports = async (context, chan, msg) => {
 
         console.log(`Joining ${ircName} (${chan.name}) (mapped to ${chan.id}) on ${serverSpec.name}: ${channel}`);
         const joinRes = chanObj.join(ircName);
-        console.log('joinRes', joinRes);
+        console.debug('joinRes', joinRes);
 
         return new Promise((resolve) => {
           chanObj.updateUsers(async (channel) => {
@@ -129,7 +128,7 @@ module.exports = async (context, chan, msg) => {
         });
       });
 
-      console.log('specServers', JSON.stringify(specServers, null, 2));
+      console.debug('specServers', JSON.stringify(specServers, null, 2));
 
       for (const [_, serverSpec] of Object.entries(specServers)) { // eslint-disable-line no-unused-vars
         const botClient = connectedIRC.bots[serverSpec.name];
@@ -178,8 +177,16 @@ module.exports = async (context, chan, msg) => {
     const botClient = e && (connectedIRC.bots[e.network] || connectedIRC.bots[e.__drcNetwork]);
 
     if (parsed.type === 'irc:userMode:set') {
-      botClient.mode(config.irc.registered[e.network].nick, e.mode);
+      botClient.mode(config.irc.registered[e.network].user.nick, e.mode.replace('\\', ''));
       // pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:userMode', data: botClient.mode(config.irc.registered[e.network].nick) }));
+    } else if (parsed.type === 'irc:userMode:get') {
+      await pubClient.publish(PREFIX, JSON.stringify({
+        type: 'irc:userMode',
+        data: {
+          user: botClient.user,
+          __drcNetwork: e.__drcNetwork
+        }
+      }));
     } else if (parsed.type === 'discord:requestPing:irc') {
       console.debug(`Pinging ${e.network}...`);
       botClient.ping(['drc', Number(new Date()).toString()].join('-'));

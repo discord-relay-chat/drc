@@ -12,6 +12,7 @@ const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, scop
 const userCommands = require('./discord/userCommands');
 const { formatKVs, aliveKey, ticklePmChanExpiry, plotMpmData } = require('./discord/common');
 const eventHandlers = require('./discord/events');
+const { fetch } = require('undici');
 
 require('./logger')('discord');
 
@@ -95,6 +96,62 @@ function registerButtonHandler (buttonId, handlerFunc) {
 const allowedSpeakersMentionString = (s = ['[', ']']) => s[0] + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + s[1];
 
 let sendToBotChan = (...a) => console.error('sendToBotChan not initialized!', ...a);
+
+// SITE CHECK: MOVE THIS!
+async function siteCheck () {
+  if (config.siteCheck.sites.length <= 0) {
+    console.log('siteCheck: no sites configured, exiting immediately.');
+    return;
+  }
+
+  const { slow, fast } = config.siteCheck.frequencyMinutes;
+
+  const slowQueue = [...config.siteCheck.sites];
+  const fastQueue = [];
+
+  const _msg = (msg, level = 'log') => {
+    console[level]('siteCheck: ' + msg);
+    sendToBotChan(allowedSpeakersMentionString(['', '']) + ': ' + msg);
+  };
+
+  const slowSuccess = () => {};
+  const slowFail = (check, index, res) => {
+    _msg(`${check} is unreachable! (${res?.status}). Checking every ${fast} minutes now...`, 'error');
+    fastQueue.push(...slowQueue.splice(index, 1));
+  };
+  const fastFail = () => {};
+  const fastSuccess = (check, index, res) => {
+    _msg(`${check} is reachable again!`);
+    slowQueue.push(...fastQueue.splice(index, 1));
+  };
+
+  async function loop (freq, q, onSuccess, onFail) {
+    for (let index = 0; index < q.length; index++) {
+      const check = q[index];
+      let fRes;
+      try {
+        fRes = await fetch(check);
+      } catch (err) {
+        console.error(`siteCheck: fetch threw for ${check}: ${err.message}`);
+        console.debug(err);
+      }
+
+      if (fRes?.ok) {
+        onSuccess(check, index, fRes);
+      } else {
+        onFail(check, index, fRes);
+      }
+    }
+
+    if (q.length) {
+      console.info(`siteCheck[${freq}] q now (${q.length} elements): ${q.join(', ')}`);
+    }
+    setTimeout(loop.bind(null, freq, q, onSuccess, onFail), freq * 60 * 1000);
+  }
+
+  loop(slow, slowQueue, slowSuccess, slowFail);
+  loop(fast, fastQueue, fastSuccess, fastFail);
+}
 
 const ignoreSquelched = [];
 
@@ -242,6 +299,8 @@ client.once('ready', async () => {
 
   sendToBotChan('\n```\n' + (await banner('Hello!')) + '\n```\n\n');
 
+  siteCheck();
+
   let allowedSpeakerCommandHandler = () => {
     throw new Error('allowedSpeakerCommandHandler not initialized! not configured?');
   };
@@ -336,7 +395,7 @@ client.once('ready', async () => {
             getDiscordChannelById: (id) => client.channels.cache.get(id)
           }, ...args);
 
-          console.log(`Exec'ed user command ${command} with args [${args.join(', ')}] --> `, result);
+          console.log(`Exec'ed user command ${command} with args [${args.join(', ')}]`, argObj, '-->', result);
 
           let toBotChan;
           if (result && result.__drcFormatter) {
@@ -382,15 +441,19 @@ client.once('ready', async () => {
     deletedBeforeJoin,
     redisClient,
     redis: redisClient, // ugh
-    registerButtonHandler,
     channelsByName,
     listenedToMutate,
-    registerOneTimeHandler,
     buttonHandlers,
+    registerButtonHandler,
+    registerOneTimeHandler,
     publish: async (publishObj) => redisClient.publish(PREFIX, JSON.stringify(publishObj))
   };
 
   Object.entries(eventHandlers).forEach(([eventName, handler]) => {
+    if (eventName.indexOf('_') !== -1) {
+      return;
+    }
+
     console.log(`Registered handler for event "${eventName}"`);
     client.on(eventName, (...a) => handler(eventHandlerContext, ...a));
   });
@@ -806,7 +869,7 @@ client.once('ready', async () => {
 ['error', 'debug', 'userUpdate', 'warn', 'presenceUpdate', 'shardError', 'rateLimit'].forEach((eName) => {
   client.on(eName, async (...a) => {
     console.debug({ event: eName }, ...a);
-    if (eName === 'error' || eName === 'warn' || eName === 'rateLimit') {
+    if (eName === 'error' || eName === 'warn') {
       let msg = `Discord PROBLEM <${eName}>: ` + '```json\n' + JSON.stringify([...a], null, 2) + '\n```\n';
 
       if (eName === 'rateLimit') {

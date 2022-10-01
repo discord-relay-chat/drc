@@ -115,7 +115,7 @@ redisListener.subscribe(PREFIX, (err) => {
         // this shouldn't be here! probably...
         body.elements.forEach((ele) => {
           if (ele.timestamp) {
-            ele.timestampString = new Date(ele.timestamp).toLocaleString();
+            ele.timestampString = new Date(ele.timestamp).toDRCString();
           }
         });
       }
@@ -123,8 +123,8 @@ redisListener.subscribe(PREFIX, (err) => {
       const renderObj = {
         NAME,
         VERSION,
-        captureTimestamp: new Date().toLocaleString(),
-        documentExpiresAt: (new Date(handler.exp)).toLocaleString(),
+        captureTimestamp: new Date().toDRCString(),
+        documentExpiresAt: (new Date(handler.exp)).toDRCString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...body
       };

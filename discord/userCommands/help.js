@@ -19,13 +19,21 @@ function f (context) {
   }
 
   if (!toSend) {
-    context.sendToBotChan('_Available commands, **bolded** have further help available via `!help [command]`_: ' +
-      Object.keys(reReq.__functions)
-        .filter((fk) => fk.indexOf('_') !== 0)
-        .sort()
-        .map((fk) =>
-          reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
-        ).join(', ') + '\n');
+    const cmdListStr = Object.keys(reReq.__functions)
+      .filter((fk) => fk.indexOf('_') !== 0)
+      .sort()
+      .map((fk) =>
+        reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
+      ).join(', ');
+    const toSendEmbed = new MessageEmbed()
+      .setTitle('Command Listing')
+      .setDescription('**Bolded** have further help available via `!help [command]`.\n\n' +
+        'Multiple commands may be executed in a single line with `|>`, for example:\n' +
+        '```\n!stats |> !whois libera outage-bot |> !ps\n```\n\n')
+      .setColor('#0011ff')
+      .setTimestamp()
+      .addField('Available Commands:', cmdListStr);
+    context.sendToBotChan(toSendEmbed, true);
   } else {
     if (typeof toSend === 'string') {
       toSend = '```\n' + toSend + '\n```';
@@ -43,7 +51,14 @@ function f (context) {
           .setTimestamp();
 
         if (toSend.notes) {
-          toSendEmbed.addField('Notes', toSend.notes);
+          toSendEmbed.setDescription(toSend.notes);
+        }
+
+        if (toSend.options && Array.isArray(toSend.options)) {
+          toSendEmbed.addField('Options', 'When arguments are taken (**»**), the syntax is `--option=argument`');
+          for (const [optName, optDesc, takeArg] of toSend.options) {
+            toSendEmbed.addField((takeArg ? '» ' : '• ') + '`' + optName + '`', optDesc);
+          }
         }
 
         if (toSend.subcommands) {
@@ -62,8 +77,10 @@ function f (context) {
   }
 }
 
-f.__drcHelp = (context) => {
-  return 'This help! Use "!help [command]" to get detailed help with "command"';
-};
+f.__drcHelp = () => ({
+  title: 'This help!',
+  usage: '[command]',
+  notes: 'Use "!help [command]" to get detailed help with "command".'
+});
 
 module.exports = f;

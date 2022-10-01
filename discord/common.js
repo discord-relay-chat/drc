@@ -61,7 +61,7 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
       'set xlabel "⬅️ the past (time, in hours) now ➡️"',
       'set key Left left reverse box samplen 2 width 2',
       'set grid x lt 1 lw .75 lc "gray40"',
-      `set title "Messages per minute, sample size: ${data.length}\\nAs of ${new Date().toLocaleString()}" textcolor rgb "white"`,
+      `set title "Messages per minute, sample size: ${data.length}\\nAs of ${new Date().toDRCString()}" textcolor rgb "white"`,
       'set border lw 3 lc rgb "white"',
       'set xlabel textcolor rgb "white"',
       'set ylabel textcolor rgb "white"',
@@ -174,33 +174,35 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
       return a.slice(2).join(' ');
     };
 
-    switch (cmd) {
-      case 'add':
-        await context.redis.sadd(key, argStr());
-        break;
-      case 'clear':
-        // this really should be a button for confirmation instead of hardcoded!
-        if (!disallowClear) {
-          await context.redis.del(key);
-        }
-        break;
-      case 'remove':
-        await context.redis.srem(key, argStr());
-        break;
-    }
+    return scopedRedisClient(async (redis) => {
+      switch (cmd) {
+        case 'add':
+          await redis.sadd(key, argStr());
+          break;
+        case 'clear':
+          // this really should be a button for confirmation instead of hardcoded!
+          if (!disallowClear) {
+            await redis.del(key);
+          }
+          break;
+        case 'remove':
+          await redis.srem(key, argStr());
+          break;
+      }
 
-    if (additionalCommands && additionalCommands[cmd]) {
-      return additionalCommands[cmd]({ key, network, ...context }, ...a);
-    }
+      if (additionalCommands && additionalCommands[cmd]) {
+        return additionalCommands[cmd]({ key, network, redis, ...context }, ...a);
+      }
 
-    const retList = (await context.redis.smembers(key)).sort();
-    const fmtName = commandName[0].toUpperCase() + commandName.slice(1);
-    retList.__drcFormatter = () => retList.length
-      ? `${fmtName} ` +
-      `list for \`${network}\` (${retList.length}): **${retList.join('**, **')}**`
-      : `${fmtName} list for \`${network}\` has no items.`;
+      const retList = (await redis.smembers(key)).sort();
+      const fmtName = commandName[0].toUpperCase() + commandName.slice(1);
+      retList.__drcFormatter = () => retList.length
+        ? `${fmtName} ` +
+        `list for \`${network}\` (${retList.length}):\n\n   ⦁ ${retList.join('\n   ⦁ ')}\n`
+        : `${fmtName} list for \`${network}\` has no items.`;
 
-    return retList;
+      return retList;
+    });
   };
 
   f.__drcHelp = () => {
@@ -255,7 +257,7 @@ function formatKVsWithOpts (obj, opts) {
         const nv = Number(v);
 
         if (k.match(/^t(?:ime)?s(?:tamp)?$/ig)) {
-          return [new Date(nv).toLocaleString(), Number(nv)];
+          return [new Date(nv).toDRCString(), Number(nv)];
         }
 
         return [nv];
@@ -417,18 +419,26 @@ module.exports = {
     return formatKVsWithOpts(obj, { delim });
   },
 
-  generatePerChanListManagementUCExport (commandName, additionalCommands) {
+  generatePerChanListManagementUCExport (commandName, additionalCommands, enforceChannelSpec = true) {
     return function (context, ...a) {
       const [netStub, channelIdSpec] = context.options._;
       const { network } = matchNetwork(netStub);
+      let channel = channelIdSpec;
 
-      if (!channelIdSpec.match(CHANNELS_PATTERN)) {
-        throw new Error(`Bad channel ID spec ${channelIdSpec}`);
+      if (enforceChannelSpec) {
+        if (!channelIdSpec.match(CHANNELS_PATTERN)) {
+          throw new Error(`Bad channel ID spec ${channelIdSpec}`);
+        }
+
+        [, channel] = [...channelIdSpec.matchAll(CHANNELS_PATTERN)][0];
       }
 
-      const [, channel] = [...channelIdSpec.matchAll(CHANNELS_PATTERN)][0];
-
       const key = [network, channel].join('_');
+      const addlCmd = additionalCommands?.[context.options._[context.options._.length - 1]];
+      if (addlCmd) {
+        return addlCmd({ key, network, ...context }, ...a);
+      }
+
       const cmdFunctor = generateListManagementUCExport(`${commandName}_${key}`, additionalCommands);
 
       context.options._[1] = context.options._[0];
@@ -483,7 +493,7 @@ module.exports = {
     );
 
     console.log('ticklePmChanExpiry', chanId, network, ak, 'expires',
-      new Date(Number(nDate) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toLocaleString());
+      new Date(Number(nDate) + (config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)).toDRCString());
 
     return setObj;
   },

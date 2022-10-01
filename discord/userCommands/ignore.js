@@ -35,7 +35,7 @@ module.exports = generateListManagementUCExport('ignore', {
       }
 
       context.sendToBotChan(`Sequelched in **${e.target}** on \`${e.__drcNetwork}\` ` +
-        `at \`${new Date(msg.timestamp).toLocaleString()}\`:\n` +
+        `at \`${new Date(msg.timestamp).toDRCString()}\`:\n` +
         `${eHead}**${e.nick}**${eFoot} ${e.message}`);
     });
   },

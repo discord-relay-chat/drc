@@ -27,20 +27,23 @@ module.exports = async function (parsed, context) {
   } = context;
   const e = parsed.data;
   const mentionTarget = config.irc.registered[e.__drcNetwork].user.nick;
-  let isIgnored = '';
-
-  await scopedRedisClient(async (redis) => {
+  const isIgnored = await scopedRedisClient(async (redis) => {
     const ignoreList = await userCommands('ignore')({ redis }, e.__drcNetwork);
 
     if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e._orig.nick)) {
       stats.messages.ignored++;
-      if (config.user.squelchIgnored) {
-        (await userCommands('ignore')({ redis }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
-        return;
-      }
-      isIgnored = '||';
+      return '||';
     }
+
+    return '';
   });
+
+  if (isIgnored && config.user.squelchIgnored) {
+    await scopedRedisClient(async (redis) => {
+      await (await userCommands('ignore')({ redis }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
+    });
+    return;
+  }
 
   e.message = replaceIrcEscapes(e.message);
 
@@ -69,7 +72,7 @@ module.exports = async function (parsed, context) {
 
         newChan = await client.guilds.cache.get(config.discord.guildId).channels.create(newName, {
           parent: config.discord.privMsgCategoryId,
-          topic: `Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${created.toLocaleString()}** ` +
+          topic: `Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${created.toDRCString()}** ` +
             `& will be removed after ${fmtDuration(0, false, config.discord.privMsgChannelStalenessTimeMinutes * 60 * 1000)} with no activity. `
         });
 
@@ -114,7 +117,7 @@ module.exports = async function (parsed, context) {
 
         registerButtonHandler(permId, async (interaction) => {
           await persistPmChan(e.__drcNetwork, id);
-          newChan.setTopic(`Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${new Date(created).toLocaleString()}**.`);
+          newChan.setTopic(`Private messages with **${e.nick}** on **${e.__drcNetwork}**. Originally opened **${new Date(created).toDRCString()}**.`);
           interaction.update({
             embeds: [new MessageEmbed()
               .setColor('#00ff00')

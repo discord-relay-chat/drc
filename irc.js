@@ -6,6 +6,7 @@ const config = require('config');
 const irc = require('irc-framework');
 const inq = require('inquirer');
 const Redis = require('ioredis');
+const sqlite3 = require('sqlite3');
 const redisClient = new Redis(config.redis.url);
 const { PREFIX, CTCPVersion, scopedRedisClient } = require('./util');
 let ipcMessageHandler = require('./irc/ipcMessage');
@@ -183,7 +184,69 @@ async function main () {
     console.log(`Connecting '${spec.nick}' to ${host}...`);
     connectedIRC.bots[host] = await connectIRCClient(spec);
 
-    const logDataToFile = (fileName, data, { isNotice = false, pathExtra = [] } = {}) => {
+    // assumes the parent path already exists!
+    const logDataToSqlite = async (prefixPath, parsed) => {
+      const sqliteFilePath = `${prefixPath}.sqlite3`;
+      let db;
+      try {
+        /* have to do this because:
+            > try { new sqlite3.Database('./dne', sqlite3.OPEN_READWRITE) } catch (e) { console.log(e) }
+            Database {}
+            > Uncaught [Error: SQLITE_CANTOPEN: unable to open database file] {
+              errno: 14,
+              code: 'SQLITE_CANTOPEN'
+            }
+            > node[126476]: ../src/node_util.cc:242:static void node::util::WeakReference::DecRef(const v8::FunctionCallbackInfo<v8::Value>&): Assertion `(weak_ref->reference_count_) >= (1)' failed.
+            1: 0xaf3270 node::Abort() [node]
+            2: 0xaf32e4  [node]
+            3: 0xb952c4 node::util::WeakReference::DecRef(v8::FunctionCallbackInfo<v8::Value> const&) [node]
+            4: 0xd28550  [node]
+            5: 0xd295ac v8::internal::Builtin_HandleApiCall(int, unsigned long*, v8::internal::Isolate*) [node]
+            6: 0x15474ac  [node]
+            Aborted (core dumped)
+        */
+        await fs.promises.stat(sqliteFilePath);
+      } catch (e) {
+        if (e.code === 'ENOENT') {
+          db = await (new Promise((resolve, reject) => {
+            (new sqlite3.Database(sqliteFilePath))
+              .run('CREATE TABLE channel (type TEXT, from_server INTEGER, nick TEXT, ' +
+              'ident TEXT, hostname TEXT, target TEXT, message TEXT, __drcNetwork TEXT, ' +
+              '__drcIrcRxTs INTEGER, __drcLogTs INTEGER, tags TEXT, extra TEXT)',
+              (err) => {
+                if (err) {
+                  return reject(err);
+                }
+                console.log(`Created anew: ${sqliteFilePath}`);
+                resolve(db);
+              });
+          }));
+        }
+      }
+
+      if (!db) {
+        try {
+          db = new sqlite3.Database(sqliteFilePath);
+        } catch (e) {
+          console.error('uh oh', sqliteFilePath, e);
+          return;
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        db.run('INSERT INTO channel VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          parsed.type, parsed.from_server ? 1 : 0, parsed.nick, parsed.ident, parsed.hostname,
+          parsed.target, parsed.message, parsed.__drcNetwork, parsed?.__drcIrcRxTs ?? -1,
+          parsed?.__drcLogTs ?? -1, JSON.stringify(parsed.tags), null, (err) => {
+            if (err) {
+              return reject(err);
+            }
+            db.close(() => resolve(parsed));
+          });
+      });
+    };
+
+    const logDataToFile = (fileName, data, { isNotice = false, pathExtra = [], isMessage = false, isEvent = false } = {}) => {
       console.debug(`logDataToFile(${fileName}, , { isNotice: ${isNotice}, pathExtra: ${pathExtra.join(', ')}})`);
       const chanFileDir = path.join(...[ircLogPath, host, ...pathExtra]);
       const chanFilePath = path.join(chanFileDir, fileName);
@@ -199,10 +262,16 @@ async function main () {
             __drcLogTs: Number(new Date())
           });
 
+          if (!isEvent) {
+            logDataToSqlite(chanFilePath, lData)
+              .catch((e) => console.error(chanFilePath, 'logDataToSqlite FAILED', e, lData));
+          }// else {
+          // KEEP THIS HERE UNTIL SQLITE IS FULLY TRUSTWORTHY!
           if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, lData);
           const fh = await fs.promises.open(chanFilePath, 'a');
           await fh.write(JSON.stringify(lData) + '\n');
           fh.close();
+          // }
         } catch (e) {
           if (e.code !== 'EEXIST') {
             console.error(`logDataToFile(${fileName}) failed: ${e}`);
@@ -280,7 +349,7 @@ async function main () {
 
       if (config.irc.log.channelsToFile) {
         const fName = isNotice && data.target === config.irc.registered[host].user.nick /* XXX:really need to keep LIVE track of our nick!! also add !nick DUH */ ? data.nick : data.target;
-        logDataToFile(fName, data, { isNotice });
+        logDataToFile(fName, data, { isNotice, isMessage: true });
       }
 
       if (isNotice) {

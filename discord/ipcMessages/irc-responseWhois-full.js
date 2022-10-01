@@ -3,13 +3,52 @@
 const {
   fmtDuration,
   ipInfo,
-  scopedRedisClient
+  scopedRedisClient,
+  searchLogs,
+  userLastSeen,
+  userFirstSeen
 } = require('../../util');
 const { formatKVs, simpleEscapeForDiscord } = require('../common');
 const userCommands = require('../userCommands');
 const { MessageEmbed } = require('discord.js');
 
+const logsSearch = async (network, d, embed, aliases = []) => {
+  const lookups = [d.actual_ip, d.actual_hostname, d.hostname].filter(Boolean);
+  const queryOptsTmpl = { distinct: true, strictStrings: true, columns: 'ident,nick,hostname' };
+  if (!aliases.length && d.nick) {
+    aliases.push(d.nick);
+  }
+  const logsSearchRes = [
+    d.ident && d.ident.length > 2 ? (await searchLogs(network, Object.assign({ ident: d.ident }, queryOptsTmpl))) : null,
+    ...(lookups.length ? (await Promise.all(lookups.filter(Boolean).map((host) => searchLogs(network, Object.assign({ host }, queryOptsTmpl))))) : []),
+    ...(aliases.length ? (await Promise.all(aliases.map((alias) => searchLogs(network, Object.assign({ nick: alias }, queryOptsTmpl))))) : [])
+  ]
+    .filter(Boolean)
+    .filter((v) => v.totalLines > 0)
+    .map((v) => v.searchResults);
+
+  const seenChannels = logsSearchRes.reduce((accSet, srObj) => {
+    Object.keys(srObj).forEach((chan) => accSet.add(chan));
+    return accSet;
+  }, new Set());
+
+  const uniqSearchRes = logsSearchRes.reduce((accObj, srObj) => {
+    Object.values(srObj).forEach((objList) => objList.forEach((intObj) => Object.entries(intObj).forEach(([k, v]) => accObj[k].add(v))));
+    return accObj;
+  }, {
+    hostname: new Set(),
+    ident: new Set(),
+    nick: new Set()
+  });
+
+  embed.addField('spoken in channels:', [...seenChannels].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
+  embed.addField('appeared as nicks:', [...uniqSearchRes.nick].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
+  embed.addField('connected with idents:', [...uniqSearchRes.ident].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
+  embed.addField('connected from hostnames:', [...uniqSearchRes.hostname].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
+};
+
 module.exports = async function (parsed, context) {
+  const whoisRespStart = process.hrtime.bigint();
   const {
     client,
     sendToBotChan,
@@ -26,6 +65,14 @@ module.exports = async function (parsed, context) {
   const msgChan = client.channels.cache.get(parsed.data?.requestData?.channel);
   const network = d.__drcNetwork;
 
+  const localSender = async (embed) => {
+    if (msgChan) {
+      return msgChan.send({ embeds: [embed] });
+    } else {
+      return sendToBotChan(embed, true);
+    }
+  };
+
   await runOneTimeHandlers(`${network}_${d._orig?.nick ?? d.nick}`);
 
   // so they don't show up in the output...
@@ -37,15 +84,30 @@ module.exports = async function (parsed, context) {
 
   const nickTracking = await userCommands('nicks');
   const ident = `${d.ident}@${d.hostname}`;
-  const identData = await nickTracking.identLookup(network, ident);
-  console.debug('whois ident lookup result', network, ident, identData);
 
+  // let hostMatchProcTime;
+  const moreEmbeds = [];
   const embed = new MessageEmbed()
     .setColor('#2c759c')
     .setTitle(`WHOIS \`${d.nick}\` on \`${network}\`?`);
 
   if (d.error) {
     embed.setDescription('Nickname not found!');
+    await logsSearch(network, d, embed);
+    if (d.nick) {
+      const lastSeens = await userLastSeen(network, d);
+      if (lastSeens.length) {
+        const lsEmbed = new MessageEmbed()
+          .setColor('#2c759c')
+          .setTitle(`Last seen info for \`${d.nick}\` on \`${network}\``);
+
+        for (const [chan, date] of lastSeens) {
+          lsEmbed.addField(date, `in ${chan}`);
+        }
+
+        moreEmbeds.push(lsEmbed);
+      }
+    }
   } else {
     embed.setDescription(formatKVs(d));
 
@@ -53,41 +115,136 @@ module.exports = async function (parsed, context) {
       embed.addField(`IP info for \`${lookupHost}\`:`, formatKVs(ipInf));
     }
 
-    const lookups = [d.actual_ip, d.actual_hostname, d.hostname];
+    const firstSeens = await userFirstSeen(network, d);
+    if (firstSeens.length) {
+      const [[chan, date]] = firstSeens;
+      embed.addField('First seen on network:', `**${date}** in **${chan}**\n`);
+    }
+
+    let lookups = [d.actual_ip, d.actual_hostname, d.hostname];
     let lookupSet = new Set(lookups);
+
+    const aliasesEmbed = new MessageEmbed()
+      .setColor('#2c759c')
+      .setTitle(`Aliases of \`${d.nick}\` on \`${network}\``);
+    moreEmbeds.push(aliasesEmbed);
+
     await scopedRedisClient(async (rc, pfx) => {
       const hosts = (await rc.smembers(`${pfx}:hosttrack:${network}:${d.ident}`))
         .filter(x => !lookups.includes(x) && x.length);
 
       if (hosts?.length) {
-        embed.addField(`Other known hosts for \`${d.ident}\` (${hosts?.length}):`,
+        aliasesEmbed.addField(`Other known hosts for \`${d.ident}\` (${hosts?.length}):`,
           '`' + hosts.splice(0, 10).join('`, `') + '`' + (hosts?.length > 10 ? ', ...' : ''));
         hosts.forEach(lookupSet.add.bind(lookupSet));
+        lookups.push(...hosts);
       }
     });
+
+    const aliases = new Set();
+    lookups = [...new Set(lookups)];
 
     const addIdentToEmbed = async (identLookup, e, searchStr) => {
       const identData = await nickTracking.identLookup(network, identLookup);
       if (identData) {
         e.addField(`Known aliases of <\`${identData.fullIdent}\`>` +
           `${searchStr ? ` (from "${searchStr}")` : ''}:`,
-        '`' + identData.uniques.filter(simpleEscapeForDiscord).join('`, `') + '`' +
+        identData.uniques.map(simpleEscapeForDiscord).join(', ') +
           (identData.lastChanges.length
             ? `\n\nLast nick change was ${fmtDuration(identData.lastChanges[0].timestamp)} ago.`
             : ''));
+        identData.uniques.forEach((id) => aliases.add(id));
       }
     };
 
-    await addIdentToEmbed(ident, embed);
+    // this is *expensive*! should fix the persistence of these to make it not so, but i'm lazy...
+    /*
+    await scopedRedisClient(async (rc, pfx) => {
+      const __s = process.hrtime.bigint();
+      const hostAliases = [];
+      const p = `${pfx}:hosttrack:${network}`;
+      const checkUsers = await rc.keys(`${p}:*`);
+      for (const checkUser of checkUsers) {
+        const matchedHosts = (await Promise.all(
+          lookups.map(async (lu) => ([lu, lu && await rc.sismember(checkUser, lu)]))))
+          .filter(([, isMember]) => isMember);
+          // .reduce((a, [host, isMember]) => ( {[host]: isMember, ...a }), {});
 
-    if (!['~user', '~quassel'].includes(d.ident)) {
+        if (matchedHosts.length) {
+          console.log(`matched hosts for ${checkUser}:`, matchedHosts);
+          hostAliases.push([checkUser.split(':').at(-1), matchedHosts]);
+        }
+      }
+      console.log('MATCHED HOSTS:', hostAliases);
+
+      const processed = {};
+      for (const [, hosts] of hostAliases) {
+        const foundHostNicks = [];
+        for (const [hostname] of hosts) {
+          const hostKeys = await rc.keys(`${pfx}:${network}:nicktrack:*@${hostname}:uniques`);
+          for (const hostKey of hostKeys) {
+            const [,,, identStr] = hostKey.split(':');
+            const rKey = [pfx, network, 'nicktrack', identStr, 'uniques'].join(':');
+            foundHostNicks.push([hostname, await rc.smembers(rKey)]);
+          }
+        }
+
+        const filteredFound = foundHostNicks.filter(Boolean);
+
+        if (filteredFound.length) {
+          console.log('filteredFound', filteredFound);
+
+          for (const [hostname, nicks] of filteredFound) {
+            if (!processed[hostname]) {
+              processed[hostname] = new Set();
+            }
+
+            nicks.forEach(nick => processed[hostname].add(nick));
+          }
+        }
+      }
+      console.log('PROCED', processed);
+
+      Object.entries(processed).forEach(([hostname, nicksSet]) => {
+        embed.addField(`Hostname \`${hostname}\` matches nicks:`, [...nicksSet].map(simpleEscapeForDiscord).join(', '));
+      });
+      hostMatchProcTime = Number(process.hrtime.bigint() - __s) / 1e9;
+      console.log(`Hostname matching took ${hostMatchProcTime}s`);
+    });
+    */
+
+    if (!['~user', '~quassel'].includes(d.ident) && d.ident.length > 2) {
+      await addIdentToEmbed(ident, aliasesEmbed);
+
       lookupSet = new Set([...lookupSet].filter(x => Boolean(x)));
       console.debug('lookupSet', lookupSet);
 
       await Promise.all([...lookupSet]
         .map(async (lookupHost) => Promise.all((await nickTracking.findUniqueIdents(network, lookupHost))
           .filter((i) => i !== ident)
-          .map(async (uniqIdent) => addIdentToEmbed(uniqIdent, embed, lookupHost)))));
+          .map(async (uniqIdent) => addIdentToEmbed(uniqIdent, aliasesEmbed, lookupHost)))));
+    }
+
+    const logsEmbed = new MessageEmbed()
+      .setColor('#2c759c')
+      .setTitle(`On \`${network}\`, \`${d.nick}\` has...`);
+    await logsSearch(network, d, logsEmbed, [...aliases]);
+    moreEmbeds.push(logsEmbed);
+
+    const notes = await userCommands('notes')(Object.assign({
+      options: parsed.data?.requestData?.options
+    }, context), ...parsed.data?.requestData?.options._);
+    if (notes && notes.length) {
+      const notesEmbed = new MessageEmbed()
+        .setColor('#2c759c')
+        .setTitle(`Notes regarding \`${d.nick}\` on \`${network}\``);
+      moreEmbeds.push(notesEmbed);
+      notesEmbed.setDescription(notes.reduce((a, note) => {
+        if (typeof note === 'string') {
+          a += `• ${note}`;
+        }
+        return a;
+      }, ''));
     }
 
     await scopedRedisClient(async (rc, pfx) => {
@@ -98,9 +255,17 @@ module.exports = async function (parsed, context) {
     });
   }
 
-  if (msgChan) {
-    msgChan.send({ embeds: [embed] });
-  } else {
-    sendToBotChan(embed, true);
+  if (!d.error) {
+    const txToProc = Number(new Date()) - parsed.data?.requestData?.txTs;
+    const procTime = Number(process.hrtime.bigint() - whoisRespStart) / 1e9;
+    const procTimeStr = `Roundtrip took ${(txToProc / 1e3).toFixed(2)} seconds & processing took ${procTime.toFixed(2)} seconds `;
+    // + `(${hostMatchProcTime.toFixed(2)}, Δ${(procTime - hostMatchProcTime).toFixed(2)})`;
+    console.log(procTimeStr);
+    embed.setFooter(procTimeStr);
+  }
+
+  await localSender(embed);
+  for (const another of moreEmbeds) {
+    await localSender(another);
   }
 };

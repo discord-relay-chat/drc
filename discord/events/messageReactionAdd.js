@@ -20,7 +20,7 @@ function createArgObjOnContext (context, data, subaction) {
   }
 
   context.argObj = { _: tmplArr };
-  console.log('createArgObjOnContext', context.argObj);
+  console.debug('createArgObjOnContext', context.argObj);
   return tmplArr;
 }
 
@@ -36,6 +36,24 @@ async function ignoreRemove (context, data) {
   return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'remove'));
 }
 
+async function makeNoteOfMessage (context, data) {
+  console.debug('makeNoteOfMessage');
+  if (!data?.message?.content) {
+    console.error('Bad data for makeNoteOfMessage:', data);
+    return;
+  }
+  let args = createArgObjOnContext(context, data);
+  const msg = `"${data?.message?.content}"` +
+    ` (captured in **${args[0]}/#${context.channelsById[data?.message?.channelId].name}**` +
+    ` at _${new Date(data?.message?.createdTimestamp).toDRCString()}_)`;
+  args = [...args, 'add', msg];
+  console.debug(args);
+  console.debug(msg);
+  context.options = { _: args };
+  context.argObj._ = args;
+  return userCommands('notes')(context, ...args);
+}
+
 const allowedReactions = {
   '%F0%9F%87%BC': whois, // "🇼"
   '%E2%9D%94': whois, // "❔"
@@ -45,9 +63,12 @@ const allowedReactions = {
   '%E2%9C%96%EF%B8%8F': ignoreAdd, // "✖️"
   '%F0%9F%87%BD': ignoreAdd, // "🇽"
   '%E2%9B%94': ignoreAdd, // "⛔"
-  '%F0%9F%9A%AB': ignoreAdd, // "🚫",
+  '%F0%9F%9A%AB': ignoreAdd, // "🚫"
 
-  '%E2%9E%96': ignoreRemove // "➖"
+  '%E2%9E%96': ignoreRemove, // "➖"
+
+  '%F0%9F%97%92%EF%B8%8F': makeNoteOfMessage, // "🗒️"
+  '%F0%9F%93%93': makeNoteOfMessage // "📓"
 };
 
 const reactionsToRemove = [];
@@ -77,13 +98,15 @@ const removeReactionInTime = (messageReaction) => {
   _removeInTime();
 };
 
-module.exports = async (context, messageReaction, author) => {
+module.exports = async (context, messageReaction, author, ...a) => {
+  console.debug('messageReactionAdd', ...a);
+  console.debug(messageReaction.client.messages);
   const removeInTime = removeReactionInTime.bind(null, messageReaction);
   if (author.id === config.discord.botId) {
     return removeInTime();
   }
 
-  console.log(messageReaction.users.reaction?.emoji?.name, 'is', messageReaction.users.reaction?.emoji?.identifier);
+  console.debug(messageReaction.users.reaction?.emoji?.name, 'is', messageReaction.users.reaction?.emoji?.identifier);
 
   if (!messageIsFromAllowedSpeaker({ author }, context)) {
     console.error('can NOT?! use reaction!', author);
