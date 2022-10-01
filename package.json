@@ -5,7 +5,7 @@
   "scripts": {
     "pretest": "semistandard --fix --verbose",
     "prestart": "semistandard --fix --verbose",
-    "test": "jest",
+    "test": "jest --forceExit --detectOpenHandles --debug --runInBand",
     "lint": "semistandard --fix --verbose"
   },
   "author": "Ed Fletcher, Sector T137 <https://github.com/edfletcher>",
