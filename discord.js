@@ -116,7 +116,7 @@ async function siteCheck () {
 
   const slowSuccess = () => {};
   const slowFail = (check, index, res) => {
-    _msg(`${check} is unreachable! (${res?.status}). Checking every ${fast} minutes now...`, 'error');
+    _msg(`🚨 ${check} is unreachable! (${res?.status}). Checking every ${fast} minutes now...`, 'error');
     fastQueue.push(...slowQueue.splice(index, 1));
   };
   const fastFail = () => {};
@@ -152,6 +152,44 @@ async function siteCheck () {
   loop(slow, slowQueue, slowSuccess, slowFail);
   loop(fast, fastQueue, fastSuccess, fastFail);
 }
+
+const pendingAliveChecks = {};
+async function alivenessCheck () {
+  const msg = userCommands('msg');
+  const ac = userCommands('aliveChecks');
+  const ctx = {
+    channelsById,
+    redis: new Redis(config.redis.url)
+  };
+
+  const networks = await ac(ctx, 'listAllNetworks');
+  for (const network of networks) {
+    const checks = await ac({}, network);
+    for (const check of checks) {
+      console.info(`Running aliveness check "${check}" on ${network}`);
+      const [nick, ...messageComps] = check.split(/\s+/);
+
+      if (pendingAliveChecks[nick]) {
+        console.error(`Alive check for ${nick} is still pending!`);
+        continue;
+      }
+
+      pendingAliveChecks[nick] = setTimeout(() => {
+        console.error(`🚨 Alive check for ${nick} popped!`);
+        sendToBotChan(allowedSpeakersMentionString(['', '']) + ': ' +
+          `🚨 Aliveness check for **${nick}** on \`${network}\` failed!`);
+        clearTimeout(pendingAliveChecks[nick]);
+        delete pendingAliveChecks[nick];
+      }, 30 * 1000);
+
+      await msg(ctx, network, nick, ...messageComps);
+    }
+  }
+
+  setTimeout(alivenessCheck, 10 * 60 * 1000);
+}
+
+setTimeout(alivenessCheck, 15 * 1000);
 
 const ignoreSquelched = [];
 
@@ -324,10 +362,32 @@ client.once('ready', async () => {
           return;
         }
 
-        const [command, ...args] = trimContent.slice(1).split(/\s+/);
-        const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
+        let [command, ...args] = trimContent.slice(1).split(/\s+/);
 
-        console.debug('USER CMD PARSED', command, fmtedCmdStr, args);
+        const quotesParse = args.reduce((a, e) => {
+          if (e.match(/--\w+="/) && !a.collect.length) {
+            a.collect.push(e);
+          } else if (a.collect.length) {
+            if (e.match(/[^"]+"/)) {
+              a.return.push([...a.collect, e].join(' '));
+              a.collect = [];
+            } else {
+              a.collect.push(e);
+            }
+          } else {
+            a.return.push(e);
+          }
+
+          return a;
+        }, {
+          collect: [],
+          return: []
+        });
+
+        args = [...quotesParse.return, ...quotesParse.collect];
+
+        const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
+        console.log(trimContent, 'USER CMD PARSED', command, fmtedCmdStr, args);
         const redis = new Redis(config.redis.url);
 
         try {
@@ -340,6 +400,7 @@ client.once('ready', async () => {
 
           const publish = async (publishObj) => redis.publish(PREFIX, JSON.stringify(publishObj));
           const argObj = yargs(args).help(false).exitProcess(false).argv;
+          console.log('Command args:', args, ' parsed into ', argObj);
 
           const createGuildChannel = async (channelName, channelOpts) =>
             client.guilds.cache.get(config.discord.guildId).channels.create(channelName, channelOpts);
@@ -782,6 +843,7 @@ client.once('ready', async () => {
   };
 
   mainSubClient.on('message', ipcMessageHandler.bind(null, {
+    pendingAliveChecks,
     allowedSpeakersAvatars,
     stats,
     runOneTimeHandlersMatchingDiscriminator,

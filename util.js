@@ -10,6 +10,7 @@ const { fetch } = require('undici');
 const dns = require('dns').promises;
 const shodan = require('shodan-client');
 const parseDuration = require('parse-duration');
+const { parseDate } = require('chrono-node');
 const sqlite3 = require('sqlite3');
 
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
@@ -439,9 +440,17 @@ function getLogsSetup (network, channel, { from, to, format = 'json', filterByNi
     const chkDate = new Date(x);
 
     if (chkDate.toString() === 'Invalid Date') {
-      const parsed = parseDuration(x);
+      let parsed = parseDate(x);
 
       if (parsed) {
+        console.log(`[parseDate] time "${x}" parsed to "${parsed}" (${Number(parsed)})`);
+        return Number(parsed);
+      }
+
+      parsed = parseDuration(x);
+
+      if (parsed) {
+        console.log(`[parseDuration] time "${x}" parsed to ${parsed} -> ${new Date(Number(new Date()) + parsed)} (${Number(new Date()) + parsed})`);
         return Number(new Date()) + parsed;
       }
 
@@ -801,6 +810,7 @@ module.exports = {
   sizeAtPath,
   isIpAddress,
   ipInfo,
+  getLogsSetup,
   getLogsSqlite,
   searchLogs,
   userLastSeen,

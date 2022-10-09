@@ -23,7 +23,8 @@ module.exports = async function (parsed, context) {
     sendToBotChan,
     client,
     channelsById,
-    allowedSpeakersMentionString
+    allowedSpeakersMentionString,
+    pendingAliveChecks
   } = context;
   const e = parsed.data;
   const mentionTarget = config.irc.registered[e.__drcNetwork].user.nick;
@@ -52,6 +53,13 @@ module.exports = async function (parsed, context) {
   }
 
   if (config.discord.privMsgCategoryId) {
+    if (e.nick in pendingAliveChecks) {
+      console.info(`Got RX of alive check for ${e.nick}`);
+      clearTimeout(pendingAliveChecks[e.nick]);
+      delete pendingAliveChecks[e.nick];
+      return;
+    }
+
     serialize(async () => {
       let chanId = Object.entries(PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
       let newChan, created;

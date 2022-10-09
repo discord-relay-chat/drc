@@ -1,8 +1,4 @@
-const { generateListManagementUCExport, serveMessages } = require('../common');
-
-async function clearSquelched (context, ...a) {
-  return context.redis.del([context.key, 'squelch'].join(':'));
-}
+const { generateListManagementUCExport, clearSquelched, digest } = require('../common');
 
 module.exports = generateListManagementUCExport('ignore', {
   _squelchMessage: async (context, ...a) => async (messageObj) => context.redis.lpush([context.key, 'squelch'].join(':'), JSON.stringify(messageObj)),
@@ -40,15 +36,6 @@ module.exports = generateListManagementUCExport('ignore', {
     });
   },
 
-  digest: async (context, ...a) => {
-    const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
-
-    await serveMessages(context, data, { ttl: 1440 });
-
-    if (!context.options.keep) {
-      clearSquelched(context);
-    }
-  },
-
+  digest,
   clearSquelched
 }, true);

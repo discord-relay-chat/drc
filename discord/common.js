@@ -11,6 +11,58 @@ const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
+// this and ^servePage should be refactored together, they're very similar
+async function serveMessages (context, data, opts = {}) {
+  const name = nanoid();
+
+  if (!data.length) {
+    context.sendToBotChan(`No messages for \`${context.network}\` were found.`);
+    return;
+  }
+
+  context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
+    await scopedRedisClient(async (r) => {
+      await r.publish(PREFIX, JSON.stringify({
+        type: 'http:get-res:' + name,
+        data: {
+          network: context.network,
+          elements: data
+        }
+      }));
+    });
+  });
+
+  const options = Object.assign(opts, context.options);
+  delete options._;
+
+  await context.publish({
+    type: 'discord:createGetEndpoint',
+    data: {
+      name,
+      renderType: 'digest',
+      options
+    }
+  });
+
+  const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
+  context.sendToBotChan(`Digest of **${data.length}** messages for \`${context.network}\` ` +
+    `(link expires in ${ttlSecs / 60} minutes): https://${config.http.fqdn}/${name}`);
+}
+
+async function clearSquelched (context, ...a) {
+  return context.redis.del([context.key, 'squelch'].join(':'));
+}
+
+async function digest (context, ...a) {
+  const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
+
+  await serveMessages(context, data, { ttl: 1440 });
+
+  if (!context.options.keep) {
+    clearSquelched(context);
+  }
+}
+
 async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHours) {
   if (!config.app.stats.plotEnabled) {
     return;
@@ -154,7 +206,8 @@ function simpleEscapeForDiscord (s) {
   return accum;
 }
 
-function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false) {
+// keySubstitue only applies (if set) to additionalCommands!
+function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false, keySubstitute = null) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
     console.debug('generateListManagementUCExport', commandName, ...a);
@@ -163,7 +216,15 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
       return `Not enough arguments! Usage: \`${commandName} [networkStub] [command] (args...)\``;
     }
 
-    const { network } = matchNetwork(netStub);
+    let network;
+    try {
+      network = matchNetwork(netStub).network;
+    } catch (NetworkNotMatchedError) {
+      if (additionalCommands[netStub]) {
+        return additionalCommands[netStub](context, ...a);
+      }
+    }
+
     const key = [PREFIX, commandName, network].join(':');
 
     const argStr = () => {
@@ -191,14 +252,16 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
       }
 
       if (additionalCommands && additionalCommands[cmd]) {
-        return additionalCommands[cmd]({ key, network, redis, ...context }, ...a);
+        const originalKey = key;
+        const addlKey = [PREFIX, keySubstitute ?? commandName, network].join(':');
+        return additionalCommands[cmd]({ key: addlKey, originalKey, network, redis, ...context }, ...a);
       }
 
       const retList = (await redis.smembers(key)).sort();
       const fmtName = commandName[0].toUpperCase() + commandName.slice(1);
       retList.__drcFormatter = () => retList.length
         ? `${fmtName} ` +
-        `list for \`${network}\` (${retList.length}):\n\n   ⦁ ${retList.join('\n   ⦁ ')}\n`
+        `list for \`${network}\` (${retList.length}):\n\n   ⦁ ${retList.map(simpleEscapeForDiscord).join('\n   ⦁ ')}\n`
         : `${fmtName} list for \`${network}\` has no items.`;
 
       return retList;
@@ -355,43 +418,7 @@ module.exports = {
     return name;
   },
 
-  // this and ^servePage should be refactored together, they're very similar
-  async serveMessages (context, data, opts = {}) {
-    const name = nanoid();
-
-    if (!data.length) {
-      context.sendToBotChan(`No messages for \`${context.network}\` were found.`);
-      return;
-    }
-
-    context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
-      await scopedRedisClient(async (r) => {
-        await r.publish(PREFIX, JSON.stringify({
-          type: 'http:get-res:' + name,
-          data: {
-            network: context.network,
-            elements: data
-          }
-        }));
-      });
-    });
-
-    const options = Object.assign(opts, context.options);
-    delete options._;
-
-    await context.publish({
-      type: 'discord:createGetEndpoint',
-      data: {
-        name,
-        renderType: 'digest',
-        options
-      }
-    });
-
-    const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
-    context.sendToBotChan(`Digest of **${data.length}** messages for \`${context.network}\` ` +
-      `(link expires in ${ttlSecs / 60} minutes): https://${config.http.fqdn}/${name}`);
-  },
+  serveMessages,
 
   async persistMessage (key, messageType, network, msgObj) {
     if (!config.user.persistMentions) {
@@ -500,5 +527,8 @@ module.exports = {
 
   persistPmChan: async (network, chanId) => persistOrClearPmChan(network, chanId),
 
-  removePmChan: async (network, chanId) => persistOrClearPmChan(network, chanId, false)
+  removePmChan: async (network, chanId) => persistOrClearPmChan(network, chanId, false),
+
+  clearSquelched,
+  digest
 };

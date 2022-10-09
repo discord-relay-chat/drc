@@ -4,7 +4,7 @@ const path = require('path');
 const uuid = require('uuid');
 const { nanoid } = require('nanoid');
 const { PREFIX, AmbiguousMatchResultError, matchNetwork, scopedRedisClient } = require('../util');
-const { dynRequireFrom, generateListManagementUCExport, generatePerChanListManagementUCExport, simpleEscapeForDiscord } = require('./common');
+const { dynRequireFrom, generateListManagementUCExport, generatePerChanListManagementUCExport, simpleEscapeForDiscord, clearSquelched, digest } = require('./common');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
@@ -54,9 +54,13 @@ resolver.__functions = {
     await context.redis.publish(PREFIX, JSON.stringify({ type: 'discord:requestPs:irc' }));
   },
 
+  identsIgnored: generateListManagementUCExport('identsIgnored'),
+
   hilite: generateListManagementUCExport('hilite'),
 
   onConnect: generateListManagementUCExport('onConnect'),
+
+  muted: generateListManagementUCExport('muted', { clearSquelched, digest }, false, 'ignore'),
 
   notes: generatePerChanListManagementUCExport('notes', {
     listAll: async (context, ...a) => scopedRedisClient(async (client, prefix) => {
@@ -66,6 +70,11 @@ resolver.__functions = {
       return 'Full list of notes:\n\n• ' + netList.map(x => simpleEscapeForDiscord(x.split(':')[1].split('_').slice(2).join('_'))).join('\n• ');
     })
   }, false),
+
+  aliveChecks: generateListManagementUCExport('aliveChecks', {
+    listAllNetworks: () => scopedRedisClient(async (client, PREFIX) =>
+      (await client.keys(`${PREFIX}:aliveChecks:*`)).map(x => x.split(':')).map(x => x.pop()))
+  }),
 
   killmenow: () => process.exit(-1),
 
@@ -102,7 +111,7 @@ resolver.__functions = {
     return Buffer.from(Array.from({ length }, () => Math.floor(Math.random() * 0xFF))).toString(fmt);
   },
 
-  logging (context) {
+  enableDebugging (context) {
     let prefix = 'En';
     if (context.argObj._[0]) {
       require('../logger').enableLevel('debug');

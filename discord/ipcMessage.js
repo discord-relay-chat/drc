@@ -249,7 +249,8 @@ module.exports = async (context, _channel, msg) => {
           'discord:startup',
           'http:get-res:',
           'discord:requestWhois:irc',
-          'discord:requestUserList:irc'
+          'discord:requestUserList:irc',
+          'discord:requestSay:irc'
         ];
 
         if (allowUnhandled.some((x) => parsed.type.indexOf(x) === 0)) {

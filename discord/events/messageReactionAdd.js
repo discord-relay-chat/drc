@@ -36,6 +36,14 @@ async function ignoreRemove (context, data) {
   return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'remove'));
 }
 
+async function muteAdd (context, data) {
+  return userCommands('muted')(context, ...createArgObjOnContext(context, data, 'add'));
+}
+
+async function muteRemove (context, data) {
+  return userCommands('muted')(context, ...createArgObjOnContext(context, data, 'remove'));
+}
+
 async function makeNoteOfMessage (context, data) {
   console.debug('makeNoteOfMessage');
   if (!data?.message?.content) {
@@ -68,7 +76,13 @@ const allowedReactions = {
   '%E2%9E%96': ignoreRemove, // "➖"
 
   '%F0%9F%97%92%EF%B8%8F': makeNoteOfMessage, // "🗒️"
-  '%F0%9F%93%93': makeNoteOfMessage // "📓"
+  '%F0%9F%93%93': makeNoteOfMessage, // "📓"
+
+  '%F0%9F%94%87': muteAdd, // "🔇"
+  '%F0%9F%94%95': muteAdd, // "🔕"
+
+  '%F0%9F%94%8A': muteRemove, // "🔊"
+  '%F0%9F%94%89': muteRemove // "🔉"
 };
 
 const reactionsToRemove = [];

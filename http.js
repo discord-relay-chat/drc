@@ -70,7 +70,7 @@ redisListener.subscribe(PREFIX, (err) => {
       return res.send(await fs.promises.readFile(assetPath));
     } catch (e) {
       console.error(`failed to send ${assetPath}:`, e);
-      return res.status(404).send();
+      return res.redirect(config.http.rootRedirectUrl);
     }
   });
 
@@ -80,15 +80,13 @@ redisListener.subscribe(PREFIX, (err) => {
 
     if (!handler) {
       console.warn('Bad handler!', req.params);
-      res.status(404).send();
-      return;
+      return res.redirect(config.http.rootRedirectUrl);
     }
 
     if (Number(new Date()) > handler.exp) {
       console.warn('expiring!', req.params);
       delete registered.get[req.params.id];
-      res.status(404).send();
-      return;
+      return res.redirect(config.http.rootRedirectUrl);
     }
 
     if (renderCache[req.params.id]) {
@@ -140,8 +138,12 @@ redisListener.subscribe(PREFIX, (err) => {
       res.send(body);
     } catch (err) {
       console.error(err);
-      res.status(500).send(JSON.stringify(err));
+      res.redirect(config.http.rootRedirectUrl);
     }
+  });
+
+  app.get('/', async (req, res) => {
+    res.redirect(config.http.rootRedirectUrl);
   });
 
   app.listen(config.http.port, (err, addr) => {

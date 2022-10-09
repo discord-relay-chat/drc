@@ -23,8 +23,8 @@ function f (context) {
       .filter((fk) => fk.indexOf('_') !== 0)
       .sort()
       .map((fk) =>
-        reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk
-      ).join(', ');
+        '• ' + (reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk)
+      ).join('\n');
     const toSendEmbed = new MessageEmbed()
       .setTitle('Command Listing')
       .setDescription('**Bolded** have further help available via `!help [command]`.\n\n' +

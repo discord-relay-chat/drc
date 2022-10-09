@@ -142,7 +142,8 @@ const _config = {
     proto: 'https',
     fqdn: os.hostname(),
     ttlSecs: 30 * 60,
-    staticDir: HTTP_STATIC_DIR
+    staticDir: HTTP_STATIC_DIR,
+    rootRedirectUrl: 'https://discordrc.com'
   },
 
   capture: {

@@ -126,11 +126,16 @@ module.exports = async function (parsed, context) {
             }
 
             const ignoreList = await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork);
+            const mutedList = await userCommands('muted')({ redis: ignoreClient }, e.__drcNetwork);
             console.debug('ignoreList', e.nick, e.nick.replaceAll('\\', ''), ignoreList.includes(e.nick.replaceAll('\\', '')));
+            console.debug('mutedList', mutedList, e.nick, e.nick.replaceAll('\\', ''), mutedList.includes(e.nick.replaceAll('\\', '')));
 
-            if (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick.replaceAll('\\', ''))) {
+            let isMuted = false;
+            if ((isMuted = (mutedList && Array.isArray(mutedList) && mutedList.includes(e.nick.replaceAll('\\', '')))) ||
+              (ignoreList && Array.isArray(ignoreList) && ignoreList.includes(e.nick.replaceAll('\\', '')))) {
+              (isMuted ? console.log : console.debug)(`MUTED=${isMuted} ${e.nick} ${context.key}`);
               stats.messages.ignored++;
-              if (config.user.squelchIgnored) {
+              if (isMuted || config.user.squelchIgnored) {
                 (await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork, '_squelchMessage'))({ timestamp: new Date(), data: e });
                 return;
               } else {

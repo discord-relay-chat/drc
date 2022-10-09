@@ -41,10 +41,17 @@ const logsSearch = async (network, d, embed, aliases = []) => {
     nick: new Set()
   });
 
-  embed.addField('spoken in channels:', [...seenChannels].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
-  embed.addField('appeared as nicks:', [...uniqSearchRes.nick].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
-  embed.addField('connected with idents:', [...uniqSearchRes.ident].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
-  embed.addField('connected from hostnames:', [...uniqSearchRes.hostname].map(simpleEscapeForDiscord).join(', ').substring(0, 1023));
+  [
+    ['spoken in channels:', [...seenChannels].map(simpleEscapeForDiscord).join(', ').substring(0, 1023)],
+    ['appeared as nicks:', [...uniqSearchRes.nick].map(simpleEscapeForDiscord).join(', ').substring(0, 1023)],
+    ['connected with idents:', [...uniqSearchRes.ident].map(simpleEscapeForDiscord).join(', ').substring(0, 1023)],
+    ['connected from hostnames:', [...uniqSearchRes.hostname].map(simpleEscapeForDiscord).join(', ').substring(0, 1023)]
+  ]
+    .forEach(([title, renderedStr]) => {
+      if (renderedStr.length) {
+        embed.addField(title, renderedStr);
+      }
+    });
 };
 
 module.exports = async function (parsed, context) {
@@ -157,63 +164,8 @@ module.exports = async function (parsed, context) {
       }
     };
 
-    // this is *expensive*! should fix the persistence of these to make it not so, but i'm lazy...
-    /*
-    await scopedRedisClient(async (rc, pfx) => {
-      const __s = process.hrtime.bigint();
-      const hostAliases = [];
-      const p = `${pfx}:hosttrack:${network}`;
-      const checkUsers = await rc.keys(`${p}:*`);
-      for (const checkUser of checkUsers) {
-        const matchedHosts = (await Promise.all(
-          lookups.map(async (lu) => ([lu, lu && await rc.sismember(checkUser, lu)]))))
-          .filter(([, isMember]) => isMember);
-          // .reduce((a, [host, isMember]) => ( {[host]: isMember, ...a }), {});
-
-        if (matchedHosts.length) {
-          console.log(`matched hosts for ${checkUser}:`, matchedHosts);
-          hostAliases.push([checkUser.split(':').at(-1), matchedHosts]);
-        }
-      }
-      console.log('MATCHED HOSTS:', hostAliases);
-
-      const processed = {};
-      for (const [, hosts] of hostAliases) {
-        const foundHostNicks = [];
-        for (const [hostname] of hosts) {
-          const hostKeys = await rc.keys(`${pfx}:${network}:nicktrack:*@${hostname}:uniques`);
-          for (const hostKey of hostKeys) {
-            const [,,, identStr] = hostKey.split(':');
-            const rKey = [pfx, network, 'nicktrack', identStr, 'uniques'].join(':');
-            foundHostNicks.push([hostname, await rc.smembers(rKey)]);
-          }
-        }
-
-        const filteredFound = foundHostNicks.filter(Boolean);
-
-        if (filteredFound.length) {
-          console.log('filteredFound', filteredFound);
-
-          for (const [hostname, nicks] of filteredFound) {
-            if (!processed[hostname]) {
-              processed[hostname] = new Set();
-            }
-
-            nicks.forEach(nick => processed[hostname].add(nick));
-          }
-        }
-      }
-      console.log('PROCED', processed);
-
-      Object.entries(processed).forEach(([hostname, nicksSet]) => {
-        embed.addField(`Hostname \`${hostname}\` matches nicks:`, [...nicksSet].map(simpleEscapeForDiscord).join(', '));
-      });
-      hostMatchProcTime = Number(process.hrtime.bigint() - __s) / 1e9;
-      console.log(`Hostname matching took ${hostMatchProcTime}s`);
-    });
-    */
-
-    if (!['~user', '~quassel'].includes(d.ident) && d.ident.length > 2) {
+    const ignoreIdents = await userCommands('identsIgnored')(context, network);
+    if (!ignoreIdents.includes(d.ident) && d.ident.length > 2) {
       await addIdentToEmbed(ident, aliasesEmbed);
 
       lookupSet = new Set([...lookupSet].filter(x => Boolean(x)));
@@ -223,13 +175,13 @@ module.exports = async function (parsed, context) {
         .map(async (lookupHost) => Promise.all((await nickTracking.findUniqueIdents(network, lookupHost))
           .filter((i) => i !== ident)
           .map(async (uniqIdent) => addIdentToEmbed(uniqIdent, aliasesEmbed, lookupHost)))));
-    }
 
-    const logsEmbed = new MessageEmbed()
-      .setColor('#2c759c')
-      .setTitle(`On \`${network}\`, \`${d.nick}\` has...`);
-    await logsSearch(network, d, logsEmbed, [...aliases]);
-    moreEmbeds.push(logsEmbed);
+      const logsEmbed = new MessageEmbed()
+        .setColor('#2c759c')
+        .setTitle(`On \`${network}\`, \`${d.nick}\` has...`);
+      await logsSearch(network, d, logsEmbed, [...aliases]);
+      moreEmbeds.push(logsEmbed);
+    }
 
     const notes = await userCommands('notes')(Object.assign({
       options: parsed.data?.requestData?.options
@@ -241,7 +193,7 @@ module.exports = async function (parsed, context) {
       moreEmbeds.push(notesEmbed);
       notesEmbed.setDescription(notes.reduce((a, note) => {
         if (typeof note === 'string') {
-          a += `• ${note}`;
+          a += `• ${note}\n`;
         }
         return a;
       }, ''));
