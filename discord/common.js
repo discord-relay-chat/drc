@@ -6,7 +6,6 @@ const path = require('path');
 const { hrtime } = require('process');
 const { spawn } = require('child_process');
 const config = require('config');
-const Redis = require('ioredis');
 const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
@@ -485,8 +484,7 @@ module.exports = {
     }
 
     const ak = aliveKey(network, chanId);
-    const r = new Redis(config.redis.url);
-    const curTtl = await r.ttl(aliveKey(network, chanId));
+    const curTtl = await scopedRedisClient((rc) => rc.ttl(aliveKey(network, chanId)));
 
     if (curTtl === -1) {
       // this key has been set to persist forever, so don't tickle the expiry!

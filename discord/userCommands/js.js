@@ -7,10 +7,24 @@ const { PREFIX, scopedRedisClient } = require('../../util');
 
 const RKEY = `${PREFIX}:jssaved`;
 
+const AllowedGlobals = ['Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt', 'Infinity', 'NaN', 'undefined',
+  'Boolean', 'String', 'Symbol', 'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError', 'RangeError',
+  'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer',
+  'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array',
+  'Uint8ClampedArray', 'BigUint64Array', 'BigInt64Array', 'DataView', 'Map', 'BigInt', 'Set', 'WeakMap', 'WeakSet',
+  'Proxy', 'Reflect', 'FinalizationRegistry', 'WeakRef', 'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent',
+  'escape', 'unescape', 'isFinite', 'isNaN', 'Buffer', 'atob', 'btoa', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder',
+  'clearInterval', 'clearTimeout', 'setInterval', 'setTimeout', 'queueMicrotask', 'performance', 'clearImmediate', 'setImmediate',
+  'SharedArrayBuffer', 'Atomics', 'buffer', 'constants', 'crypto', 'dgram', 'dns', 'domain', 'fs', 'http', 'http2', 'https',
+  'net', 'os', 'path', 'querystring', 'readline', 'stream', 'string_decoder', 'timers', 'tls', 'url', 'zlib', 'util']
+  .reduce((a, x) => ({ [x]: global[x], ...a }), {});
+
 async function _run (context, runStr) {
   try {
     console.log(`runStr> ${runStr}`);
     let res = vm.runInNewContext(runStr, {
+      ...context,
+      ...AllowedGlobals,
       logger,
       config,
       PREFIX,
@@ -18,12 +32,12 @@ async function _run (context, runStr) {
       util: require('../../util'),
       src: scopedRedisClient,
       stbc: context.sendToBotChan,
-      setTimeout,
       console: {
+        debug: context.sendToBotChan,
         log: context.sendToBotChan,
+        warn: context.sendToBotChan,
         error: context.sendToBotChan
-      },
-      ...context
+      }
     });
 
     let wasAwaited = false;

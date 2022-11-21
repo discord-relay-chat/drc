@@ -67,13 +67,18 @@ resolver.__functions = {
       console.log('listAll', context.network, `${prefix}:notes_${context.network}_*`);
       const netList = await client.keys(`${prefix}:notes_${context.network}_*`);
       console.log(`got list of ${netList.length}`);
-      return 'Full list of notes:\n\n• ' + netList.map(x => simpleEscapeForDiscord(x.split(':')[1].split('_').slice(2).join('_'))).join('\n• ');
+      return 'Full list of notes:\n\n• ' + netList.sort().map(x => simpleEscapeForDiscord(x.split(':')[1].split('_').slice(2).join('_'))).join('\n• ');
     })
   }, false),
 
   aliveChecks: generateListManagementUCExport('aliveChecks', {
     listAllNetworks: () => scopedRedisClient(async (client, PREFIX) =>
       (await client.keys(`${PREFIX}:aliveChecks:*`)).map(x => x.split(':')).map(x => x.pop()))
+  }),
+
+  siteChecks: generateListManagementUCExport('siteChecks', {
+    listAllNetworks: () => scopedRedisClient(async (client, PREFIX) =>
+      (await client.keys(`${PREFIX}:siteChecks:*`)).map(x => x.split(':')).map(x => x.pop()))
   }),
 
   killmenow: () => process.exit(-1),

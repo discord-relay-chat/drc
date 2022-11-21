@@ -763,9 +763,16 @@ function expiryFromOptions (options) {
 
 async function scopedRedisClient (scopeCb) {
   const scopeClient = new Redis(config.redis.url);
-  const retVal = await scopeCb(scopeClient, PREFIX);
-  await scopeClient.disconnect();
-  return retVal;
+
+  try {
+    return await scopeCb(scopeClient, PREFIX);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    scopeClient.disconnect();
+  }
+
+  return null;
 }
 
 function isObjPathExtant (obj, path) {

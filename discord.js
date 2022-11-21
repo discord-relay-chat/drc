@@ -99,14 +99,16 @@ let sendToBotChan = (...a) => console.error('sendToBotChan not initialized!', ..
 
 // SITE CHECK: MOVE THIS!
 async function siteCheck () {
-  if (config.siteCheck.sites.length <= 0) {
-    console.log('siteCheck: no sites configured, exiting immediately.');
-    return;
+  const { slow, fast } = config.siteCheck.frequencyMinutes;
+  const siteChecks = userCommands('siteChecks');
+
+  const networks = await siteChecks({}, 'listAllNetworks');
+  let slowQueue = [...config.siteCheck.sites];
+  for (const network of networks) {
+    const checks = await siteChecks({}, network);
+    slowQueue = slowQueue.concat(checks);
   }
 
-  const { slow, fast } = config.siteCheck.frequencyMinutes;
-
-  const slowQueue = [...config.siteCheck.sites];
   const fastQueue = [];
 
   const _msg = (msg, level = 'log') => {
@@ -144,7 +146,7 @@ async function siteCheck () {
     }
 
     if (q.length) {
-      console.info(`siteCheck[${freq}] q now (${q.length} elements): ${q.join(', ')}`);
+      console.info(`siteCheck freq=${freq}m queue (${q.length} elements): ${q.join(', ')}`);
     }
     setTimeout(loop.bind(null, freq, q, onSuccess, onFail), freq * 60 * 1000);
   }
@@ -186,6 +188,7 @@ async function alivenessCheck () {
     }
   }
 
+  ctx.redis.disconnect();
   setTimeout(alivenessCheck, 10 * 60 * 1000);
 }
 
