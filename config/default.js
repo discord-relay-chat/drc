@@ -13,6 +13,16 @@ const HTTP_STATIC_PATH_NAME = 'static';
 const MPM_PLOT_FILE_NAME = 'mpmplot.png';
 const HTTP_STATIC_DIR = path.join(PROJECT_DIR, 'http', HTTP_STATIC_PATH_NAME);
 
+const SECRET_KEYS = [
+  'discord.botId',
+  'discord.token',
+  'irc.registered',
+  'redis.url',
+  'shodan.apiKey',
+  'ipinfo.token',
+  'openai.secretKey'
+];
+
 function replace (obj, keys, replacement) {
   const result = _.cloneDeep(obj);
   if (!Array.isArray(keys)) {
@@ -27,6 +37,8 @@ function replace (obj, keys, replacement) {
 }
 
 const _config = {
+  _replace: replace,
+
   user: {
     autoCaptureOnMention: true,
     deleteDiscordWithEchoMessageOn: true,
@@ -169,15 +181,17 @@ const _config = {
     }
   },
 
+  openai: {
+    secretKey: null,
+    model: 'text-davinci-003',
+    temperature: 0.7,
+    maxTokens: 4000
+  },
+
+  _secretKeys: SECRET_KEYS,
+
   toJSON () {
-    return replace(this, [
-      'discord.botId',
-      'discord.token',
-      'irc.registered',
-      'redis.url',
-      'shodan.apiKey',
-      'ipinfo.token'
-    ], '*');
+    return replace(this, SECRET_KEYS, '*');
   }
 };
 
