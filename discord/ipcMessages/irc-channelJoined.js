@@ -166,8 +166,8 @@ module.exports = async function (parsed, context) {
               console.debug(fName, joined.channel, avatar, 'HOOKS??', hooks.size);
 
               if (hooks.size === 0) {
-                console.debug('create anew...', joined.channel);
-                hook = await msgChan.createWebhook(channelsById[joined.id].name, { avatar });
+                console.debug('create anew...', joined.id, joined.channel);
+                hook = await msgChan.createWebhook(joined.id, { avatar });
                 console.debug('create anew...!');
               } else {
                 hook = [...hooks.values()][0];
