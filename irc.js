@@ -8,7 +8,8 @@ const inq = require('inquirer');
 const Redis = require('ioredis');
 const sqlite3 = require('sqlite3');
 const redisClient = new Redis(config.redis.url);
-const { PREFIX, CTCPVersion, scopedRedisClient } = require('./util');
+const { PREFIX, CTCPVersion, scopedRedisClient, resolveNameForDiscord } = require('./util');
+const LiveNicks = require('./irc/liveNicks');
 let ipcMessageHandler = require('./irc/ipcMessage');
 let genEvHandler = require('./irc/genEvHandler');
 
@@ -96,6 +97,10 @@ async function connectIRCClient (connSpec) {
 
   ircClient.on('debug', console.debug);
   connSpec.version = CTCPVersion;
+  scopedRedisClient((client, pfx) => client.publish(pfx, JSON.stringify({
+    type: 'irc:connecting',
+    data: { network: connSpec.host }
+  })));
   ircClient.connect(connSpec);
   return regPromise;
 }
@@ -154,7 +159,14 @@ async function main () {
       haveJoinedChannels,
       children,
       allowsBotReconnect: () => allowsBotReconnect,
-      disconnectedBots
+      disconnectedBots,
+      createNewChanSpec: (name, id, parentId) => ({
+        name,
+        id,
+        parentId,
+        parent: parentId,
+        liveNicks: new LiveNicks()
+      })
     }, ...a);
   });
 
@@ -281,12 +293,61 @@ async function main () {
       });
     };
 
+    const channelUserModifyingEvents = ['quit', 'kick', 'join', 'part', 'nick'];
+    function adjustChannelUsersOnEvent (host, event, data) {
+      if (!channelUserModifyingEvents.includes(event)) {
+        return;
+      }
+
+      let { channel, nick } = data;
+      let chanSpec;
+
+      if (channel) {
+        channel = resolveNameForDiscord(host, channel);
+        const chanSpecs = specServers[host].channels.filter(x => x.name === channel);
+        if (chanSpecs.length > 1) {
+          console.error(`Duplicate channel specs found for ${host}/${channel}, full list:`, chanSpecs);
+        }
+
+        if (chanSpecs.length > 0) {
+          [chanSpec] = chanSpecs;
+        }
+      }
+
+      try {
+        if (event === 'join') {
+          chanSpec.liveNicks.add(nick);
+        } else if (['part', 'kick'].includes(event)) {
+          chanSpec.liveNicks.delete(nick);
+        } else if (event === 'quit') {
+          // have to find _all_ channels where `nick` was!
+          for (const { liveNicks } of specServers[host].channels) {
+            if (liveNicks.has(nick)) {
+              liveNicks.delete(nick);
+            }
+          }
+        } else if (event === 'nick') {
+          const { new_nick } = data; // eslint-disable-line camelcase
+          for (const { liveNicks } of specServers[host].channels) {
+            if (liveNicks.has(nick)) {
+              liveNicks.swap(nick, new_nick);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('adjustChannelUsersOnEvent event handling loop failed: no chanSpec for an event that needs it?');
+        console.error({ host, event, data, chanSpec });
+        console.error(e);
+      }
+    }
+
     ['quit', 'reconnecting', 'close', 'socket close', 'kick', 'ban', 'join',
       'unknown command', 'channel info', 'topic', 'part', 'invited', 'tagmsg',
       'ctcp response', 'ctcp request', 'wallops', 'nick', 'nick in use', 'nick invalid',
       'whois', 'whowas', 'motd', 'info', 'help', 'mode', 'loggedin', 'account']
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
+          adjustChannelUsersOnEvent(host, ev, data);
           return genEvHandler(host, ev, data, {
             logDataToFile
           });
@@ -297,7 +358,7 @@ async function main () {
       if (!disconnectedBots[host]) {
         delete specServers[host];
         disconnectedBots[host] = new Date();
-        console.log(`SOCKET CLOSED on ${host}!! WAITING FOR MOTD?`);
+        console.warn(`IRC socket closed on ${host}`);
 
         connectedIRC.bots[host].on('motd', () => {
           console.log(`IRC ${host} reconnected after ${new Date() - disconnectedBots[host]}`);

@@ -4,12 +4,11 @@ const config = require('config');
 const userCommands = require('../userCommands');
 const { senderNickFromMessage, messageIsFromAllowedSpeaker } = require('../common');
 
-function createArgObjOnContext (context, data, subaction) {
-  const network = context.channelsById[context.channelsById[data?.message.channelId].parent]?.name;
-  const tmplArr = [
-    network,
-    senderNickFromMessage(data?.message) // nick
-  ];
+function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
+  const tmplArr = [senderNickFromMessage(data?.message)];
+  if (!noNetworkFirstArg) {
+    tmplArr.unshift(context.channelsById[context.channelsById[data?.message.channelId].parent]?.name);
+  }
 
   if (subaction) {
     if (subaction === 'whois') {
@@ -42,6 +41,12 @@ async function muteAdd (context, data) {
 
 async function muteRemove (context, data) {
   return userCommands('muted')(context, ...createArgObjOnContext(context, data, 'remove'));
+}
+
+async function isUserHere (context, data) {
+  context.discordMessage = data.message;
+  context.isFromReaction = true;
+  return userCommands('isUserHere')(context, ...createArgObjOnContext(context, data, null, true));
 }
 
 async function makeNoteOfMessage (context, data) {
@@ -82,7 +87,10 @@ const allowedReactions = {
   '%F0%9F%94%95': muteAdd, // "🔕"
 
   '%F0%9F%94%8A': muteRemove, // "🔊"
-  '%F0%9F%94%89': muteRemove // "🔉"
+  '%F0%9F%94%89': muteRemove, // "🔉"
+
+  '%F0%9F%8F%A0': isUserHere, // "🏠"
+  '%F0%9F%8F%98%EF%B8%8F': isUserHere // "🏘️"
 };
 
 const reactionsToRemove = [];
@@ -113,8 +121,9 @@ const removeReactionInTime = (messageReaction) => {
 };
 
 module.exports = async (context, messageReaction, author, ...a) => {
-  console.debug('messageReactionAdd', ...a);
-  console.debug(messageReaction.client.messages);
+  console.debug('messageReactionAdd', a);
+  console.debug(author);
+  console.debug(messageReaction);
   const removeInTime = removeReactionInTime.bind(null, messageReaction);
   if (author.id === config.discord.botId) {
     return removeInTime();

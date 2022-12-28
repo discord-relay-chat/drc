@@ -6,6 +6,9 @@ const { PREFIX, NAME, VERSION, expiryFromOptions } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
 const mustache = require('mustache');
+const { nanoid } = require('nanoid');
+const { Readable } = require('stream');
+const { finished } = require('stream/promises');
 
 const app = require('fastify')({
   logger: true
@@ -46,6 +49,16 @@ process.on('SIGUSR1', () => {
 
 templatesLoad();
 
+function mkdirSyncIgnoreExist (dirPath) {
+  try {
+    fs.mkdirSync(dirPath);
+  } catch (e) {
+    if (e.code !== 'EEXIST') {
+      throw e;
+    }
+  }
+}
+
 redisListener.subscribe(PREFIX, (err) => {
   if (err) {
     throw err;
@@ -55,15 +68,26 @@ redisListener.subscribe(PREFIX, (err) => {
 
   const reqPubClient = new Redis(config.redis.url);
 
-  app.get('/static/:name', async (req, res) => {
-    try {
-      await fs.promises.mkdir(config.http.staticDir);
-    } catch (e) {
-      if (e.code !== 'EEXIST') {
-        console.error(e);
-      }
-    }
+  mkdirSyncIgnoreExist(config.http.staticDir);
 
+  if (config.http.attachmentsDir) {
+    const { attachmentsDir } = config.http;
+    mkdirSyncIgnoreExist(attachmentsDir);
+
+    app.get('/attachments/:name', async (req, res) => {
+      const attachmentPath = path.join(attachmentsDir, req.params.name);
+
+      try {
+        console.log(`serving ${attachmentPath}`);
+        return res.send(await fs.promises.readFile(attachmentPath));
+      } catch (e) {
+        console.error(`failed to send ${attachmentPath}:`, e);
+        return res.redirect(config.http.rootRedirectUrl);
+      }
+    });
+  }
+
+  app.get('/static/:name', async (req, res) => {
     const assetPath = path.join(config.http.staticDir, req.params.name);
 
     try {
@@ -195,6 +219,58 @@ redisListener.subscribe(PREFIX, (err) => {
             promise,
             ...rr
           };
+        } else if (subType === 'isHTTPRunningRequest' && type === 'discord') {
+          const { reqId } = parsed.data;
+          console.log('isHTTPRunningRequest reqId', reqId);
+          reqPubClient.publish(PREFIX, JSON.stringify({
+            type: 'http:isHTTPRunningResponse',
+            data: {
+              reqId,
+              listenAddr: addr,
+              fqdn: config.http.fqdn
+            }
+          }));
+        } else if (subType === 'cacheMessageAttachementRequest' && type === 'discord') {
+          const { attachmentURL } = parsed.data;
+          console.log('cacheMessageAttachement attachmentURL', attachmentURL);
+
+          const innerHandler = async () => {
+            const data = { attachmentURL, enabled: !!config.http.attachmentsDir, error: null };
+
+            if (data.enabled) {
+              try {
+                const { ext } = path.parse((new URL(attachmentURL)).pathname);
+                const fetchRes = await fetch(attachmentURL, { // eslint-disable-line no-undef
+                  headers: {
+                    Accept: '*/*'
+                  }
+                });
+
+                if (!fetchRes.ok) {
+                  throw new Error(fetchRes.statusText);
+                }
+
+                const newId = nanoid() + ext;
+                const outPath = path.join(config.http.attachmentsDir, newId);
+                const outStream = fs.createWriteStream(outPath);
+                await finished(Readable.fromWeb(fetchRes.body).pipe(outStream));
+                console.log(`Cached attachment ${newId} from source ${attachmentURL}`);
+                data.cachedURL = config.http.proto + '://' + config.http.fqdn + '/attachments/' + newId;
+              } catch (e) {
+                console.error(`Fetching or persisting ${attachmentURL} failed:`, e.message);
+                data.error = e.message;
+              }
+            }
+
+            return data;
+          };
+
+          innerHandler().then((data) => {
+            reqPubClient.publish(PREFIX, JSON.stringify({
+              type: 'http:cacheMessageAttachementResponse',
+              data
+            }));
+          });
         }
       } catch (e) {
         console.error(e);

@@ -211,8 +211,6 @@ module.exports = async function (parsed, context) {
     const txToProc = Number(new Date()) - parsed.data?.requestData?.txTs;
     const procTime = Number(process.hrtime.bigint() - whoisRespStart) / 1e9;
     const procTimeStr = `Roundtrip took ${(txToProc / 1e3).toFixed(2)} seconds & processing took ${procTime.toFixed(2)} seconds `;
-    // + `(${hostMatchProcTime.toFixed(2)}, Δ${(procTime - hostMatchProcTime).toFixed(2)})`;
-    console.log(procTimeStr);
     embed.setFooter(procTimeStr);
   }
 

@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm install
 COPY logger.js .
 COPY util.js .
+COPY config.js .
 COPY config/default.js ./config/
 COPY config/local-prod.json ./config/
 COPY config/channelXforms-prod.json ./config/

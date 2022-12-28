@@ -104,8 +104,6 @@ async function f (context) {
           return [tPfx, nextVal.toLocaleString()];
         }));
     }));
-
-    console.log('realCounts', realCounts);
   } catch (e) {
     console.error('bad realCounts!', e);
   }

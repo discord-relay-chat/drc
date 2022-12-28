@@ -20,6 +20,6 @@ module.exports = async function (parsed, context) {
     msgChan: client.channels.cache.get(chanSpec.id)
   };
 
-  console.log('USER LIST!!', parsed.data, discName, chanSpec);
+  console.debug('USER LIST!!', parsed.data, discName, chanSpec);
   await runOneTimeHandlers(parsed.data.channel.name);
 };

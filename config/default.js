@@ -12,6 +12,7 @@ const PROJECT_DIR = path.resolve(path.join(__dirname, '..'));
 const HTTP_STATIC_PATH_NAME = 'static';
 const MPM_PLOT_FILE_NAME = 'mpmplot.png';
 const HTTP_STATIC_DIR = path.join(PROJECT_DIR, 'http', HTTP_STATIC_PATH_NAME);
+const HTTP_ATTACHMENTS_DIR = path.join(PROJECT_DIR, 'http', 'attachments');
 
 const SECRET_KEYS = [
   'discord.botId',
@@ -64,6 +65,7 @@ const _config = {
       path: process.env?.DRC_LOG_PATH || './logs'
     },
     allowedSpeakers: [],
+    allowedSpeakersRoleId: null,
     timeout: 30,
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
@@ -79,7 +81,8 @@ const _config = {
           ready: '#aaeeaa',
           ipcReconnect: '#99ff99',
           privMsg: '#bc04fb',
-          networkJoined: '#22aaaa'
+          networkJoined: '#22ff88',
+          nickIsGone: '#ff0011'
         }
       },
       MPM_PLOT_FILE_NAME,
@@ -155,6 +158,7 @@ const _config = {
     fqdn: os.hostname(),
     ttlSecs: 30 * 60,
     staticDir: HTTP_STATIC_DIR,
+    attachmentsDir: HTTP_ATTACHMENTS_DIR,
     rootRedirectUrl: 'https://discordrc.com'
   },
 

@@ -1,6 +1,6 @@
 function lastParamsElementOrPassthru (s) {
   if (s.params) {
-    return s.params.slice(-1);
+    return s.params.slice(-1).join(' ');
   }
 
   return s;
@@ -14,6 +14,10 @@ function concatLastTwoParamsElementOrPassthru (s) {
   return s;
 }
 
+function allButFirstParams (s) {
+  return s.params.slice(1).join(' ');
+}
+
 module.exports = {
   1: {
     name: 'RPL_WELCOME',
@@ -25,7 +29,7 @@ module.exports = {
   },
   4: {
     name: 'RPL_MYINFO',
-    parse: (s) => s.params ? s.params.slice(1, 3) : s
+    parse: (s) => s.params ? s.params.slice(1, 3).join(' ') : s
   },
   250: {
     name: 'RPL_STATSCONN',
@@ -33,14 +37,11 @@ module.exports = {
   },
   251: {
     name: 'RPL_LUSEROP',
-    parse: (s) => {
-      console.log(`WTF IS RPL_LUSEROP? ${JSON.stringify(s)}`, s);
-      return s;
-    }
+    parse: allButFirstParams
   },
   252: {
     name: 'RPL_LUSERCLIENT',
-    parse: lastParamsElementOrPassthru
+    parse: allButFirstParams
   },
   253: {
     name: 'RPL_LUSERUNKNOWN',

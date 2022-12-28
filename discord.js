@@ -1,7 +1,7 @@
 'use strict';
 
 const inq = require('inquirer');
-const config = require('config');
+const config = require('./config');
 const crypto = require('crypto');
 const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
 const Redis = require('ioredis');
@@ -19,6 +19,7 @@ require('./logger')('discord');
 const INTENTS = [
   Intents.FLAGS.GUILDS,
   Intents.FLAGS.GUILD_MESSAGES,
+  Intents.FLAGS.GUILD_MEMBERS,
   Intents.FLAGS.DIRECT_MESSAGES,
   Intents.FLAGS.GUILD_MESSAGE_REACTIONS
 ];
@@ -79,6 +80,10 @@ function registerOneTimeHandler (event, discriminator, handlerFunc) {
   discrimObj[discriminator].push(handlerFunc);
 }
 
+function removeOneTimeHandler (event, discriminator) {
+  return delete oneTimeMsgHandlers[event][discriminator];
+}
+
 const channelMessageHandlers = {};
 function registerChannelMessageHandler (channelId, handler) {
   channelMessageHandlers[channelId] = handler;
@@ -93,7 +98,13 @@ function registerButtonHandler (buttonId, handlerFunc) {
   buttonHandlers[buttonId].push(handlerFunc);
 }
 
-const allowedSpeakersMentionString = (s = ['[', ']']) => s[0] + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + s[1];
+const allowedSpeakersMentionString = (s = ['[', ']']) => {
+  if (!config.app.allowedSpeakers.length) {
+    return '';
+  }
+
+  return s[0] + config.app.allowedSpeakers.map(x => `<@${x}>`).join(' ') + s[1];
+};
 
 let sendToBotChan = (...a) => console.error('sendToBotChan not initialized!', ...a);
 
@@ -223,6 +234,7 @@ const formatForAllowedSpeakerResponse = (s, raw = false) =>
     ? s
     : (s instanceof MessageEmbed ? { embeds: [s] } : s));
 
+let clientOnSigint = () => {};
 client.once('ready', async () => {
   console.log('Ready!');
 
@@ -235,18 +247,28 @@ client.once('ready', async () => {
     client.user.setActivity('nothing! (I\'m offline!)', { type: 'LISTENING' });
   };
 
-  process.on('exit', () => {
-    console.log('beforeExit!');
-    onExit('Exit!');
-  });
-
-  process.on('SIGINT', () => {
-    console.log('Exiting...');
-    onExit('Bye!');
-    setInterval(process.exit, 2000);
-  });
+  clientOnSigint = () => onExit('Bye!');
 
   const chanCache = client.channels.cache.values();
+
+  try {
+    if (config.app.allowedSpeakersRoleId) {
+      const guild = await client.guilds.fetch(config.discord.guildId);
+      await guild.members.fetch();
+      const role = await guild.roles.fetch(config.app.allowedSpeakersRoleId);
+
+      if (!role) {
+        throw new Error(`Role ${config.app.allowedSpeakersRoleId} doesn't exist!`);
+      }
+
+      const allowedSpeakerIds = [...role.members.map(u => u.id)];
+      if (config.app.allowedSpeakersMerge(allowedSpeakerIds)) {
+        console.log(`Added ${allowedSpeakerIds.length} users to allowed speakers group from role ${config.app.allowedSpeakersRoleId}`);
+      }
+    }
+  } catch (e) {
+    console.error('allowedSpeakersRoleId handling: ', e);
+  }
 
   // first pass to build channelsById & categories
   for (const chan of chanCache) {
@@ -276,10 +298,9 @@ client.once('ready', async () => {
     }
   }
 
-  console.log('READY STRUCTS');
-  console.log('channelsById', channelsById);
-  console.log('categoriesByName', categoriesByName);
-  // console.debug('categories', channelsById)
+  console.debug('READY STRUCTS');
+  console.debug('channelsById', channelsById);
+  console.debug('categoriesByName', categoriesByName);
 
   if (config.irc.quitMsgChanId) {
     const __sendToBotChan = async (s, raw = false) => {
@@ -355,7 +376,7 @@ client.once('ready', async () => {
           const funcs = trimContent
             .split('|>')
             .map((s) => s.trim())
-            .map((content) => allowedSpeakerCommandHandler.bind(null, { content }, toChanId));
+            .map((content) => allowedSpeakerCommandHandler.bind(null, Object.assign({}, data, { content }), toChanId));
 
           // serialize
           for (const f of funcs) {
@@ -396,11 +417,6 @@ client.once('ready', async () => {
         try {
           const cmdFunc = userCommands(command);
 
-          if (!cmdFunc) {
-            console.warn('user comand not found! (silent to the user)', command, ...args);
-            return;
-          }
-
           const publish = async (publishObj) => redis.publish(PREFIX, JSON.stringify(publishObj));
           const argObj = yargs(args).help(false).exitProcess(false).argv;
           console.log('Command args:', args, ' parsed into ', argObj);
@@ -439,6 +455,12 @@ client.once('ready', async () => {
             };
           }
 
+          if (!cmdFunc) {
+            console.warn('user comand not found!', command, ...args);
+            localSender(`\`${command}\` is not a valid DRC user command. Run \`!help\` to see all available commands.`);
+            return;
+          }
+
           const result = await cmdFunc({
             stats,
             redis,
@@ -447,6 +469,7 @@ client.once('ready', async () => {
             argObj,
             options: argObj, // much better name! use this from now on...
             registerOneTimeHandler,
+            removeOneTimeHandler,
             createGuildChannel,
             registerChannelMessageHandler,
             registerButtonHandler,
@@ -456,7 +479,8 @@ client.once('ready', async () => {
             channelsById,
             categoriesByName,
             toChanId,
-            getDiscordChannelById: (id) => client.channels.cache.get(id)
+            getDiscordChannelById: (id) => client.channels.cache.get(id),
+            discordMessage: data
           }, ...args);
 
           console.log(`Exec'ed user command ${command} with args [${args.join(', ')}]`, argObj, '-->', result);
@@ -510,6 +534,7 @@ client.once('ready', async () => {
     buttonHandlers,
     registerButtonHandler,
     registerOneTimeHandler,
+    removeOneTimeHandler,
     publish: async (publishObj) => redisClient.publish(PREFIX, JSON.stringify(publishObj))
   };
 
@@ -636,6 +661,7 @@ client.once('ready', async () => {
             registerButtonHandler(buttonId, async (interaction) => {
               const logs = await userCommands('logs')({
                 registerOneTimeHandler,
+                removeOneTimeHandler,
                 sendToBotChan,
                 channelsById,
                 network,
@@ -833,15 +859,17 @@ client.once('ready', async () => {
         for (const hfunc of oneTimeMsgHandlers[type][discrim]) {
           await hfunc(data);
         }
+
+        delete oneTimeMsgHandlers[type][discrim];
+
+        if (!Object.keys(oneTimeMsgHandlers[type]).length) {
+          delete oneTimeMsgHandlers[type];
+        }
       } catch (e) {
         console.error(`OTH for ${type}/${discrim} failed!`, e);
       }
-
-      delete oneTimeMsgHandlers[type][discrim];
-
-      if (!Object.keys(oneTimeMsgHandlers[type]).length) {
-        delete oneTimeMsgHandlers[type];
-      }
+    } else {
+      console.error(`Expected one-time handler for type=${type} and discrim=${discrim}, but none were found! data=`, data);
     }
   };
 
@@ -886,6 +914,7 @@ client.once('ready', async () => {
         silent: true
       },
       registerOneTimeHandler,
+      removeOneTimeHandler,
       redis: redisClient,
       publish: (o) => redisClient.publish(PREFIX, JSON.stringify(o))
     });
@@ -901,6 +930,7 @@ client.once('ready', async () => {
             silent: true
           },
           registerOneTimeHandler,
+          removeOneTimeHandler,
           redis,
           publish: (o) => redis.publish(PREFIX, JSON.stringify(o))
         });
@@ -968,6 +998,13 @@ async function main () {
       message: `Enter token for bot with ID ${config.discord.botId}`
     })).token;
   }
+
+  process.on('SIGINT', () => {
+    console.log('Exiting...');
+    clientOnSigint();
+    process.on('exit', () => console.log('Done.'));
+    setTimeout(process.exit, 2000);
+  });
 
   client.login(token);
 }

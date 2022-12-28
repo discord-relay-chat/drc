@@ -6,15 +6,27 @@ const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord
 
 async function f (context, ...a) {
   const [netStub, chanId] = a;
-  const { network } = matchNetwork(netStub);
+  let network, channelName;
 
-  let channel = chanId;
-  const chanMatch = [...chanId.matchAll(CHANNELS_PATTERN)];
+  if (netStub && chanId) {
+    network = matchNetwork(netStub).network;
+    const chanMatch = [...chanId.matchAll(CHANNELS_PATTERN)];
 
-  if (chanMatch.length) {
-    channel = '#' + resolveNameForIRC(network, context.channelsById[chanMatch[0][1]].name);
+    if (chanMatch.length) {
+      channelName = context.channelsById[chanMatch[0][1]].name;
+    }
+  } else if (context.discordMessage) {
+    const chanObj = context.channelsById[context.discordMessage.channelId];
+    network = context.channelsById[chanObj?.parent]?.name ?? null;
+    channelName = chanObj?.name;
   }
 
+  if (!network || !channelName) {
+    return `Unable to determine network ("${network}") or channel ("${channelName}")`;
+  }
+
+  console.log(network, channelName);
+  const channel = '#' + resolveNameForIRC(network, channelName);
   context.registerOneTimeHandler('irc:responseUserList', channel, async (data) => {
     const { channel: { name, users }, network } = data;
 

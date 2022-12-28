@@ -37,7 +37,7 @@ function initialize (processName = process.title, overrideConsole = true, onlyTo
 
       const dstrArr = [
         new Date(),
-        '[' + (config.app.log.addNameVerPrefix ? `${APP_NAMEVER}/${level}` : level) + ']',
+        '[' + (config.app.log.addNameVerPrefix || process.env.DRC_LOG_ADD_NAME ? `${APP_NAMEVER}/${level}` : level) + ']',
         ...a
       ];
 

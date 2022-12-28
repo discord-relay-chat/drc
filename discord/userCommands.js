@@ -4,7 +4,15 @@ const path = require('path');
 const uuid = require('uuid');
 const { nanoid } = require('nanoid');
 const { PREFIX, AmbiguousMatchResultError, matchNetwork, scopedRedisClient } = require('../util');
-const { dynRequireFrom, generateListManagementUCExport, generatePerChanListManagementUCExport, simpleEscapeForDiscord, clearSquelched, digest } = require('./common');
+const {
+  dynRequireFrom,
+  generateListManagementUCExport,
+  generatePerChanListManagementUCExport,
+  simpleEscapeForDiscord,
+  clearSquelched,
+  digest,
+  isHTTPRunning
+} = require('./common');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
@@ -139,6 +147,16 @@ resolver.__functions = {
     const [network, minutes] = context.argObj._;
     context.argObj._ = [network, 'digest', minutes];
     return resolver('logs')(context);
+  },
+
+  isHTTPRunning: async (context) => {
+    const res = await isHTTPRunning(context.registerOneTimeHandler, context.removeOneTimeHandler);
+    let resStr = 'No.';
+    if (res) {
+      const { listenAddr, fqdn } = res;
+      resStr = `Yes, on \`${listenAddr}\` internally and as \`${fqdn}\` externally.`;
+    }
+    context.sendToBotChan(resStr);
   }
 };
 

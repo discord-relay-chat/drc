@@ -82,14 +82,22 @@ module.exports = async (context, _channel, msg) => {
       return await runOneTimeHandlers(parsed.data);
     }
 
-    // console.log('RESOLVE!?', parsed.type, !!ipcMessageHandlers[parsed.type], Object.keys(ipcMessageHandlers));
     if (ipcMessageHandlers[parsed.type]) {
       // 'return await' to ensure we catch anything here rather than bubbling up
       return await ipcMessageHandlers[parsed.type](parsed, { runOneTimeHandlers, serialize, ...context });
     }
 
     await (async function () {
-      if (type === 'http' && subType === 'get-req' && subSubType) {
+      if (type === 'http' && subType === 'cacheMessageAttachementResponse') {
+        runOneTimeHandlers(parsed.data.attachmentURL);
+      } else if (type === 'http' && subType === 'isHTTPRunningResponse') {
+        runOneTimeHandlers(parsed.data.reqId);
+      } else if (type === 'irc' && subType === 'nickInChanResponse') {
+        // ._orig.nick used instead of just .nick because the latter will have been
+        // run through simpleEscapeForDiscord and may have been altered from the string
+        // that will match correctly in runOneTimeHandlers()
+        runOneTimeHandlers([parsed.data._orig.nick, parsed.data.channel, parsed.data.network].join('_'));
+      } else if (type === 'http' && subType === 'get-req' && subSubType) {
         runOneTimeHandlers(subSubType);
       } else if (type === 'irc' && subType === 'responseJoinChannel') {
         runOneTimeHandlers(parsed.data.name);
@@ -101,6 +109,8 @@ module.exports = async (context, _channel, msg) => {
         isIrcConnected = true;
         console.debug('IRC is ready!', parsed.data);
         (ircReady.resolve || ircReadyHandler)(parsed.data);
+      } else if (parsed.type === 'irc:connecting') {
+        sendToBotChan(`**Connecting to** \`${parsed.data.network}\`...`);
       } else if (parsed.type === 'irc:joined') {
         const embed = new MessageEmbed()
           .setColor(config.app.stats.embedColors.irc.networkJoined)
@@ -117,7 +127,7 @@ module.exports = async (context, _channel, msg) => {
         }
       } else if (parsed.type === 'irc:exit' || parsed.type === 'irc:socket_close' || parsed.type === 'irc:reconnecting') {
         if (isIrcConnected) {
-          sendToBotChan(`Lost IRC connection to **${parsed?.data.__drcNetwork}** at **${new Date()}**! (\`${parsed.type}\`)`);
+          sendToBotChan(`Lost IRC connection to **${parsed?.data?.__drcNetwork}** at **${new Date()}**! (\`${parsed.type}\`)`);
         }
 
         if (parsed.type === 'irc:reconnecting') {
@@ -230,8 +240,7 @@ module.exports = async (context, _channel, msg) => {
           parsed.data.params[0] === config.irc.registered[parsed.data.__drcNetwork].user.nick) {
           const numCmd = Number(parsed.data.command);
           if (numerics[numCmd]) {
-            const numSpec = numerics[numCmd];
-            sendToBotChan('`IRC:' + numSpec.name + '` on ' + `\`${parsed.data.hostname || parsed.data.__drcNetwork}\`:\n>>> ${numSpec.parse(parsed.data)}`);
+            sendToBotChan(`_${parsed.data.hostname || parsed.data.__drcNetwork}_> ` + numerics[numCmd].parse(parsed.data));
           } else {
             sendToBotChan('`IRC:UNK` on ' + `\`${parsed.data.hostname || parsed.data.__drcNetwork}\` (_command number ${parsed.data.command}_):` + '\n```\n' + parsed.data.params.slice(1).join('\n') + '\n```');
           }
@@ -250,7 +259,13 @@ module.exports = async (context, _channel, msg) => {
           'http:get-res:',
           'discord:requestWhois:irc',
           'discord:requestUserList:irc',
-          'discord:requestSay:irc'
+          'discord:requestSay:irc',
+          'discord:nickInChanReq',
+          'discord:channels',
+          'discord:deleteChannel',
+          'discord:requestJoinChannel:irc',
+          'discord:isHTTPRunningRequest',
+          'discord:cacheMessageAttachementRequest'
         ];
 
         if (allowUnhandled.some((x) => parsed.type.indexOf(x) === 0)) {

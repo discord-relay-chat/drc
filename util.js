@@ -43,6 +43,7 @@ class JsonMapper {
     if (!this._options.redisBacked) {
       this._ioops = {
         read: async () => fs.promises.readFile(this.path),
+        readSync: () => fs.readFileSync(this.path),
         write: async (data) => fs.promises.writeFile(this.path, JSON.stringify(data))
       };
     } else {
@@ -89,6 +90,11 @@ class JsonMapper {
 
   async _load () {
     this.cache = JSON.parse(await this._ioops.read());
+    this._initialized = true;
+  }
+
+  _loadSync () {
+    this.cache = JSON.parse(this._ioops.readSync());
     this._initialized = true;
   }
 
@@ -148,14 +154,13 @@ const PrivmsgMappings = new JsonMapper(config.irc.privmsgMappingsPath, 'PrivmsgM
 });
 
 function resolveNameForIRC (network, name) {
-  ChannelXforms._load();
+  ChannelXforms._loadSync();
   const xforms = ChannelXforms.cache[network];
-  console.debug('resolveNameForIRC', network, name, xforms);
   return (xforms && xforms[name]) || name;
 }
 
 function resolveNameForDiscord (network, ircName) {
-  ChannelXforms._load();
+  ChannelXforms._loadSync();
   if (!resolverRev) {
     resolverRev = Object.entries(ChannelXforms.cache).reduce((a, [network, nEnt]) => {
       return { [network]: Object.entries(nEnt).reduce((b, [k, v]) => ({ [v]: k, ...b }), {}), ...a };
@@ -443,14 +448,12 @@ function getLogsSetup (network, channel, { from, to, format = 'json', filterByNi
       let parsed = parseDate(x);
 
       if (parsed) {
-        console.log(`[parseDate] time "${x}" parsed to "${parsed}" (${Number(parsed)})`);
         return Number(parsed);
       }
 
       parsed = parseDuration(x);
 
       if (parsed) {
-        console.log(`[parseDuration] time "${x}" parsed to ${parsed} -> ${new Date(Number(new Date()) + parsed)} (${Number(new Date()) + parsed})`);
         return Number(new Date()) + parsed;
       }
 

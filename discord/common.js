@@ -10,7 +10,26 @@ const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
-// this and ^servePage should be refactored together, they're very similar
+async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutSeconds = 2) {
+  const reqId = nanoid();
+  const retProm = new Promise((resolve) => {
+    const timeoutHandle = setTimeout(() => resolve(null), timeoutSeconds * 1000);
+    regOTHandler('http:isHTTPRunningResponse', reqId, async (data) => {
+      clearTimeout(timeoutHandle);
+      rmOTHandler('http:isHTTPRunningResponse', reqId);
+      resolve(data);
+    });
+  });
+
+  await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
+    type: 'discord:isHTTPRunningRequest',
+    data: { reqId }
+  })));
+
+  return retProm;
+}
+
+// this and servePage should be refactored together, they're very similar
 async function serveMessages (context, data, opts = {}) {
   const name = nanoid();
 
@@ -183,6 +202,11 @@ function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
 
 const discordEscapeRx = /([*_`])/g;
 function simpleEscapeForDiscord (s) {
+  if (s.indexOf('\\') !== -1) {
+    // assume any escape in `s` means it has already been escaped
+    return s;
+  }
+
   let lastIndex = 0;
   let accum = '';
 
@@ -199,7 +223,7 @@ function simpleEscapeForDiscord (s) {
   }
 
   if (s !== accum) {
-    console.debug(`escapeForDiscord "${s}" -> "${accum}"`);
+    console.debug(`simpleEscapeForDiscord "${s}" -> "${accum}"`);
   }
 
   return accum;
@@ -209,7 +233,6 @@ function simpleEscapeForDiscord (s) {
 function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false, keySubstitute = null) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
-    console.debug('generateListManagementUCExport', commandName, ...a);
 
     if (!netStub) {
       return `Not enough arguments! Usage: \`${commandName} [networkStub] [command] (args...)\``;
@@ -353,6 +376,23 @@ module.exports = {
   simpleEscapeForDiscord,
   generateListManagementUCExport,
 
+  async isNickInChan (nick, channel, network, regOTHandler) {
+    const retProm = new Promise((resolve) => {
+      regOTHandler('irc:nickInChanResponse', [nick, channel, network].join('_'), async (data) => resolve(data));
+    });
+
+    await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
+      type: 'discord:nickInChanReq',
+      data: {
+        nick,
+        channel,
+        network
+      }
+    })));
+
+    return retProm;
+  },
+
   senderNickFromMessage (msgObj) {
     // message was sent via our username-interposing webhooks, so we can extract the nick directly
     if (msgObj?.author.bot && msgObj?.author.discriminator === '0000') {
@@ -437,6 +477,25 @@ module.exports = {
       await rClient.set(fullKey, JSON.stringify({ __drcMsgId: msgId, ...msgObj }));
       return { msgId, msgKey };
     });
+  },
+
+  isHTTPRunning,
+
+  async cacheMessageAttachment (context, attachmentURL) {
+    if (!(await isHTTPRunning(context.registerOneTimeHandler, context.removeOneTimeHandler))) {
+      return;
+    }
+
+    const retProm = new Promise((resolve) => {
+      context.registerOneTimeHandler('http:cacheMessageAttachementResponse', attachmentURL, async (data) => resolve(data));
+    });
+
+    await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
+      type: 'discord:cacheMessageAttachementRequest',
+      data: { attachmentURL }
+    })));
+
+    return retProm;
   },
 
   formatKVsWithOpts,
