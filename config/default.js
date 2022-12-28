@@ -153,6 +153,7 @@ const _config = {
   },
 
   http: {
+    enabled: false,
     port: 4242,
     proto: 'https',
     fqdn: os.hostname(),
