@@ -3,6 +3,7 @@
 const config = require('config');
 const userCommands = require('../userCommands');
 const { messageIsFromAllowedSpeaker, createArgObjOnContext } = require('../common');
+const { makeNoteOfMessage } = require('../interactionsCommon');
 
 async function whois (context, data) {
   return userCommands('whois')(context, ...createArgObjOnContext(context, data, 'whois'));
@@ -28,24 +29,6 @@ async function isUserHere (context, data) {
   context.discordMessage = data.message;
   context.isFromReaction = true;
   return userCommands('isUserHere')(context, ...createArgObjOnContext(context, data, null, true));
-}
-
-async function makeNoteOfMessage (context, data) {
-  console.debug('makeNoteOfMessage');
-  if (!data?.message?.content) {
-    console.error('Bad data for makeNoteOfMessage:', data);
-    return;
-  }
-  let args = createArgObjOnContext(context, data);
-  const msg = `"${data?.message?.content}"` +
-    ` (captured in **${args[0]}/#${context.channelsById[data?.message?.channelId].name}**` +
-    ` at _${new Date(data?.message?.createdTimestamp).toDRCString()}_)`;
-  args = [...args, 'add', msg];
-  console.debug(args);
-  console.debug(msg);
-  context.options = { _: args };
-  context.argObj._ = args;
-  return userCommands('notes')(context, ...args);
 }
 
 const allowedReactions = {

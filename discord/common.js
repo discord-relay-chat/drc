@@ -22,25 +22,33 @@ function senderNickFromMessage (msgObj) {
 
 function contextMenuHandlerCommonInitial (context, ...a) {
   const [interaction] = a;
-  const { message } = interaction?.options.get('message');
+  const message = interaction?.options.get('message')?.message;
   const senderNick = senderNickFromMessage(message);
   return { interaction, message, senderNick };
 }
 
-async function contextMenuCommonHandler (innerHandler, context, ...a) {
+async function _contextMenuCommonHandler (ephemeral, innerHandler, context, ...a) {
   const { interaction, message, senderNick } = contextMenuHandlerCommonInitial(context, ...a);
   let replyEmbed = new MessageEmbed()
     .setTitle('Unable to determine IRC nickname from that message. Sorry!')
     .setTimestamp();
 
-  if (senderNick) {
+  if (message && senderNick) {
     replyEmbed = await innerHandler({ interaction, message, senderNick });
   }
 
   interaction.reply({
     embeds: [replyEmbed],
-    ephemeral: true
+    ephemeral
   }).catch(console.error);
+}
+
+async function contextMenuCommonHandlerNonEphemeral (innerHandler, context, ...a) {
+  return _contextMenuCommonHandler(false, innerHandler, context, ...a);
+}
+
+async function contextMenuCommonHandler (innerHandler, context, ...a) {
+  return _contextMenuCommonHandler(true, innerHandler, context, ...a);
 }
 
 function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
@@ -436,6 +444,7 @@ module.exports = {
   createArgObjOnContext,
   senderNickFromMessage,
   contextMenuCommonHandler,
+  contextMenuCommonHandlerNonEphemeral,
 
   async isNickInChan (nick, channel, network, regOTHandler) {
     const retProm = new Promise((resolve) => {
