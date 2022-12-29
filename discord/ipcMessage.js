@@ -84,7 +84,12 @@ module.exports = async (context, _channel, msg) => {
 
     if (ipcMessageHandlers[parsed.type]) {
       // 'return await' to ensure we catch anything here rather than bubbling up
-      return await ipcMessageHandlers[parsed.type](parsed, { runOneTimeHandlers, serialize, ...context });
+      return await ipcMessageHandlers[parsed.type](parsed, {
+        // allow missing handlers here
+        runOneTimeHandlers: (discrim) => runOneTimeHandlers(discrim, true),
+        serialize,
+        ...context
+      });
     }
 
     await (async function () {

@@ -4,7 +4,7 @@ const { shodanHostLookup, matchNetwork, scopedRedisClient } = require('../../uti
 const { PREFIX } = require('../../util');
 
 module.exports = async function (context, ...a) {
-  if (a.length < 2) {
+  if (context.argObj._.length < 2) {
     throw new Error('not enough args');
   }
 
@@ -14,11 +14,11 @@ module.exports = async function (context, ...a) {
 
   // for when '!whois' is issued from a normal channel, rather than as a reaction
   // (which already adds channel ID to the `a` array in messageReactionAdd.js)
-  if (context.toChanId && a.length === 2) {
-    a.push(context.toChanId);
+  if (context.toChanId && context.argObj._.length === 2) {
+    context.argObj._.push(context.toChanId);
   }
 
-  const [netStub, nick, channel] = a;
+  const [netStub, nick, channel] = context.argObj._;
   const { network } = matchNetwork(netStub);
 
   const reqObj = {
@@ -43,7 +43,9 @@ module.exports = async function (context, ...a) {
   }
 
   if (reqObj.data.options?.shodan) {
+    console.log('REG SHODAN?', `${network}_${nick}`);
     context.registerOneTimeHandler('irc:responseWhois:full', `${network}_${nick}`, async (data) => {
+      console.log('POP SHODAN!', `${network}_${nick}`, data);
       await scopedRedisClient(async (r) => r.publish(PREFIX, JSON.stringify({
         type: 'discord:shodan:host',
         data: await shodanHostLookup(data.hostname)

@@ -8,7 +8,59 @@ const { spawn } = require('child_process');
 const config = require('config');
 const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
-const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
+const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
+
+function senderNickFromMessage (msgObj) {
+  // message was sent via our username-interposing webhooks, so we can extract the nick directly
+  if (msgObj?.author.bot && msgObj?.author.discriminator === '0000') {
+    console.debug('senderNickFromMessage IS A IRC USER INTERPOSED ->', msgObj?.author.username);
+    return msgObj?.author.username;
+  }
+
+  console.debug('senderNickFromMessage MISSED', msgObj);
+}
+
+function contextMenuHandlerCommonInitial (context, ...a) {
+  const [interaction] = a;
+  const { message } = interaction?.options.get('message');
+  const senderNick = senderNickFromMessage(message);
+  return { interaction, message, senderNick };
+}
+
+async function contextMenuCommonHandler (innerHandler, context, ...a) {
+  const { interaction, message, senderNick } = contextMenuHandlerCommonInitial(context, ...a);
+  let replyEmbed = new MessageEmbed()
+    .setTitle('Unable to determine IRC nickname from that message. Sorry!')
+    .setTimestamp();
+
+  if (senderNick) {
+    replyEmbed = await innerHandler({ interaction, message, senderNick });
+  }
+
+  interaction.reply({
+    embeds: [replyEmbed],
+    ephemeral: true
+  }).catch(console.error);
+}
+
+function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
+  const tmplArr = [senderNickFromMessage(data?.message)];
+  if (!noNetworkFirstArg) {
+    tmplArr.unshift(context.channelsById[context.channelsById[data?.message.channelId].parent]?.name);
+  }
+
+  if (subaction) {
+    if (subaction === 'whois') {
+      tmplArr.push(data?.message.channelId); // discord channel ID for response
+    } else {
+      tmplArr.splice(1, 0, subaction);
+    }
+  }
+
+  context.argObj = { _: tmplArr };
+  console.debug('createArgObjOnContext', context.argObj);
+  return tmplArr;
+}
 
 async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutSeconds = 2) {
   const reqId = nanoid();
@@ -163,7 +215,7 @@ async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHo
   return null;
 }
 
-function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
+function dynRequireFrom (dir, addedCb, opts = { pathReplace: null, dontAttachHelpers: false }) {
   const paths = {};
   const retObj = fs.readdirSync(dir).reduce((a, dirEnt) => {
     const fPath = path.resolve(path.join(dir, dirEnt));
@@ -189,19 +241,25 @@ function dynRequireFrom (dir, addedCb, opts = { pathReplace: null }) {
     return a;
   }, {});
 
-  retObj.__resolver = (name) => require.cache[require.resolve(paths[name])];
-  retObj.__refresh = () => {
-    Object.values(paths).forEach((modPath) => {
-      delete require.cache[require.resolve(modPath)];
-      require(require.resolve(modPath));
-    });
-  };
+  if (!opts.dontAttachHelpers) {
+    retObj.__resolver = (name) => require.cache[require.resolve(paths[name])];
+    retObj.__refresh = () => {
+      Object.values(paths).forEach((modPath) => {
+        delete require.cache[require.resolve(modPath)];
+        require(require.resolve(modPath));
+      });
+    };
+  }
 
   return retObj;
 }
 
 const discordEscapeRx = /([*_`])/g;
 function simpleEscapeForDiscord (s) {
+  if (typeof (s) !== 'string' || s.length === 0) {
+    return s;
+  }
+
   if (s.indexOf('\\') !== -1) {
     // assume any escape in `s` means it has already been escaped
     return s;
@@ -375,6 +433,9 @@ module.exports = {
   dynRequireFrom,
   simpleEscapeForDiscord,
   generateListManagementUCExport,
+  createArgObjOnContext,
+  senderNickFromMessage,
+  contextMenuCommonHandler,
 
   async isNickInChan (nick, channel, network, regOTHandler) {
     const retProm = new Promise((resolve) => {
@@ -391,16 +452,6 @@ module.exports = {
     })));
 
     return retProm;
-  },
-
-  senderNickFromMessage (msgObj) {
-    // message was sent via our username-interposing webhooks, so we can extract the nick directly
-    if (msgObj?.author.bot && msgObj?.author.discriminator === '0000') {
-      console.debug('senderNickFromMessage IS A IRC USER INTERPOSED ->', msgObj?.author.username);
-      return msgObj?.author.username;
-    }
-
-    console.debug('senderNickFromMessage MISSED', msgObj);
   },
 
   messageIsFromAllowedSpeaker (data, { sendToBotChan = () => {} }) {

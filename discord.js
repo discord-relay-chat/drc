@@ -6,13 +6,14 @@ const crypto = require('crypto');
 const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
+const { fetch } = require('undici');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
 const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, scopedRedisClient } = require('./util');
 const userCommands = require('./discord/userCommands');
 const { formatKVs, aliveKey, ticklePmChanExpiry, plotMpmData } = require('./discord/common');
 const eventHandlers = require('./discord/events');
-const { fetch } = require('undici');
+const registerContextMenus = require('./discord/contextMenus');
 
 require('./logger')('discord');
 
@@ -852,7 +853,7 @@ client.once('ready', async () => {
     client.user.setStatus('online');
   };
 
-  const runOneTimeHandlersMatchingDiscriminator = async (type, data, discrim) => {
+  const runOneTimeHandlersMatchingDiscriminator = async (type, data, discrim, missingHandlerIsOk = false) => {
     console.debug('runOneTimeHandlersMatchingDiscriminator', type, discrim, data, oneTimeMsgHandlers);
     if (oneTimeMsgHandlers[type] && oneTimeMsgHandlers[type][discrim]) {
       try {
@@ -868,7 +869,7 @@ client.once('ready', async () => {
       } catch (e) {
         console.error(`OTH for ${type}/${discrim} failed!`, e);
       }
-    } else {
+    } else if (!missingHandlerIsOk) {
       console.error(`Expected one-time handler for type=${type} and discrim=${discrim}, but none were found! data=`, data);
     }
   };
@@ -1006,6 +1007,7 @@ async function main () {
     setTimeout(process.exit, 2000);
   });
 
+  registerContextMenus();
   client.login(token);
 }
 

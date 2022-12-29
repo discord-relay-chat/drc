@@ -2,26 +2,7 @@
 
 const config = require('config');
 const userCommands = require('../userCommands');
-const { senderNickFromMessage, messageIsFromAllowedSpeaker } = require('../common');
-
-function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
-  const tmplArr = [senderNickFromMessage(data?.message)];
-  if (!noNetworkFirstArg) {
-    tmplArr.unshift(context.channelsById[context.channelsById[data?.message.channelId].parent]?.name);
-  }
-
-  if (subaction) {
-    if (subaction === 'whois') {
-      tmplArr.push(data?.message.channelId); // discord channel ID for response
-    } else {
-      tmplArr.splice(1, 0, subaction);
-    }
-  }
-
-  context.argObj = { _: tmplArr };
-  console.debug('createArgObjOnContext', context.argObj);
-  return tmplArr;
-}
+const { messageIsFromAllowedSpeaker, createArgObjOnContext } = require('../common');
 
 async function whois (context, data) {
   return userCommands('whois')(context, ...createArgObjOnContext(context, data, 'whois'));

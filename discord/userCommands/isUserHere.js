@@ -1,6 +1,6 @@
 const config = require('../../config');
 const { resolveNameForIRC } = require('../../util');
-const { isNickInChan } = require('../common');
+const { isNickInChan, simpleEscapeForDiscord } = require('../common');
 
 module.exports = async (context, ...a) => {
   const message = context?.discordMessage;
@@ -22,19 +22,23 @@ module.exports = async (context, ...a) => {
       const ircChanName = '#' + resolveNameForIRC(parentNetworkName, chanObj?.name);
       const { nickInChan, newNick } = await isNickInChan(userNick, chanObj?.name, parentNetworkName, context.registerOneTimeHandler);
       console.log(userNick, 'in ', ircChanName, '/', parentNetworkName, '? -->', { nickInChan, newNick });
-      let retStr = `No, **${userNick}** is not in \`${ircChanName}\` on \`${parentNetworkName}\``;
+      const [nickEsc, newEsc] = [userNick, newNick].map(simpleEscapeForDiscord);
+      let retStr = `No, **${nickEsc}** is not in \`${ircChanName}\` on \`${parentNetworkName}\``;
+
       if (nickInChan || newNick) {
-        retStr = `Yes, **${userNick}** is in \`${ircChanName}\` on \`${parentNetworkName}\``;
+        retStr = `Yes, **${nickEsc}** is in \`${ircChanName}\` on \`${parentNetworkName}\``;
         if (newNick) {
-          retStr += `, but they've since changed their nickname to **${newNick}**`;
+          retStr += `, but they've since changed their nickname to **${newEsc}**`;
         }
       }
+
       if (context?.isFromReaction) {
         // why is this being removed after a time too?!
         // also really just need to figure out how to send the text to the channel
         // after a reaction, because cannot inform the user about a newNick with only emojis! :facepalm:
         message?.react(nickInChan ? '👍' : '👎');
       }
+
       return retStr + '.';
     }
   }
