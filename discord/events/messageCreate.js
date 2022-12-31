@@ -110,17 +110,17 @@ module.exports = async (context, data) => {
   let emitThis = true;
 
   if (replyNick) {
-    console.log('Ghost nick check for', replyNick, 'in', channel, network.name);
+    console.debug('Ghost nick check for', replyNick, 'in', channel, network.name);
     const nicRes = await isNickInChan(replyNick, channel.name, network.name, context.registerOneTimeHandler);
-    console.log('Ghost nick check result:', nicRes);
+    console.debug('Ghost nick check result:', nicRes);
 
-    replyNick = simpleEscapeForDiscord(replyNick);
+    const discReplyNick = simpleEscapeForDiscord(replyNick);
     emitThis = nicRes.nickInChan || nicRes.newNick;
     if (!emitThis) {
-      const desc = `**${replyNick}** is no longer in this channel.\n\n` +
+      const desc = `**${discReplyNick}** is no longer in this channel.\n\n` +
       'Your message to them (reproduced below) was _not_ sent.';
       const embed = new MessageEmbed()
-        .setTitle(`${replyNick} is gone!`)
+        .setTitle(`${discReplyNick} is gone!`)
         .setDescription(desc)
         .setColor(config.app.stats.embedColors.irc.nickIsGone);
       embed.addField('Message content:', '> ' + data.content);
@@ -133,7 +133,7 @@ module.exports = async (context, data) => {
           embeds: [new MessageEmbed()
             .setTitle('Reply target adjustment:')
             .setDescription(
-              `\nNickname **${replyNick}** was changed to **${nicRes.newNick}**.\n\n` +
+              `\nNickname **${discReplyNick}** was changed to **${nicRes.newNick}**.\n\n` +
               'The target of your reply to them was adjusted accordingly.'
             )
             .setColor(config.app.stats.embedColors.irc.nickIsGone)]
