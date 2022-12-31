@@ -93,6 +93,10 @@ const _config = {
   },
 
   discord: {
+    // options are
+    // 'replace' (replace IRC nick with Discord ASers)
+    // 'bracket' (turns into: IRCNick[DiscordASers])
+    allowedSpeakersHighlightType: 'replace',
     privMsgChannelStalenessTimeMinutes: 720,
     privMsgChannelStalenessRemovalAlert: 0.1, // remaining of privMsgChannelStalenessTimeMinutes
     privMsgCategoryId: null,

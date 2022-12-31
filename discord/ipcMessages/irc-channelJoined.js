@@ -117,10 +117,14 @@ module.exports = async function (parsed, context) {
             const netNick = config.irc.registered[e.__drcNetwork].user.nick;
             let mentionIdx = e.message.search(new RegExp(netNick, 'i'));
             if (mentionIdx !== -1) {
-              mentionIdx += netNick.length;
-              e.message = e.message.substring(0, mentionIdx) +
-                allowedSpeakersMentionString() +
-                e.message.substring(mentionIdx);
+              if (config.discord.allowedSpeakersHighlightType === 'bracket') {
+                mentionIdx += netNick.length;
+                e.message = e.message.substring(0, mentionIdx) +
+                  allowedSpeakersMentionString() +
+                  e.message.substring(mentionIdx);
+              } else if (config.discord.allowedSpeakersHighlightType === 'replace') {
+                e.message = e.message.replace(netNick, allowedSpeakersMentionString(['', '']));
+              }
 
               await persistMsgWithAutoCapture('mention');
             }
