@@ -2,7 +2,7 @@
 
 const config = require('config');
 const Redis = require('ioredis');
-const { spawn } = require('child_process');
+const { spawn } = require('../spawn');
 const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient, resolveNameForDiscord } = require('../util');
 const LiveNicks = require('./liveNicks');
 

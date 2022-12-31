@@ -141,6 +141,9 @@ async function digest (context, ...a) {
   }
 }
 
+// this still doesn't work when containerized - even with the host daemon - because of the need
+// to write files, both a temporary one that the gnuplot executable can read and the output image
+// BUT i'm not removing it because I really want to fix it... someday...
 async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHours) {
   if (!config.app.stats.plotEnabled) {
     return;

@@ -19,7 +19,10 @@ module.exports = async (context, data) => {
     return removePmChan(network, id);
   }
 
-  if (!deletedBeforeJoin[name]) {
+  // not having a parent category is not an error but it does
+  // indicate that this isn't and IRC channel, and thus no deleteChannel
+  // message should be sent
+  if (!deletedBeforeJoin[name] && parentCat?.name) {
     await scopedRedisClient(async (c) => {
       await c.publish(PREFIX, JSON.stringify({
         type: 'discord:deleteChannel',
@@ -31,7 +34,10 @@ module.exports = async (context, data) => {
       }));
     });
   } else {
-    console.log(`Removed channel ${name} (ID: ${deletedBeforeJoin[name]}) before join`);
+    if (!deletedBeforeJoin[name]) {
+      console.log(`Removed channel ${name} (ID: ${deletedBeforeJoin[name]}) before join`);
+    }
+
     delete deletedBeforeJoin[name];
   }
 };

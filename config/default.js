@@ -193,6 +193,11 @@ const _config = {
     maxTokens: 4000
   },
 
+  hostDaemon: {
+    enabled: false,
+    whitelistedBinaries: ['nmap', 'df', 'uptime', 'who', 'gnuplot', 'sudo', 'zork']
+  },
+
   _secretKeys: SECRET_KEYS,
 
   toJSON () {

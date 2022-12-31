@@ -1,5 +1,5 @@
 const config = require('config');
-const { spawn } = require('child_process');
+const { spawn } = require('../../spawn');
 
 const active = {};
 
@@ -13,9 +13,18 @@ module.exports = async function (context, ...a) {
       const chanName = `zork-${newGameId}`;
 
       const proc = spawn('zork');
+      // this is required because of the await context.createGuildChannel() below, which
+      // will cause the event loop to iterate and spawn zork remotely (when enabled)
+      let beginGameData;
+      proc.stdout.on('data', (data) => (beginGameData = data));
+
       const channel = await context.createGuildChannel(chanName, {
         topic: `Zork game #${newGameId}, started ${new Date().toDRCString()} (PID: ${proc.pid})`
       });
+
+      if (beginGameData) {
+        await channel.send('```' + beginGameData + '```');
+      }
 
       const sendPaged = (prefix, d) => {
         const dStr = d.toString('utf8');
@@ -45,7 +54,7 @@ module.exports = async function (context, ...a) {
         proc
       };
 
-      return '#' + chanName;
+      return 'Your new Zork game has started in channel <#' + channel.id + '>. Enjoy!';
     }
   }
 

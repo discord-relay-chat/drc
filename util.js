@@ -48,7 +48,7 @@ class JsonMapper {
       };
     } else {
       const rkeyPostfix = `JsonMapper::${name}`;
-      console.log(`JsonMapper for ${name} created with redis backing ${rkeyPostfix}`);
+      console.debug(`JsonMapper for ${name} created with redis backing ${rkeyPostfix}`);
       this._ioops = {
         read: async () => scopedRedisClient((client, PREFIX) => client.get(`${PREFIX}:${rkeyPostfix}`)),
         write: async (data) => scopedRedisClient((client, PREFIX) => client.set(`${PREFIX}:${rkeyPostfix}`, JSON.stringify(data)))

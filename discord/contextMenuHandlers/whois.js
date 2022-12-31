@@ -5,7 +5,7 @@ const userCommands = require('../userCommands');
 const { contextMenuCommonHandler } = require('../common');
 
 module.exports = {
-  commandName: "Whois this user?",
+  commandName: 'Whois this user?',
   handler: async function (context, ...a) {
     return contextMenuCommonHandler(async ({ message, senderNick }) => {
       const parent = context.channelsById[context.channelsById[message?.channelId]?.parent]?.name;
