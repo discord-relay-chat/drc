@@ -92,6 +92,10 @@ const MessageHandlers = {
           console.error(`Spawned process PID ${drcPid} ERROR:`, eventParams);
         }
 
+        if (eventName === 'spawn') {
+          eventParams.push(process.pid);
+        }
+
         client.publish(PREFIX + HOST_SPAWNED_EVENT_CHAN_MID + drcPid + ':' + eventName,
           JSON.stringify({ eventName, eventParams }));
       });

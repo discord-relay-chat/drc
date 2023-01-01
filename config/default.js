@@ -55,7 +55,8 @@ const _config = {
     squelchReconnectChannelJoins: true,
     supressBotEmbeds: true,
     monospacePrivmsgs: false,
-    showAllModeChanges: false
+    showAllModeChanges: false,
+    destroyGameChannelsWhenDone: false
   },
 
   app: {
@@ -66,6 +67,10 @@ const _config = {
     },
     allowedSpeakers: [],
     allowedSpeakersRoleId: null,
+    // options are
+    // 'replace' (replace IRC nick with Discord ASers)
+    // 'bracket' (turns into: IRCNick[DiscordASers])
+    allowedSpeakersHighlightType: 'replace',
     timeout: 30,
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
@@ -93,10 +98,6 @@ const _config = {
   },
 
   discord: {
-    // options are
-    // 'replace' (replace IRC nick with Discord ASers)
-    // 'bracket' (turns into: IRCNick[DiscordASers])
-    allowedSpeakersHighlightType: 'replace',
     privMsgChannelStalenessTimeMinutes: 720,
     privMsgChannelStalenessRemovalAlert: 0.1, // remaining of privMsgChannelStalenessTimeMinutes
     privMsgCategoryId: null,
@@ -199,7 +200,7 @@ const _config = {
 
   hostDaemon: {
     enabled: false,
-    whitelistedBinaries: ['nmap', 'df', 'uptime', 'who', 'gnuplot', 'sudo', 'zork']
+    whitelistedBinaries: ['nmap', 'df', 'uptime', 'who', 'gnuplot', 'sudo', 'zork', 'adventure']
   },
 
   _secretKeys: SECRET_KEYS,

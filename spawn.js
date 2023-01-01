@@ -62,6 +62,10 @@ class DRCChildProcess {
     return this.mainEventRegistrar.on(event, callback);
   }
 
+  disconnect () {
+    // need to define & send a "requestDisconnect" event!
+  }
+
   spawn () {
     setImmediate(() => {
       const client = new Redis(config.redis.url);
@@ -77,6 +81,12 @@ class DRCChildProcess {
     });
 
     return this;
+  }
+
+  get pid () {
+    // yeah this doesn't match child_process.ChildProcess semantics at all... or POSIX
+    // i checked and they'd never need (and fail) to be coerced to integers anywhere so :shrug:
+    return this.drcPid;
   }
 }
 
