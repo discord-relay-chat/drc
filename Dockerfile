@@ -6,12 +6,12 @@ COPY *.js .
 COPY config/default.js ./config/
 COPY config/local-prod.json ./config/
 COPY config/channelXforms-prod.json ./config/
+COPY http ./http/
 STOPSIGNAL SIGINT
 
 FROM base as http
 WORKDIR /usr/src/drc
 COPY http.js .
-COPY http ./http/
 ENV NODE_ENV=prod
 ENV DRC_LOG_PATH=/logs
 ENV TZ="America/Los_Angeles"

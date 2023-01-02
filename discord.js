@@ -418,6 +418,8 @@ client.once('ready', async () => {
         try {
           const cmdFunc = userCommands(command);
 
+          // this should be removed ASAP in favor of scopedRedisClient,
+          // but need to find all uses of it first...
           const publish = async (publishObj) => redis.publish(PREFIX, JSON.stringify(publishObj));
           const argObj = yargs(args).help(false).exitProcess(false).argv;
           console.log('Command args:', args, ' parsed into ', argObj);

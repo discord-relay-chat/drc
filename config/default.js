@@ -40,6 +40,7 @@ function replace (obj, keys, replacement) {
 const _config = {
   _replace: replace,
 
+  // stop adding stuff here until #24 is addressed!
   user: {
     autoCaptureOnMention: true,
     deleteDiscordWithEchoMessageOn: true,
@@ -63,7 +64,9 @@ const _config = {
     log: {
       level: 'info',
       addNameVerPrefix: false, // set this to 'true' if not using docker to deploy
-      path: process.env?.DRC_LOG_PATH || './logs'
+      path: process.env?.DRC_LOG_PATH || './logs',
+      // options are: html, json, jsonl
+      localQueryOutputFormat: 'html'
     },
     allowedSpeakers: [],
     allowedSpeakersRoleId: null,

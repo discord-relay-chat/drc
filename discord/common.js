@@ -9,6 +9,7 @@ const config = require('config');
 const { nanoid } = require('nanoid');
 const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
+const httpCommon = require('../http/common');
 
 function senderNickFromMessage (msgObj) {
   // message was sent via our username-interposing webhooks, so we can extract the nick directly
@@ -70,10 +71,10 @@ function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = fa
   return tmplArr;
 }
 
-async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutSeconds = 2) {
+async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutMs = 500) {
   const reqId = nanoid();
   const retProm = new Promise((resolve) => {
-    const timeoutHandle = setTimeout(() => resolve(null), timeoutSeconds * 1000);
+    const timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
     regOTHandler('http:isHTTPRunningResponse', reqId, async (data) => {
       clearTimeout(timeoutHandle);
       rmOTHandler('http:isHTTPRunningResponse', reqId);
@@ -89,8 +90,53 @@ async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutSeconds = 2) {
   return retProm;
 }
 
+const serveMessagesLocalFSOutputFormats = {
+  html: (data, network) => {
+    return httpCommon.renderTemplate('digest', { network, elements: data }).body;
+  },
+
+  json: (data) => JSON.stringify(data.reduce((a, {
+    timestamp, data: {
+      type, nick, ident, hostname, target, message, tags
+    }
+  }) => ([...a, {
+    timestampMs: timestamp, type, nick, ident, hostname, target, message, tags
+  }]), [])),
+
+  jsonl: (data) => data.reduce((a, {
+    timestamp, data: {
+      type, nick, ident, hostname, target, message, tags
+    }
+  }) => (a += JSON.stringify({
+    timestampMs: timestamp, type, nick, ident, hostname, target, message, tags
+  }) + '\n'), '')
+};
+
+async function serveMessagesLocalFS (context, data, opts = {}) {
+  const outpath = 'queries.out';
+  const { localQueryOutputFormat } = config.app.log;
+  const logPath = path.join(path.resolve(config.irc.log.path), outpath);
+
+  if (!fs.existsSync(logPath)) {
+    await fs.promises.mkdir(logPath);
+  }
+
+  const logname = `${context.network}_${new Date().toISOString()}`.replaceAll(':', '') +
+    '.' + localQueryOutputFormat;
+  const fname = path.join(logPath, logname);
+  await fs.promises.writeFile(fname,
+    serveMessagesLocalFSOutputFormats[localQueryOutputFormat](data, context.network));
+  console.log('Wrote', fname);
+  context.sendToBotChan(`**${data.length}** messages for \`${context.network}\` ` +
+    `written to **${logname}** in the logging \`${outpath}\` subdirectory.`);
+}
+
 // this and servePage should be refactored together, they're very similar
 async function serveMessages (context, data, opts = {}) {
+  if (!config.http.enabled || !(await isHTTPRunning(context.registerOneTimeHandler, context.removeOneTimeHandler))) {
+    return serveMessagesLocalFS(context, data, opts);
+  }
+
   const name = nanoid();
 
   if (!data.length) {
@@ -113,14 +159,14 @@ async function serveMessages (context, data, opts = {}) {
   const options = Object.assign(opts, context.options);
   delete options._;
 
-  await context.publish({
+  await scopedRedisClient((client, prefix) => client.publish(prefix, JSON.stringify({
     type: 'discord:createGetEndpoint',
     data: {
       name,
       renderType: 'digest',
       options
     }
-  });
+  })));
 
   const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
   context.sendToBotChan(`Digest of **${data.length}** messages for \`${context.network}\` ` +
@@ -436,7 +482,9 @@ function formatKVsWithOpts (obj, opts) {
   };
 
   const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
-  return Object.entries(obj).sort(sorter).map(([k, v]) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(v, k)}`).join('\n');
+  return Object.entries(obj).sort(sorter)
+    .filter(([k, v]) => typeof (v) !== 'function')
+    .map(([k, v]) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(v, k)}`).join('\n');
 }
 
 module.exports = {

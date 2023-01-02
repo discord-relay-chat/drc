@@ -2,13 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PREFIX, NAME, VERSION, expiryFromOptions } = require('./util');
+const { PREFIX, expiryFromOptions } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
 const mustache = require('mustache');
 const { nanoid } = require('nanoid');
 const { Readable } = require('stream');
 const { finished } = require('stream/promises');
+const { renderTemplate, templatesLoad, getTemplates } = require('./http/common');
 
 const app = require('fastify')({
   logger: true
@@ -28,26 +29,10 @@ const registered = {
 
 const renderCache = {};
 
-let templates;
-function templatesLoad () {
-  const templatePath = path.join(__dirname, 'http', 'templates');
-  templates = fs.readdirSync(templatePath).reduce((a, tmplPath) => {
-    const { name } = path.parse(tmplPath);
-    return {
-      [name]: () => fs.readFileSync(path.join(templatePath, tmplPath)).toString('utf8'),
-      ...a
-    };
-  }, {});
-
-  console.log(`Loaded templates: ${Object.keys(templates).join(', ')}`);
-}
-
 process.on('SIGUSR1', () => {
   console.log('SIGUSR1 received, reloading templates');
-  templatesLoad();
+  templatesLoad(true);
 });
-
-templatesLoad();
 
 function mkdirSyncIgnoreExist (dirPath) {
   try {
@@ -116,13 +101,7 @@ redisListener.subscribe(PREFIX, (err) => {
     if (renderCache[req.params.id]) {
       console.debug('using cached render obj for', req.params.id);
       const { renderType, renderObj } = renderCache[req.params.id];
-
-      if (req.query.json) {
-        res.send(renderObj);
-      } else {
-        res.type('text/html; charset=utf-8').send(mustache.render(templates[renderType](), renderObj));
-      }
-
+      res.type('text/html; charset=utf-8').send(mustache.render(getTemplates()[renderType](), renderObj));
       return;
     }
 
@@ -131,34 +110,10 @@ redisListener.subscribe(PREFIX, (err) => {
       const type = ['http', 'get-req', name].join(':');
 
       await reqPubClient.publish(PREFIX, JSON.stringify({ type }));
-      let body = await handler.promise;
-
-      if (body.elements) {
-        // this shouldn't be here! probably...
-        body.elements.forEach((ele) => {
-          if (ele.timestamp) {
-            ele.timestampString = new Date(ele.timestamp).toDRCString();
-          }
-        });
-      }
-
-      const renderObj = {
-        NAME,
-        VERSION,
-        captureTimestamp: new Date().toDRCString(),
-        documentExpiresAt: (new Date(handler.exp)).toDRCString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        ...body
-      };
+      const { body, renderObj } = renderTemplate(renderType, (await handler.promise), handler.exp);
 
       renderCache[req.params.id] = { renderType, renderObj };
-
-      if (!req.query.json && renderType && templates[renderType]) {
-        console.debug('Rendering', renderObj);
-        body = mustache.render(templates[renderType](), renderObj);
-        res.type('text/html; charset=utf-8');
-      }
-
+      res.type('text/html; charset=utf-8');
       res.send(body);
     } catch (err) {
       console.error(err);

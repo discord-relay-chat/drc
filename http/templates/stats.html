@@ -88,10 +88,12 @@
     
     <br/><br/><br/>
 
-    This document was generated at <b>{{ captureTimestamp }}</b>
-    by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a><br/>&amp;
+    This document was generated at {{ captureTimestamp }} 
+    by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+    {{#documentExpiresAt}}
+    &amp;
     will self-destruct at <b>{{ documentExpiresAt }}</b>
-    <br/><br/>
-    (all times in {{ timezone }}).
+    {{/documentExpiresAt}}
+    ({{ timezone }}).
   </body>
 </html>
