@@ -2,7 +2,7 @@
 
 const Redis = require('ioredis');
 const config = require('./config');
-const { PREFIX, scopedRedisClient } = require('./util');
+const { PREFIX, scopedRedisClient, isXRunning, isXRunningRequestListener } = require('./util');
 const { spawn } = require('child_process');
 
 require('./logger')('host');
@@ -157,6 +157,16 @@ async function main () {
   process.on('SIGHUP', sigHandler);
 
   await scopedRedisClient(async (client, prefix) => {
+    const isRunningListener = await isXRunningRequestListener('Host', async (data) => {
+      const { reqId } = data;
+      console.log('isHostRunningRequest reqId', reqId);
+      await scopedRedisClient(async (innerClient) =>
+        innerClient.publish(prefix, JSON.stringify({
+          type: 'http:isHostRunningResponse',
+          data: { reqId }
+        })));
+    });
+
     const channel = prefix + HOST_REQUEST_CHANNEL_SUFFIX;
     client.subscribe(channel, (err) => {
       if (err) {
@@ -169,6 +179,7 @@ async function main () {
 
     console.log(`Listening on channel "${channel}"...`);
     const signal = await sigProm;
+    isRunningListener.disconnect();
     console.log(`Ended with signal ${signal}`);
 
     Object.keys(RunningProcesses).forEach((drcPid) => {
@@ -186,6 +197,8 @@ if (require.main === module) {
     RemoteEventListener,
 
     HOST_REQUEST_CHANNEL_SUFFIX,
-    HOST_SPAWNED_EVENT_CHAN_MID
+    HOST_SPAWNED_EVENT_CHAN_MID,
+
+    isHostRunning: isXRunning.bind(null, 'Host')
   };
 }

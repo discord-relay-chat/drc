@@ -97,6 +97,8 @@ module.exports = async (context, _channel, msg) => {
         runOneTimeHandlers(parsed.data.attachmentURL);
       } else if (type === 'http' && subType === 'isHTTPRunningResponse') {
         runOneTimeHandlers(parsed.data.reqId);
+      } else if (type === 'http' && subType === 'isHostRunningResponse') {
+        runOneTimeHandlers(parsed.data.reqId);
       } else if (type === 'irc' && subType === 'nickInChanResponse') {
         // ._orig.nick used instead of just .nick because the latter will have been
         // run through simpleEscapeForDiscord and may have been altered from the string

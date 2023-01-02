@@ -166,6 +166,10 @@ async function f (context) {
     logsSizeInMB: logsSizeInBytes / 1024 / 1024
   };
 
+  if (context.options.returnCalcResults) {
+    return stats;
+  }
+
   if (!context.options.silent && !context.options.reload) {
     const serveOpts = {
       mpmPlotFqdn: config.app.stats.getMpmPlotFqdn(),
@@ -177,50 +181,12 @@ async function f (context) {
     const files = [];
     const embed = new MessageEmbed()
       .setColor(config.app.stats.embedColors.main)
-      .setTitle('Runtime Stats')
+      .setTitle('System Statistics')
       .setURL(`https://${config.http.fqdn}/${name}`);
 
     if (config.app.stats.plotEnabled) {
       embed.setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
       files.append(new MessageAttachment(serveOpts.mpmPlotFqdn));
-    }
-
-    if (stats.errors > 0) {
-      embed.addField('Bot ERRORS', `${stats.errors}`);
-    }
-
-    if (stats.irc.errors > 0) {
-      embed.addField('IRC ERRORS', `${stats.irc.errors}`);
-    }
-
-    const ksMiss = Number(stats.redis.stats.keyspace_misses);
-    const ksHit = Number(stats.redis.stats.keyspace_hits);
-
-    embed
-      .addFields(
-        { name: 'Bot uptime', value: stats.lastCalcs.uptimeFormatted, inline: true },
-        {
-          name: 'IRC uptime',
-          value: stats.irc.uptime + (stats.irc?.discordReconnects ? `\n(${stats.irc?.discordReconnects} bot reconnects)` : ''),
-          inline: true
-        },
-        { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true }
-      );
-
-    if (context.options.long) {
-      embed.addFields(
-        { name: 'Memory available', value: stats.lastCalcs.memoryAvailablePercent + '%', inline: true },
-        { name: 'Load averages', value: stats.sinceLast.loadavg.join(', '), inline: true },
-        { name: 'Log size', value: `${Number(stats.lastCalcs.logsSizeInMB).toLocaleString(undefined, { maximumFractionDigits: 2 })}MB`, inline: true },
-        { name: 'Redis clients', value: stats.redis.clients.connected_clients.toString(), inline: true },
-        {
-          name: 'Redis memory (used/rss/peak)',
-          value: `${stats.redis.memory.used_memory_human.toString()} / ` +
-          `${stats.redis.memory.used_memory_rss_human.toString()} / ${stats.redis.memory.used_memory_peak_human.toString()}`,
-          inline: true
-        },
-        { name: 'Redis CHR', value: Number(ksMiss / (ksMiss + ksHit)).toFixed(4).toString(), inline: true }
-      );
     }
 
     embed

@@ -12,6 +12,7 @@ const shodan = require('shodan-client');
 const parseDuration = require('parse-duration');
 const { parseDate } = require('chrono-node');
 const sqlite3 = require('sqlite3');
+const { nanoid } = require('nanoid');
 
 const PKGJSON = JSON.parse(fs.readFileSync('package.json'));
 const VERSION = PKGJSON.version;
@@ -28,6 +29,52 @@ let resolverRev;
 Date.prototype.toDRCString = function () { // eslint-disable-line no-extend-native
   return this.toString().replace(/\sGMT.*/, '');
 };
+
+async function isXRunning (xName, context, timeoutMs = 500) {
+  const { registerOneTimeHandler, removeOneTimeHandler } = context;
+  const reqId = nanoid();
+  const keyPrefix = `is${xName}Running`;
+  const retProm = new Promise((resolve) => {
+    const timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
+    const respName = `http:${keyPrefix}Response`; // xxx: "http" here is no longer correct for "X"!
+    registerOneTimeHandler(respName, reqId, async (data) => {
+      clearTimeout(timeoutHandle);
+      removeOneTimeHandler(respName, reqId);
+      resolve(data);
+    });
+  });
+
+  await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
+    type: `discord:${keyPrefix}Request`, // xxx: "http" here is no longer correct for "X"!
+    data: { reqId }
+  })));
+
+  return retProm;
+}
+
+async function isXRunningRequestListener (xName, messageCallback) {
+  const client = new Redis(config.redis.url);
+  const reqKey = `discord:is${xName}RunningRequest`; // xxx: "discord" here is no longer correct for "X"!
+
+  await client.subscribe(PREFIX, (err) => {
+    if (err) {
+      throw err;
+    }
+
+    client.on('message', async (_chan, msg) => {
+      try {
+        const { type, data } = JSON.parse(msg);
+        if (type === reqKey) {
+          await messageCallback(data);
+        }
+      } catch (e) {
+        console.warn(`isXRunningRequestListener(${xName}) malformed message:`, e, msg);
+      }
+    });
+  });
+
+  return client;
+}
 
 class JsonMapper {
   constructor (path, name, { createOnNotFound = true, createNetworksOnNotFound = false, redisBacked = false } = {}) {
@@ -833,6 +880,8 @@ module.exports = {
   expiryDurationFromOptions,
   scopedRedisClient,
   isObjPathExtant,
+  isXRunning,
+  isXRunningRequestListener,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

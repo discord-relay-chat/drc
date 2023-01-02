@@ -7,7 +7,7 @@ const { hrtime } = require('process');
 const { spawn } = require('child_process');
 const config = require('config');
 const { nanoid } = require('nanoid');
-const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient } = require('../util');
+const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient, isXRunning } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
 const httpCommon = require('../http/common');
 
@@ -72,22 +72,7 @@ function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = fa
 }
 
 async function isHTTPRunning (regOTHandler, rmOTHandler, timeoutMs = 500) {
-  const reqId = nanoid();
-  const retProm = new Promise((resolve) => {
-    const timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
-    regOTHandler('http:isHTTPRunningResponse', reqId, async (data) => {
-      clearTimeout(timeoutHandle);
-      rmOTHandler('http:isHTTPRunningResponse', reqId);
-      resolve(data);
-    });
-  });
-
-  await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
-    type: 'discord:isHTTPRunningRequest',
-    data: { reqId }
-  })));
-
-  return retProm;
+  return isXRunning('HTTP', { registerOneTimeHandler: regOTHandler, removeOneTimeHandler: rmOTHandler }, timeoutMs);
 }
 
 const serveMessagesLocalFSOutputFormats = {
