@@ -36,7 +36,7 @@ async function isXRunning (xName, context, timeoutMs = 500) {
   const keyPrefix = `is${xName}Running`;
   const retProm = new Promise((resolve) => {
     const timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
-    const respName = `http:${keyPrefix}Response`; // xxx: "http" here is no longer correct for "X"!
+    const respName = `isXRunning:${keyPrefix}Response`;
     registerOneTimeHandler(respName, reqId, async (data) => {
       clearTimeout(timeoutHandle);
       removeOneTimeHandler(respName, reqId);
@@ -45,7 +45,7 @@ async function isXRunning (xName, context, timeoutMs = 500) {
   });
 
   await scopedRedisClient(async (client, prefix) => client.publish(prefix, JSON.stringify({
-    type: `discord:${keyPrefix}Request`, // xxx: "http" here is no longer correct for "X"!
+    type: `isXRunning:${keyPrefix}Request`,
     data: { reqId }
   })));
 
@@ -54,7 +54,7 @@ async function isXRunning (xName, context, timeoutMs = 500) {
 
 async function isXRunningRequestListener (xName, messageCallback) {
   const client = new Redis(config.redis.url);
-  const reqKey = `discord:is${xName}RunningRequest`; // xxx: "discord" here is no longer correct for "X"!
+  const reqKey = `isXRunning:is${xName}RunningRequest`;
 
   await client.subscribe(PREFIX, (err) => {
     if (err) {
@@ -804,10 +804,16 @@ function xxd (buffer, { rowWidth = 32, returnRawLines = false } = {}) {
 }
 
 function expiryDurationFromOptions (options) {
+  if (options?.ttl === -1) {
+    return null;
+  }
   return (options.ttl ? options.ttl * 60 : config.http.ttlSecs) * 1000;
 }
 
 function expiryFromOptions (options) {
+  if (options?.ttl === -1) {
+    return null;
+  }
   return Number(new Date()) + expiryDurationFromOptions(options);
 }
 
@@ -840,6 +846,10 @@ function isObjPathExtant (obj, path) {
   }
 
   return !path.length ? obj : null;
+}
+
+function fqUrlFromPath (path) {
+  return `${config.http.proto}://${config.http.fqdn}/${path}`;
 }
 
 module.exports = {
@@ -882,6 +892,7 @@ module.exports = {
   isObjPathExtant,
   isXRunning,
   isXRunningRequestListener,
+  fqUrlFromPath,
 
   AmbiguousMatchResultError,
   NetworkNotMatchedError

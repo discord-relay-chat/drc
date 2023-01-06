@@ -2,8 +2,7 @@
 
 const config = require('config');
 const { matchNetwork, ChannelXforms, expiryDurationFromOptions } = require('../../util');
-const { formatKVs, servePage } = require('../common');
-const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
+const { formatKVs, servePage, convertDiscordChannelsToIRCInString } = require('../common');
 const { nanoid } = require('nanoid');
 
 async function formattedGet (network) {
@@ -18,11 +17,7 @@ const subCommands = {
   get: async (context, network) => formattedGet(network),
 
   set: async (context, network, dChan, iChan) => {
-    if (iChan.match(CHANNELS_PATTERN)) {
-      const [chanMatch, channelId] = [...iChan.matchAll(CHANNELS_PATTERN)][0];
-      iChan = iChan.replace(chanMatch, '#' + context.getDiscordChannelById(channelId).name);
-    }
-
+    iChan = convertDiscordChannelsToIRCInString(iChan, context);
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));
     return formattedGet(network);
   },

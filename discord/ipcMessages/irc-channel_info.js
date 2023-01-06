@@ -6,9 +6,14 @@ module.exports = async function (parsed, context) {
   const network = parsed.data.__drcNetwork;
   delete parsed.data.__drcNetwork;
   delete parsed.data._orig;
-  delete parsed.data.tags;
   const { channel } = parsed.data;
   delete parsed.data.channel;
+
+  try {
+    parsed.data.tags = JSON.parse(parsed.data.tags);
+  } catch {
+    delete parsed.data.tags;
+  }
 
   const embed = new MessageEmbed()
     .setColor('#11bbbb')

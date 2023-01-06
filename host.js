@@ -162,7 +162,7 @@ async function main () {
       console.log('isHostRunningRequest reqId', reqId);
       await scopedRedisClient(async (innerClient) =>
         innerClient.publish(prefix, JSON.stringify({
-          type: 'http:isHostRunningResponse',
+          type: 'isXRunning:isHostRunningResponse',
           data: { reqId }
         })));
     });

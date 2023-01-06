@@ -7,7 +7,7 @@ const { hrtime } = require('process');
 const { spawn } = require('child_process');
 const config = require('config');
 const { nanoid } = require('nanoid');
-const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient, isXRunning } = require('../util');
+const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient, isXRunning, fqUrlFromPath } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
 const httpCommon = require('../http/common');
 
@@ -155,7 +155,7 @@ async function serveMessages (context, data, opts = {}) {
 
   const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
   context.sendToBotChan(`Digest of **${data.length}** messages for \`${context.network}\` ` +
-    `(link expires in ${ttlSecs / 60} minutes): https://${config.http.fqdn}/${name}`);
+    `(link expires in ${ttlSecs / 60} minutes): ${fqUrlFromPath(name)}`);
 }
 
 async function clearSquelched (context, ...a) {
@@ -329,6 +329,14 @@ function simpleEscapeForDiscord (s) {
   return accum;
 }
 
+function convertDiscordChannelsToIRCInString (targetString, context) {
+  if (targetString.match(CHANNELS_PATTERN)) {
+    const [chanMatch, channelId] = [...targetString.matchAll(CHANNELS_PATTERN)][0];
+    targetString = targetString.replace(chanMatch, '#' + context.getDiscordChannelById(channelId).name);
+  }
+  return targetString;
+}
+
 // keySubstitue only applies (if set) to additionalCommands!
 function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false, keySubstitute = null) {
   const f = async function (context, ...a) {
@@ -354,7 +362,7 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
         throw new Error(`Not enough args for ${cmd}!`);
       }
 
-      return a.slice(2).join(' ');
+      return convertDiscordChannelsToIRCInString(a.slice(2).join(' '), context);
     };
 
     return scopedRedisClient(async (redis) => {
@@ -476,6 +484,7 @@ module.exports = {
   plotMpmData,
   dynRequireFrom,
   simpleEscapeForDiscord,
+  convertDiscordChannelsToIRCInString,
   generateListManagementUCExport,
   createArgObjOnContext,
   senderNickFromMessage,

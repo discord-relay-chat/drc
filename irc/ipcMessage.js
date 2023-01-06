@@ -215,6 +215,43 @@ module.exports = async (context, chan, msg) => {
           ...e
         }
       }));
+    } else if (parsed.type === 'irc:mode:get') {
+      const { network, nickOrChan } = parsed.data;
+      let modes = [];
+      if (nickOrChan.indexOf('#') === 0) {
+        modes = botClient.channel(nickOrChan).mode();
+      } else {
+        modes = [...botClient.user.modes];
+      }
+
+      await pubClient.publish(PREFIX, JSON.stringify({
+        type: 'irc:mode:getResponse',
+        data: {
+          network,
+          nickOrChan,
+          modes,
+          __drcNetwork: e.__drcNetwork
+        }
+      }));
+    } else if (parsed.type === 'irc:mode:set') {
+      const { nickOrChan, mode, network } = parsed.data;
+      if (nickOrChan.indexOf('#') === 0) {
+        botClient.channel(nickOrChan).mode(mode);
+      } else {
+        botClient.mode(nickOrChan, mode);
+      }
+
+      // send a "get" to ourselves (because i'm lazy), on behalf of the user, after a short delay
+      setTimeout(() => {
+        scopedRedisClient((client) => client.publish(PREFIX, JSON.stringify({
+          type: 'irc:mode:get',
+          data: {
+            network,
+            nickOrChan,
+            __drcNetwork: e.__drcNetwork
+          }
+        })));
+      }, 1000);
     } else if (parsed.type === 'irc:userMode:set') {
       botClient.mode(config.irc.registered[e.network].user.nick, e.mode.replace('\\', ''));
       // pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:userMode', data: botClient.mode(config.irc.registered[e.network].nick) }));

@@ -92,7 +92,7 @@ redisListener.subscribe(PREFIX, (err) => {
       return res.redirect(config.http.rootRedirectUrl);
     }
 
-    if (Number(new Date()) > handler.exp) {
+    if (handler.exp && Number(new Date()) > handler.exp) {
       console.warn('expiring!', req.params);
       delete registered.get[req.params.id];
       return res.redirect(config.http.rootRedirectUrl);
@@ -174,11 +174,11 @@ redisListener.subscribe(PREFIX, (err) => {
             promise,
             ...rr
           };
-        } else if (subType === 'isHTTPRunningRequest' && type === 'discord') {
+        } else if (subType === 'isHTTPRunningRequest' && type === 'isXRunning') {
           const { reqId } = parsed.data;
           console.log('isHTTPRunningRequest reqId', reqId);
           reqPubClient.publish(PREFIX, JSON.stringify({
-            type: 'http:isHTTPRunningResponse',
+            type: 'isXRunning:isHTTPRunningResponse',
             data: {
               reqId,
               listenAddr: addr,

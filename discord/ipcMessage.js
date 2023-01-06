@@ -95,9 +95,7 @@ module.exports = async (context, _channel, msg) => {
     await (async function () {
       if (type === 'http' && subType === 'cacheMessageAttachementResponse') {
         runOneTimeHandlers(parsed.data.attachmentURL);
-      } else if (type === 'http' && subType === 'isHTTPRunningResponse') {
-        runOneTimeHandlers(parsed.data.reqId);
-      } else if (type === 'http' && subType === 'isHostRunningResponse') {
+      } else if (type === 'isXRunning' && subType.indexOf('Response') !== -1) {
         runOneTimeHandlers(parsed.data.reqId);
       } else if (type === 'irc' && subType === 'nickInChanResponse') {
         // ._orig.nick used instead of just .nick because the latter will have been
@@ -235,7 +233,16 @@ module.exports = async (context, _channel, msg) => {
           }
         }
       } else if (type === 'irc') {
-        if (['ban', 'say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) || (subType === 'responseSay' && !parsed.data)) {
+        if (['ban', 'say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) ||
+          (subType === 'responseSay' && !parsed.data)) {
+          return;
+        }
+
+        if (subType === 'mode') {
+          if (parsed.data.modes) {
+            const { nickOrChan, network, modes } = parsed.data;
+            sendToBotChan(`Modes for **${nickOrChan}** on ${network}: \`${modes.join('')}\``);
+          }
           return;
         }
 
@@ -271,7 +278,8 @@ module.exports = async (context, _channel, msg) => {
           'discord:channels',
           'discord:deleteChannel',
           'discord:requestJoinChannel:irc',
-          'discord:isHTTPRunningRequest',
+          'isXRunning:isHTTPRunningRequest',
+          'isXRunning:isHostRunningRequest',
           'discord:cacheMessageAttachementRequest'
         ];
 
