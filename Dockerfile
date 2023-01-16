@@ -30,6 +30,7 @@ COPY irc.js .
 COPY irc ./irc/
 COPY discord ./discord/
 COPY .certs ./.certs/
+RUN chown -R drc /app/drc/.certs/
 USER drc
 CMD ["node", "irc"]
 
