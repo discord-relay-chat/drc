@@ -38,7 +38,11 @@ async function f (context, ...a) {
       const serveObj = {
         ...dataObj,
         queryTimeS,
-        response: dataObj.response.replaceAll(/^(?:\n)+/g, '').replaceAll('\n', '<br/>')
+        response: dataObj.response
+          .replaceAll(/^\s+/g, '')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('\n', '\n<br/>')
       };
       if (!context.options.ttl) {
         context.options.ttl = -1;

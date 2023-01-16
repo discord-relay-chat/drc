@@ -1,9 +1,9 @@
 const config = require('config');
-const { spawn } = require('../../spawn');
+const { spawn } = require('child_process');
 
 const active = {};
 
-const WhitelistedGames = ['zork', 'adventure'];
+const WhitelistedGames = ['adventure'];
 
 const WhitelistedGamesRunnerOpts = {
   adventure: { settleTimeMs: 200 }

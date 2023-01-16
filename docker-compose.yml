@@ -4,13 +4,24 @@ services:
       context: .
       dockerfile: Dockerfile
       target: http
+    volumes:
+      - type: bind
+        source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
+        target: /logs
+      - type: bind
+        target: /http
+        source: ${DRC_HTTP_PATH_HOST:?"Must define DRC_HTTP_PATH_HOST as the absolute path to http on the host."}
+      # this enables editing the templates at runtime
+      - type: bind
+        target: /app/drc/http/templates
+        source: ${DRC_HTTP_TEMPLATES_PATH_HOST:?"Must define DRC_HTTP_TEMPLATES_PATH_HOST as the absolute path to http templates source on the host."}
     network_mode: "host"
 
   irc:
     build:
       <<: *default-build-spec
       target: irc
-    volumes: &default-logs-bind
+    volumes:
       - type: bind
         source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
         target: /logs
@@ -20,7 +31,18 @@ services:
     build:
       <<: *default-build-spec
       target: discord
-    volumes: *default-logs-bind
+    volumes: 
+      - type: bind
+        source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
+        target: /logs
+      # this enables the hot-reloading of user commands via !reload
+      - type: bind
+        target: /app/drc/discord
+        source: ${DRC_DISCORD_SRC_HOST:?"Must define DRC_DISCORD_SRC_HOST as the absolute path to discord source on the host."}
+      # this enables gnuplot-enabled commands to write to the http directory
+      - type: bind
+        target: /http
+        source: ${DRC_HTTP_PATH_HOST:?"Must define DRC_HTTP_PATH_HOST as the absolute path to http on the host."}
     network_mode: "host"
     restart: "on-failure"
 

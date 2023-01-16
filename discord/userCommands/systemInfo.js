@@ -4,7 +4,6 @@ const config = require('../../config');
 const statsCmd = require('./stats');
 const { MessageEmbed } = require('discord.js');
 const { isHTTPRunning } = require('../common');
-const { isHostRunning } = require('../../host');
 
 async function systemInfo (context, ...a) {
   context.options = { returnCalcResults: true };
@@ -24,7 +23,6 @@ async function systemInfo (context, ...a) {
   const ksMiss = Number(stats.redis.stats.keyspace_misses);
   const ksHit = Number(stats.redis.stats.keyspace_hits);
   const httpRunning = await isHTTPRunning(context.registerOneTimeHandler, context.removeOneTimeHandler);
-  const hostRunning = await isHostRunning(context);
 
   embed
     .addFields(
@@ -35,8 +33,7 @@ async function systemInfo (context, ...a) {
         inline: true
       },
       { name: 'System uptime', value: stats.lastCalcs.systemUptime, inline: true },
-      { name: 'HTTP daemon?', value: httpRunning ? `Yes (as "${httpRunning.fqdn}")` : '_**No**_', inline: true },
-      { name: 'Host daemon?', value: hostRunning ? 'Yes' : '_**No**_', inline: true }
+      { name: 'HTTP daemon?', value: httpRunning ? `Yes (as "${httpRunning.fqdn}")` : '_**No**_', inline: true }
     );
 
   embed.addFields(

@@ -30,7 +30,9 @@ Date.prototype.toDRCString = function () { // eslint-disable-line no-extend-nati
   return this.toString().replace(/\sGMT.*/, '');
 };
 
-async function isXRunning (xName, context, timeoutMs = 500) {
+function runningInContainer () { return process.env.DRC_IN_CONTAINER; }
+
+async function isXRunning (xName, context, timeoutMs = 1500) {
   const { registerOneTimeHandler, removeOneTimeHandler } = context;
   const reqId = nanoid();
   const keyPrefix = `is${xName}Running`;
@@ -118,7 +120,7 @@ class JsonMapper {
       this.path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
 
       try {
-        this._load();
+        await this._load();
         resolvePath = this.path;
       } catch (err) {
         console.warn(`Failed to find ${this.path}: ${this._options.createOnNotFound ? 'creating!' : 'falling back to default!'}`);
@@ -368,6 +370,13 @@ class NetworkNotMatchedError extends Error {
   }
 }
 
+class UserCommandNotFound extends Error {
+  constructor (msg) {
+    super(msg);
+    this.name = this.constructor.name;
+  }
+}
+
 function matchNetwork (network, options = { returnScores: false }) {
   const ret = {};
 
@@ -471,6 +480,28 @@ const getLogsFormats = {
   txt: (x) => `[${new Date(x.__drcIrcRxTs).toISOString()}] <${x.nick}> ${x.message}`
 };
 
+function tryToParseADateOrDuration (maybeADuration) {
+  const chkDate = new Date(maybeADuration);
+
+  if (chkDate.toString() === 'Invalid Date') {
+    let parsed = parseDate(maybeADuration);
+
+    if (parsed) {
+      return Number(parsed);
+    }
+
+    parsed = parseDuration(maybeADuration);
+
+    if (parsed) {
+      return Number(new Date()) + parsed;
+    }
+
+    return undefined;
+  }
+
+  return chkDate;
+}
+
 function getLogsSetup (network, channel, { from, to, format = 'json', filterByNick } = {}) {
   const logCfg = config.irc.log;
 
@@ -488,28 +519,7 @@ function getLogsSetup (network, channel, { from, to, format = 'json', filterByNi
     throw new Error(`bad format ${format}`);
   }
 
-  const [fromTime, toTime] = [from, to].map(x => {
-    const chkDate = new Date(x);
-
-    if (chkDate.toString() === 'Invalid Date') {
-      let parsed = parseDate(x);
-
-      if (parsed) {
-        return Number(parsed);
-      }
-
-      parsed = parseDuration(x);
-
-      if (parsed) {
-        return Number(new Date()) + parsed;
-      }
-
-      return undefined;
-    }
-
-    return chkDate;
-  });
-
+  const [fromTime, toTime] = [from, to].map(tryToParseADateOrDuration);
   const expectedPath = path.resolve(path.join(logCfg.path, network, channel));
   return {
     formatter,
@@ -706,13 +716,23 @@ async function searchLogs (network, options, singleProcFunc = getLogsSqlite) {
     networkFiles = networkFiles.filter((fEnt) => fEnt.name.indexOf('#') === 0);
   }
 
+  let retObj;
+  const start = new Date();
   try {
     console.debug('SEARCH LIST:', networkFiles.map(x => x.name).join(', '));
-    return await searchLogsSqlite(network, networkFiles, options, singleProcFunc);
+    retObj = await searchLogsSqlite(network, networkFiles, options, singleProcFunc);
   } catch (err) {
     console.error(`searchLogsSqlite(${network}) failed:`, err);
-    return { totalLines: 0, searchResults: [], error: err };
+    retObj = { totalLines: 0, searchResults: [], error: err };
   }
+
+  const end = new Date();
+  const queryTimeMs = end - start;
+  return {
+    queryTimeMs,
+    queryTimeHuman: fmtDuration(start, true, end),
+    ...retObj
+  };
 }
 
 // ref: https://modern.ircdocs.horse/formatting.html#characters
@@ -893,7 +913,10 @@ module.exports = {
   isXRunning,
   isXRunningRequestListener,
   fqUrlFromPath,
+  runningInContainer,
+  tryToParseADateOrDuration,
 
   AmbiguousMatchResultError,
-  NetworkNotMatchedError
+  NetworkNotMatchedError,
+  UserCommandNotFound
 };

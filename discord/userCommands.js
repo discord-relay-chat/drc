@@ -3,14 +3,23 @@
 const path = require('path');
 const uuid = require('uuid');
 const { nanoid } = require('nanoid');
-const { PREFIX, AmbiguousMatchResultError, matchNetwork, scopedRedisClient } = require('../util');
+const {
+  PREFIX,
+  AmbiguousMatchResultError,
+  matchNetwork,
+  scopedRedisClient,
+  userFirstSeen,
+  userLastSeen
+} = require('../util');
 const {
   dynRequireFrom,
   generateListManagementUCExport,
   clearSquelched,
   digest,
-  isHTTPRunning
+  isHTTPRunning,
+  getNetworkAndChanNameFromUCContext
 } = require('./common');
+const config = require('../config');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
@@ -30,7 +39,15 @@ function resolver (functionName) {
     }
 
     f = fs[matches[0]];
+    if (f) {
+      f.__resolvedFullCommandName = matches[0];
+    }
   }
+
+  scopedRedisClient(async (client, prefix) => {
+    await client.zincrby([prefix, 'userCommandResolver'].join(':'), '1',
+      functionName ?? f.__resolvedFullCommandName ?? '__unresolved__' + functionName);
+  });
 
   return f;
 }
@@ -39,6 +56,7 @@ resolver.__unrequireCommands = function () {
   [
     '../util',
     './common',
+    './plotting',
     ...fileExportReqdPaths
   ]
     .forEach((fPath) => {
@@ -129,12 +147,12 @@ resolver.__functions = {
   },
 
   digest: (context) => {
-    if (context.argObj._.length !== 2) {
+    if (context.options._.length !== 2) {
       return;
     }
 
-    const [network, minutes] = context.argObj._;
-    context.argObj._ = [network, 'digest', minutes];
+    const [network, minutes] = context.options._;
+    context.options._ = [network, 'digest', minutes];
     return resolver('logs')(context);
   },
 
@@ -146,6 +164,30 @@ resolver.__functions = {
       resStr = `Yes, on \`${listenAddr}\` internally and as \`${fqdn}\` externally.`;
     }
     context.sendToBotChan(resStr);
+  },
+
+  plotMpm: async (context) => require('./plotting')
+    .plotMpmData(config.app.stats.mpmPlotTimeLimitHours, null, {
+      produceBackupIfExtant: true,
+      alwaysLogScale: true
+    }),
+
+  userFirstSeen: async (context) => {
+    const { network } = getNetworkAndChanNameFromUCContext(context);
+    if (network) {
+      return (await userFirstSeen(network, context.options))[0];
+    } else {
+      return `Unknown network ${network}`;
+    }
+  },
+
+  userLastSeen: async (context) => {
+    const { network } = getNetworkAndChanNameFromUCContext(context);
+    if (network) {
+      return (await userLastSeen(network, context.options))[0];
+    } else {
+      return `Unknown network ${network}`;
+    }
   }
 };
 

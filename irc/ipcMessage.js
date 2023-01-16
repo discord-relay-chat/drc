@@ -2,8 +2,8 @@
 
 const config = require('config');
 const Redis = require('ioredis');
-const { spawn } = require('../spawn');
-const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient, resolveNameForDiscord } = require('../util');
+const { spawn } = require('child_process');
+const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient, resolveNameForDiscord, runningInContainer } = require('../util');
 const LiveNicks = require('./liveNicks');
 
 let categories = {};
@@ -108,11 +108,9 @@ module.exports = async (context, chan, msg) => {
 
       Object.entries(servers).forEach(([server, _client]) => {
         if (categoriesByName[server]) {
-          const id = categoriesByName[server];
           specServers[server] = {
-            id,
+            ids: categoriesByName[server],
             name: server,
-            spec: categories[id],
             channels: []
           };
         }
@@ -360,13 +358,19 @@ module.exports = async (context, chan, msg) => {
                   opts = [...opts, ...parsed.data.options.nmap];
                 }
 
+                if (runningInContainer()) {
+                  opts.shift();
+                }
+
                 opts.push(whoisData.hostname);
                 console.log('Initiaing: ' + opts.join(' '));
                 try {
-                  const proc = spawn('sudo', opts);
+                  const proc = spawn(runningInContainer() ? 'nmap' : 'sudo', opts);
 
                   proc.stdout.on('data', (d) => collectors.stdout.push(d.toString('utf8')));
                   proc.stderr.on('data', (d) => collectors.stderr.push(d.toString('utf8')));
+
+                  proc.on('error', (err) => console.error('nmap spawn failed', err, opts));
 
                   proc.on('close', async () => {
                     const started = children[proc.pid].started;

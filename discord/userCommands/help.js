@@ -28,8 +28,12 @@ function f (context) {
     const toSendEmbed = new MessageEmbed()
       .setTitle('Command Listing')
       .setDescription('**Bolded** have further help available via `!help [command]`.\n\n' +
-        'Multiple commands may be executed in a single line with `|>`, for example:\n' +
-        '```\n!stats |> !whois libera outage-bot |> !ps\n```\n\n')
+        'Multiple commands may be run _serially_ in a single invocation with `|>` or _concurrently_ with `!>`. ' +
+        'These may be combined, with concurrent sections processed together as one serial section. For example:\n' +
+        '```\n!stats |> !whois libera outage-bot !> !sys |> !ps\n```\n' +
+        '`!stats` runs first serially. Then, `!whois` and `!sys` are run concurrently together. ' +
+        'When they have both completed, `!ps` is run.' +
+        '\n\n')
       .setColor('#0011ff')
       .setTimestamp()
       .addField('Available Commands:', cmdListStr);

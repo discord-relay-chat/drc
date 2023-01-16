@@ -9,10 +9,11 @@ const os = require('os');
 const path = require('path');
 
 const PROJECT_DIR = path.resolve(path.join(__dirname, '..'));
-const HTTP_STATIC_PATH_NAME = 'static';
 const MPM_PLOT_FILE_NAME = 'mpmplot.png';
-const HTTP_STATIC_DIR = path.join(PROJECT_DIR, 'http', HTTP_STATIC_PATH_NAME);
-const HTTP_ATTACHMENTS_DIR = path.join(PROJECT_DIR, 'http', 'attachments');
+const HTTP_STATIC_PATH_NAME = 'static';
+const HTTP_PATH = process.env?.DRC_HTTP_PATH || path.join(PROJECT_DIR, 'http');
+const HTTP_STATIC_DIR = path.join(HTTP_PATH, HTTP_STATIC_PATH_NAME);
+const HTTP_ATTACHMENTS_DIR = path.join(HTTP_PATH, 'attachments');
 
 const SECRET_KEYS = [
   'discord.botId',
@@ -94,9 +95,10 @@ const _config = {
         }
       },
       MPM_PLOT_FILE_NAME,
-      plotEnabled: false,
+      plotEnabled: true,
+      plotBackupsAndGifGenerationEnabled: false,
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
-      mpmPlotTimeLimitHours: 120 // 5 days
+      mpmPlotTimeLimitHours: 24
     }
   },
 
@@ -201,11 +203,6 @@ const _config = {
     maxTokens: 4000
   },
 
-  hostDaemon: {
-    enabled: false,
-    whitelistedBinaries: ['nmap', 'df', 'uptime', 'who', 'gnuplot', 'sudo', 'zork', 'adventure']
-  },
-
   _secretKeys: SECRET_KEYS,
 
   toJSON () {
@@ -213,8 +210,8 @@ const _config = {
   }
 };
 
-_config.app.stats.getMpmPlotFqdn = () =>
+_config.app.stats.getMpmPlotFqdn = (fnameOverride) =>
   `${require('config').http.proto ?? 'https'}://` +
-  `${require('config').http.fqdn}/${HTTP_STATIC_PATH_NAME}/${MPM_PLOT_FILE_NAME}`;
+  `${require('config').http.fqdn}/${HTTP_STATIC_PATH_NAME}/${fnameOverride ?? MPM_PLOT_FILE_NAME}`;
 
 module.exports = _config;

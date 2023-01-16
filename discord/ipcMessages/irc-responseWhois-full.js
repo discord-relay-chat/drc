@@ -123,13 +123,13 @@ module.exports = async function (parsed, context) {
       embed.addField(`IP info for \`${lookupHost}\`:`, formatKVs(ipInf));
     }
 
-    if (parsed.data?.requestData?.options.full) {
-      const firstSeens = await userFirstSeen(network, d);
-      if (firstSeens.length) {
-        const [[chan, date]] = firstSeens;
-        embed.addField('First seen on network:', `**${date}** in **${chan}**\n`);
-      }
+    const firstSeens = await userFirstSeen(network, d);
+    if (firstSeens.length) {
+      const [[chan, date]] = firstSeens;
+      embed.addField('First seen on network:', `**${date}** in **${chan}**\n`);
+    }
 
+    if (parsed.data?.requestData?.options.full) {
       let lookups = [d.actual_ip, d.actual_hostname, d.hostname];
       let lookupSet = new Set(lookups);
 
@@ -203,7 +203,7 @@ module.exports = async function (parsed, context) {
 
       await scopedRedisClient(async (rc, pfx) => {
         const zScore = await rc.zscore(`${pfx}:kicks:${network}:kickee`, d.nick);
-        if (zScore) {
+        if (zScore > 2) {
           embed.addField('Toxic user alert!', `**${d.nick}** has been kicked from channels **${zScore}** times on this network!`);
         }
       });

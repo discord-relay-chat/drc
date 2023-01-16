@@ -9,11 +9,13 @@ const yargs = require('yargs');
 const { fetch } = require('undici');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
-const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, scopedRedisClient } = require('./util');
+const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, UserCommandNotFound, scopedRedisClient } = require('./util');
 const userCommands = require('./discord/userCommands');
-const { formatKVs, aliveKey, ticklePmChanExpiry, plotMpmData } = require('./discord/common');
+const { formatKVs, aliveKey, ticklePmChanExpiry } = require('./discord/common');
+const { plotMpmData } = require('./discord/plotting');
 const eventHandlers = require('./discord/events');
 const registerContextMenus = require('./discord/contextMenus');
+const parsers = require('./lib/parsers');
 
 require('./logger')('discord');
 
@@ -282,7 +284,7 @@ client.once('ready', async () => {
         channels: {}
       };
 
-      categoriesByName[chan.name] = chan.id;
+      categoriesByName[chan.name] = [chan.id, ...(categoriesByName[chan.name] ?? [])];
       channelsByName[chan.name] = {};
     }
   }
@@ -293,7 +295,7 @@ client.once('ready', async () => {
   for (const chan of client.channels.cache.values()) {
     const { id, name, parentId } = chan;
     if (chan.parentId && categories[chan.parentId]) {
-      console.log(`Found channel ${chan.name} (ID ${chan.id}) in category '${categories[chan.parentId].name}'`);
+      console.log(`Found channel ${chan.name} (${chan.id}) in category '${categories[chan.parentId].name}' (${chan.parentId})`);
       categories[chan.parentId].channels[chan.id] = { id, name, parentId, parent: parentId };
       channelsByName[categories[chan.parentId].name][chan.name] = chan.id;
     }
@@ -371,147 +373,141 @@ client.once('ready', async () => {
   if (config.app.allowedSpeakers.length) {
     allowedSpeakerCommandHandler = async (data, toChanId) => {
       const trimContent = data.content.replace(/^\s+/, '');
-      if (trimContent[0] === '!') {
-        // allow |> as statement separators on a single line
-        if (trimContent.indexOf('|>') !== -1) {
-          const funcs = trimContent
-            .split('|>')
-            .map((s) => s.trim())
-            .map((content) => allowedSpeakerCommandHandler.bind(null, Object.assign({}, data, { content }), toChanId));
+      if (trimContent[0] !== '!') {
+        return;
+      }
 
-          // serialize
-          for (const f of funcs) {
-            await f();
-          }
+      const pipedHandler = parsers.parseMessageStringForPipes(trimContent, (content) =>
+        allowedSpeakerCommandHandler(Object.assign({}, data, { content }), toChanId));
 
+      if (pipedHandler) {
+        return pipedHandler();
+      }
+
+      let { command, args } = parsers.parseCommandAndArgs(trimContent);
+      args = parsers.parseArgsForQuotes(args);
+
+      const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
+      console.log(trimContent, 'USER CMD PARSED', command, fmtedCmdStr, args);
+      const redis = new Redis(config.redis.url);
+
+      const zEvents = [];
+      let resolvedName;
+      try {
+        const cmdFunc = userCommands(command);
+        resolvedName = cmdFunc?.__resolvedFullCommandName;
+
+        // this should be removed ASAP in favor of scopedRedisClient,
+        // but need to find all uses of it first...
+        const publish = async (publishObj) => redis.publish(PREFIX, JSON.stringify(publishObj));
+        const argObj = yargs(args).help(false).exitProcess(false).argv;
+        console.log('Command args:', args, ' parsed into ', argObj);
+
+        const createGuildChannel = async (channelName, channelOpts) =>
+          client.guilds.cache.get(config.discord.guildId).channels.create(channelName, channelOpts);
+
+        let localSender = sendToBotChan;
+
+        if (toChanId) {
+          localSender = async (msg, raw = false) => {
+            let msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
+            const chan = client.channels.cache.get(toChanId);
+
+            try {
+              const _realSender = chan.__drcSend || chan.send.bind(chan);
+              const privMsg = '_(Only visible to you)_';
+
+              if (!raw) {
+                msgFormatted = `${privMsg} ${msgFormatted}`;
+              }
+
+              await _realSender(msgFormatted, raw);
+
+              if (raw) {
+                await _realSender(privMsg);
+              }
+            } catch (err) {
+              try {
+                console.warn('send failed, falling back to bot chan', err);
+                zEvents.push('chanSendFallback');
+                return await client?.channels.cache.get(config.irc.quitMsgChanId).send(msgFormatted);
+              } catch (iErr) {
+                console.error('localSender/send failed!', iErr, toChanId, msg, chan);
+                zEvents.push('localSenderFailed');
+              }
+            }
+          };
+        }
+
+        if (!cmdFunc) {
+          localSender(`\`${command}\` is not a valid DRC user command. Run \`!help\` to see all available commands.`);
+          throw new UserCommandNotFound();
+        }
+
+        const result = await cmdFunc({
+          stats,
+          redis,
+          publish, // TODO: replace all uses of `redis` with `publish` (and others if needed)
+          sendToBotChan: localSender,
+          argObj,
+          options: argObj, // much better name! use this from now on...
+          registerOneTimeHandler,
+          removeOneTimeHandler,
+          createGuildChannel,
+          registerChannelMessageHandler,
+          registerButtonHandler,
+          discordAuthor: data.author,
+          ignoreSquelched,
+          captureSpecs,
+          channelsById,
+          categoriesByName,
+          toChanId,
+          getDiscordChannelById: (id) => client.channels.cache.get(id),
+          discordMessage: data
+        }, ...args);
+
+        console.log(`Exec'ed user command ${command} with args [${args.join(', ')}]`, argObj, '-->', result);
+
+        let toBotChan;
+        if (result && result.__drcFormatter) {
+          toBotChan = await result.__drcFormatter();
+        } else if (typeof result === 'string') {
+          toBotChan = result;
+        } else if (result) {
+          toBotChan = '```json\n' + JSON.stringify(result, null, 2) + '\n```\n';
+        }
+
+        if (toBotChan) {
+          localSender(toBotChan);
+        }
+
+        zEvents.push('commandSuccess');
+      } catch (ucErr) {
+        if (ucErr instanceof UserCommandNotFound) {
+          console.warn('user comand not found!', command, ...args);
+          zEvents.push('commandNotFound');
           return;
         }
 
-        let [command, ...args] = trimContent.slice(1).split(/\s+/);
+        console.error('user command threw!\n\n', ucErr);
 
-        const quotesParse = args.reduce((a, e) => {
-          if (e.match(/--\w+="/) && !a.collect.length) {
-            a.collect.push(e);
-          } else if (a.collect.length) {
-            if (e.match(/[^"]+"/)) {
-              a.return.push([...a.collect, e].join(' '));
-              a.collect = [];
-            } else {
-              a.collect.push(e);
-            }
-          } else {
-            a.return.push(e);
-          }
-
-          return a;
-        }, {
-          collect: [],
-          return: []
-        });
-
-        args = [...quotesParse.return, ...quotesParse.collect];
-
-        const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
-        console.log(trimContent, 'USER CMD PARSED', command, fmtedCmdStr, args);
-        const redis = new Redis(config.redis.url);
-
-        try {
-          const cmdFunc = userCommands(command);
-
-          // this should be removed ASAP in favor of scopedRedisClient,
-          // but need to find all uses of it first...
-          const publish = async (publishObj) => redis.publish(PREFIX, JSON.stringify(publishObj));
-          const argObj = yargs(args).help(false).exitProcess(false).argv;
-          console.log('Command args:', args, ' parsed into ', argObj);
-
-          const createGuildChannel = async (channelName, channelOpts) =>
-            client.guilds.cache.get(config.discord.guildId).channels.create(channelName, channelOpts);
-
-          let localSender = sendToBotChan;
-
-          if (toChanId) {
-            localSender = async (msg, raw = false) => {
-              let msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
-              const chan = client.channels.cache.get(toChanId);
-
-              try {
-                const _realSender = chan.__drcSend || chan.send.bind(chan);
-                const privMsg = '_(Only visible to you)_';
-
-                if (!raw) {
-                  msgFormatted = `${privMsg} ${msgFormatted}`;
-                }
-
-                await _realSender(msgFormatted, raw);
-
-                if (raw) {
-                  await _realSender(privMsg);
-                }
-              } catch (err) {
-                try {
-                  console.warn('send failed, falling back to bot chan', err);
-                  return await client?.channels.cache.get(config.irc.quitMsgChanId).send(msgFormatted);
-                } catch (iErr) {
-                  console.error('localSender/send failed!', iErr, toChanId, msg, chan);
-                }
-              }
-            };
-          }
-
-          if (!cmdFunc) {
-            console.warn('user comand not found!', command, ...args);
-            localSender(`\`${command}\` is not a valid DRC user command. Run \`!help\` to see all available commands.`);
-            return;
-          }
-
-          const result = await cmdFunc({
-            stats,
-            redis,
-            publish, // TODO: replace all uses of `redis` with `publish` (and others if needed)
-            sendToBotChan: localSender,
-            argObj,
-            options: argObj, // much better name! use this from now on...
-            registerOneTimeHandler,
-            removeOneTimeHandler,
-            createGuildChannel,
-            registerChannelMessageHandler,
-            registerButtonHandler,
-            discordAuthor: data.author,
-            ignoreSquelched,
-            captureSpecs,
-            channelsById,
-            categoriesByName,
-            toChanId,
-            getDiscordChannelById: (id) => client.channels.cache.get(id),
-            discordMessage: data
-          }, ...args);
-
-          console.log(`Exec'ed user command ${command} with args [${args.join(', ')}]`, argObj, '-->', result);
-
-          let toBotChan;
-          if (result && result.__drcFormatter) {
-            toBotChan = await result.__drcFormatter();
-          } else if (typeof result === 'string') {
-            toBotChan = result;
-          } else if (result) {
-            toBotChan = '```json\n' + JSON.stringify(result, null, 2) + '\n```\n';
-          }
-
-          if (toBotChan) {
-            localSender(toBotChan);
-          }
-        } catch (ucErr) {
-          console.error('user command threw!\n\n', ucErr);
-
-          if (ucErr instanceof NetworkNotMatchedError) {
-            sendToBotChan(`Unable to find a matching network for "${ucErr.message}"`);
-          } else {
-            sendToBotChan(fmtedCmdStr + `threw an error! (${ucErr.name}):` +
-              ' `' + ucErr.message + '`');
-          }
-        } finally {
-          redis.disconnect();
+        if (ucErr instanceof NetworkNotMatchedError) {
+          sendToBotChan(`Unable to find a matching network for "${ucErr.message}"`);
+          zEvents.push('netNotMatched');
+        } else {
+          sendToBotChan(fmtedCmdStr + `threw an error! (${ucErr.name}):` +
+            ' `' + ucErr.message + '`');
+          zEvents.push('otherError');
         }
+      } finally {
+        redis.disconnect();
+        scopedRedisClient(async (client, prefix) => {
+          const keyArr = [prefix, 'userCommandCalls'];
+          const zNewCounts = await Promise.all(
+            zEvents.map((evName) => client.zincrby([...keyArr, evName].join(':'), '1', resolvedName ?? command))
+          );
+          console.log('Logging UC zEvents!', command, 'is', resolvedName, '||', zEvents, '->>', zNewCounts);
+        });
       }
     };
   } else {
@@ -796,7 +792,7 @@ client.once('ready', async () => {
     } else {
       const embed = new MessageEmbed()
         .setColor(config.app.stats.embedColors.irc.ipcReconnect)
-        .setTitle('IRC is reconnected!')
+        .setTitle('Discord bot has reconnected to IRC')
         .addFields(
           { name: 'IRC uptime', value: stats.irc?.uptime, inline: true },
           { name: 'Redis uptime', value: stats.lastCalcs?.redisUptime, inline: true },
@@ -945,7 +941,9 @@ client.once('ready', async () => {
           timestamp: Number(new Date())
         }));
 
-        await plotMpmData();
+        await plotMpmData(config.app.stats.mpmPlotTimeLimitHours, null, {
+          alwaysLogScale: true
+        });
       });
     };
 

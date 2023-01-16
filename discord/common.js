@@ -1,13 +1,10 @@
 'use strict';
 
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const { hrtime } = require('process');
-const { spawn } = require('child_process');
 const config = require('config');
 const { nanoid } = require('nanoid');
-const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient, isXRunning, fqUrlFromPath } = require('../util');
+const { PREFIX, matchNetwork, fmtDuration, scopedRedisClient, isXRunning, fqUrlFromPath, resolveNameForIRC } = require('../util');
 const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
 const httpCommon = require('../http/common');
 
@@ -153,9 +150,19 @@ async function serveMessages (context, data, opts = {}) {
     }
   })));
 
-  const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
-  context.sendToBotChan(`Digest of **${data.length}** messages for \`${context.network}\` ` +
-    `(link expires in ${ttlSecs / 60} minutes): ${fqUrlFromPath(name)}`);
+  const embed = new MessageEmbed()
+    .setColor('DARK_GOLD')
+    .setTitle(`Serving **${data.length}**-message digest for \`${context.network}\``)
+    .setDescription(fqUrlFromPath(name));
+
+  if (options.ttl === -1) {
+    embed.addField('Forever URL', fqUrlFromPath(`static/${name}.html`));
+  } else {
+    const ttlSecs = options.ttl ? options.ttl * 60 : config.http.ttlSecs;
+    embed.addField('Expires', `${ttlSecs / 60} minutes`);
+  }
+
+  context.sendToBotChan({ embeds: [embed] }, true);
 }
 
 async function clearSquelched (context, ...a) {
@@ -170,91 +177,6 @@ async function digest (context, ...a) {
   if (!context.options.keep) {
     clearSquelched(context);
   }
-}
-
-// this still doesn't work when containerized - even with the host daemon - because of the need
-// to write files, both a temporary one that the gnuplot executable can read and the output image
-// BUT i'm not removing it because I really want to fix it... someday...
-async function plotMpmData (timeLimitHours = config.app.stats.mpmPlotTimeLimitHours) {
-  if (!config.app.stats.plotEnabled) {
-    return;
-  }
-
-  let maxY = 0;
-  const nowNum = Number(new Date());
-  const timeLimit = nowNum - timeLimitHours * 60 * 60 * 1000;
-  // double it to be safe, in case config.app.statsSilentPersistFreqMins wasn't always what it is now
-  const queryLim = (timeLimitHours / (config.app.statsSilentPersistFreqMins / 60)) * 2;
-  const startTime = hrtime.bigint();
-  const data = (await scopedRedisClient((rc) => rc.lrange(`${PREFIX}:mpmtrack`, 0, queryLim)))
-    .map(JSON.parse)
-    .filter((x) => x.timestamp >= timeLimit)
-    .map((x) => {
-      maxY = Math.max(x.chatMsgsMpm, x.totMsgsMpm, maxY);
-      return [Number((nowNum - x.timestamp) / (1000 * 60 * 60)).toFixed(1), x.chatMsgsMpm, x.totMsgsMpm];
-    })
-    .reverse();
-
-  console.log(`plotMpmData: querying ${queryLim} elements & filtering into ${data.length} ` +
-    `took ${(Number(hrtime.bigint() - startTime) / 1e6).toFixed(2)}ms ` +
-    `(timeLimitHours=${timeLimitHours}, statsSilentPersistFreqMins=${config.app.statsSilentPersistFreqMins})`);
-
-  if (data?.length) {
-    const fName = config.app.stats.mpmPlotOutputPath;
-    const tName = path.join(os.tmpdir(), `drc-mpmplot.${nanoid()}.dat`);
-    await fs.promises.writeFile(tName, data.map(x => x.join(' ')).join('\n'));
-
-    const xtics = [];
-    const gapSize = Math.ceil(data.length / 10);
-    for (let i = 0; i < data.length; i += gapSize) {
-      xtics.push(`"${data[i][0]}" ${i}`);
-    }
-
-    let gnuplotCmds = ['set grid'];
-
-    if (maxY > 100) { // TODO: stddev
-      gnuplotCmds.push('set logscale y');
-    }
-
-    gnuplotCmds = [
-      ...gnuplotCmds,
-      `set yrange [2:${Math.ceil(maxY * 1.05)}]`,
-      'set tics nomirror',
-      'set logscale y',
-      `set xtics(${xtics.join(', ')})`,
-      'set xlabel "⬅️ the past (time, in hours) now ➡️"',
-      'set key Left left reverse box samplen 2 width 2',
-      'set grid x lt 1 lw .75 lc "gray40"',
-      `set title "Messages per minute, sample size: ${data.length}\\nAs of ${new Date().toDRCString()}" textcolor rgb "white"`,
-      'set border lw 3 lc rgb "white"',
-      'set xlabel textcolor rgb "white"',
-      'set ylabel textcolor rgb "white"',
-      'set key textcolor rgb "white"',
-      'set terminal pngcairo transparent enhanced font "helvetica, 11" fontscale 1.0',
-      `set output '${fName}'`,
-      'set style fill transparent solid 0.6 noborder',
-      'plot ' + [
-        `'${tName}' using 0:3 with filledcurve y1=0 lc rgb "web-blue" title 'Total'`,
-        `'${tName}' using 0:2 with filledcurve y1=0 lc rgb "dark-turquoise" title 'Chat'`
-      ].join(', ')
-    ].join('\n');
-
-    return new Promise((resolve, reject) => {
-      const gnuplot = spawn('gnuplot');
-
-      gnuplot.on('close', () => {
-        fs.unlinkSync(tName);
-        resolve(fName);
-      });
-
-      gnuplot.on('error', reject);
-
-      gnuplot.stdin.write(gnuplotCmds, 'utf8');
-      gnuplot.stdin.end();
-    });
-  }
-
-  return null;
 }
 
 function dynRequireFrom (dir, addedCb, opts = { pathReplace: null, dontAttachHelpers: false }) {
@@ -329,10 +251,11 @@ function simpleEscapeForDiscord (s) {
   return accum;
 }
 
-function convertDiscordChannelsToIRCInString (targetString, context) {
+function convertDiscordChannelsToIRCInString (targetString, context, network) {
   if (targetString.match(CHANNELS_PATTERN)) {
     const [chanMatch, channelId] = [...targetString.matchAll(CHANNELS_PATTERN)][0];
-    targetString = targetString.replace(chanMatch, '#' + context.getDiscordChannelById(channelId).name);
+    const ircName = '#' + resolveNameForIRC(network, '#' + context.getDiscordChannelById(channelId).name);
+    targetString = targetString.replace(chanMatch, ircName);
   }
   return targetString;
 }
@@ -481,7 +404,6 @@ function formatKVsWithOpts (obj, opts) {
 }
 
 module.exports = {
-  plotMpmData,
   dynRequireFrom,
   simpleEscapeForDiscord,
   convertDiscordChannelsToIRCInString,
@@ -490,6 +412,37 @@ module.exports = {
   senderNickFromMessage,
   contextMenuCommonHandler,
   contextMenuCommonHandlerNonEphemeral,
+
+  getNetworkAndChanNameFromUCContext (context) {
+    const [netStub, chanId] = context.options._;
+    let network, channelName;
+    console.warn('getNetworkAndChanNameFromUCContext', netStub, chanId);
+
+    if (netStub) {
+      network = matchNetwork(netStub).network;
+
+      if (chanId) {
+        const chanMatch = [...chanId.matchAll(CHANNELS_PATTERN)];
+
+        if (chanMatch.length) {
+          channelName = context.channelsById[chanMatch[0][1]].name;
+        }
+      }
+    }
+
+    if (context.discordMessage) {
+      const chanObj = context.channelsById[context.discordMessage.channelId];
+      if (!network) {
+        network = context.channelsById[chanObj?.parent]?.name ?? null;
+      }
+      if (!channelName) {
+        channelName = chanObj?.name;
+      }
+    }
+
+    console.warn('getNetworkAndChanNameFromUCContext -->', { network, channelName });
+    return { network, channelName };
+  },
 
   async isNickInChan (nick, channel, network, regOTHandler) {
     const retProm = new Promise((resolve) => {

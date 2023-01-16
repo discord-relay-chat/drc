@@ -25,6 +25,10 @@
         color: #32a882;
       }
 
+      .userDisplay:hover {
+        color: #32a882;
+      }
+
       a:hover {
         color: #55c8ff;
       }
@@ -35,6 +39,7 @@
         flex-wrap: wrap;
         margin: 0 0 3em 0;
         padding: 0;
+        border: 0.5px dotted slategray;
       }
 
       .Rtable-cell {
@@ -45,6 +50,26 @@
         overflow: hidden;
         list-style: none;
         background: fade(slategrey,20%);
+        border-bottom: 0.5px dotted slategray;
+        vertical-align: middle;
+      }
+
+      .ac {
+        text-align: center;
+        vertical-align: middle;
+      }
+
+      .ar {
+        text-align: right;
+        vertical-align: middle;
+      }
+
+      .rb {
+        border-right: 0.5px dotted slategray;
+      }
+
+      .tsCell {
+        font-size: 0.6em;
       }
 
       .Rtable--2cols > .Rtable-cell  { width: 50%; }
@@ -69,6 +94,7 @@
         }
         .Rtable-cell { width: 100% !important; }
         .Rtable-cell--foot { margin-bottom: 1em; }
+        .ar { text-align: center; }
       }
 
       .Rtable-cell--head { 
@@ -82,15 +108,28 @@
       {{ elements.length }} messages in this digest from <code>{{ network }}</code>
     </h3>
 
+    <a onclick="toggleAllUserDisplays()">
+      Toggle nickname display for all
+    </a>
+    <br/><br/>
+
     <div class="row Rtable Rtable--collapse" id="headerrow">
       {{ #elements }}
-      <div class="Rtable-cell Rtable--6cols-cell Rtable-cell--head mono">[{{ timestampString }}]</div>
+      <div class="ac rb tsCell Rtable-cell Rtable--7cols-cell Rtable-cell--head mono"
+        onclick="this.textContent='{{ timestamp }}';">
+        {{ timestampString }}
+      </div>
       <!-- {{ timestamp }} -->
-      <div class="Rtable-cell Rtable--7cols-cell Rtable-cell--head mono target">{{ data.target }}</div>
-      <div class="Rtable-cell Rtable--7cols-cell">&lt;<b class="nick mono">{{ data.nick }}</b>&gt;</div>
+      <div class="ac Rtable-cell Rtable--7cols-cell Rtable-cell--head mono target">{{ data.target }}</div>
+      <div class="userDisplay ar rb Rtable-cell Rtable--6cols-cell" onclick="toggleUserDisplay(this);">
+        <span class="nickEle">&lt;<b class="nick mono">{{ data.nick }}</b>&gt;</span>
+        <span class="idHnEle" style="display: none;">&lt;<b class="nick mono">{{ data.ident }}<br/>@{{ data.hostname }}</b>&gt;</span>
+      </div>
       <div class="Rtable-cell Rtable--1cols-cell" class="msg">{{ data.message }}</div>
       {{ /elements }}
     </div>
+
+    <template id="tooltipTemplate"><span id="ident"></span><br/>@<span id="hostname"></span></template>
 
     <hr />
     
@@ -102,4 +141,21 @@
     {{/documentExpiresAt}}
     ({{ timezone }}).
   </body>
+  <script defer type="text/javascript">
+    function toggleUserDisplay (element) {
+      const nick = element.querySelector('.nickEle');
+      const idHn = element.querySelector('.idHnEle');
+
+      const t = nick.style.display;
+      nick.style.display = idHn.style.display;
+      idHn.style.display = t;
+      
+      console.log(element.querySelector('.nickEle'));
+      console.log(element.querySelector('.idHnEle'));
+    }
+
+    function toggleAllUserDisplays () {
+      [...document.querySelectorAll('.userDisplay')].forEach(toggleUserDisplay);
+    }
+  </script>
 </html>

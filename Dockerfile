@@ -1,38 +1,43 @@
 FROM node:18 as base
-WORKDIR /usr/src/drc
+WORKDIR /app/drc
+RUN apt update
+RUN apt -y install nmap
+RUN useradd -u 1001 -U -p discordrc drc
 COPY package*.json ./
 RUN npm install
 COPY *.js .
+COPY lib ./lib/
 COPY config/default.js ./config/
 COPY config/local-prod.json ./config/
 COPY config/channelXforms-prod.json ./config/
 COPY http ./http/
+COPY scripts ./scripts/
+RUN chown -R drc /app/drc/scripts
+ENV NODE_ENV=prod
+ENV DRC_LOG_PATH=/logs
+ENV DRC_IN_CONTAINER=1
+ENV TZ="America/Los_Angeles"
 STOPSIGNAL SIGINT
 
 FROM base as http
-WORKDIR /usr/src/drc
 COPY http.js .
-ENV NODE_ENV=prod
-ENV DRC_LOG_PATH=/logs
-ENV TZ="America/Los_Angeles"
+ENV DRC_HTTP_PATH=/http
+USER drc
 CMD ["node", "http"]
 
 FROM base as irc
-WORKDIR /usr/src/drc
 COPY irc.js .
 COPY irc ./irc/
+COPY discord ./discord/
 COPY .certs ./.certs/
-ENV NODE_ENV=prod
-ENV DRC_LOG_PATH=/logs
-ENV TZ="America/Los_Angeles"
+USER drc
 CMD ["node", "irc"]
 
 FROM base as discord
-WORKDIR /usr/src/drc
 COPY discord.js .
 COPY discord ./discord/
 COPY irc/numerics.js ./irc/
-ENV NODE_ENV=prod
-ENV DRC_LOG_PATH=/logs
-ENV TZ="America/Los_Angeles"
+# zork is packaged in a snap, which does not run in containers :(
+RUN apt -y install bc gnuplot colossal-cave-adventure imagemagick-6.q16
+USER drc
 CMD ["node", "discord"]

@@ -1,25 +1,11 @@
 'use strict';
 
-const { matchNetwork, resolveNameForIRC } = require('../../util');
-const { simpleEscapeForDiscord } = require('../common');
-const { MessageMentions: { CHANNELS_PATTERN }, MessageEmbed } = require('discord.js');
+const { resolveNameForIRC } = require('../../util');
+const { simpleEscapeForDiscord, getNetworkAndChanNameFromUCContext } = require('../common');
+const { MessageEmbed } = require('discord.js');
 
 async function f (context, ...a) {
-  const [netStub, chanId] = a;
-  let network, channelName;
-
-  if (netStub && chanId) {
-    network = matchNetwork(netStub).network;
-    const chanMatch = [...chanId.matchAll(CHANNELS_PATTERN)];
-
-    if (chanMatch.length) {
-      channelName = context.channelsById[chanMatch[0][1]].name;
-    }
-  } else if (context.discordMessage) {
-    const chanObj = context.channelsById[context.discordMessage.channelId];
-    network = context.channelsById[chanObj?.parent]?.name ?? null;
-    channelName = chanObj?.name;
-  }
+  const { network, channelName } = getNetworkAndChanNameFromUCContext(context);
 
   if (!network || !channelName) {
     return `Unable to determine network ("${network}") or channel ("${channelName}")`;

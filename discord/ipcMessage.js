@@ -164,7 +164,9 @@ module.exports = async (context, _channel, msg) => {
         (subType === 'topic' || subType === 'join' || subType === 'part' || subType === 'kick')) {
         const discName = resolveNameForDiscord(parsed.data.__drcNetwork, parsed.data.channel);
         const discId = channelsByName[parsed.data.__drcNetwork][discName];
-        const chanSpec = categories[categoriesByName[parsed.data.__drcNetwork]].channels[channelsByName[parsed.data.__drcNetwork][discName]];
+        const [chanSpec] = categoriesByName[parsed.data.__drcNetwork]
+          .map((catId) => categories[catId].channels[discId]).filter(x => !!x);
+        console.debug('CHAN SPEC', chanSpec, 'for', parsed.data);
 
         if (subType === 'join' || subType === 'part') {
           const opts = [parsed.data.__drcNetwork, `<#${discId}>`];
@@ -279,7 +281,6 @@ module.exports = async (context, _channel, msg) => {
           'discord:deleteChannel',
           'discord:requestJoinChannel:irc',
           'isXRunning:isHTTPRunningRequest',
-          'isXRunning:isHostRunningRequest',
           'discord:cacheMessageAttachementRequest'
         ];
 

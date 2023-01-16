@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PREFIX, expiryFromOptions } = require('./util');
+const { PREFIX, expiryFromOptions, scopedRedisClient } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
 const mustache = require('mustache');
@@ -10,6 +10,7 @@ const { nanoid } = require('nanoid');
 const { Readable } = require('stream');
 const { finished } = require('stream/promises');
 const { renderTemplate, templatesLoad, getTemplates } = require('./http/common');
+const mimeTypes = require('mime-types');
 
 const app = require('fastify')({
   logger: true
@@ -18,10 +19,6 @@ const app = require('fastify')({
 require('./logger')('http');
 
 const redisListener = new Redis(config.app.redis);
-
-const stats = { // eslint-disable-line no-unused-vars
-  upSince: new Date()
-};
 
 const registered = {
   get: {}
@@ -38,10 +35,25 @@ function mkdirSyncIgnoreExist (dirPath) {
   try {
     fs.mkdirSync(dirPath);
   } catch (e) {
-    if (e.code !== 'EEXIST') {
+    if (!['EACCES', 'EEXIST'].includes(e.code)) {
       throw e;
     }
   }
+}
+
+async function renderAndCache (handler) {
+  const { parsed: { data: { name, renderType } } } = handler;
+  const type = ['http', 'get-req', name].join(':');
+
+  // the 'get-req' message informs the creator of this endpoint that the
+  // data is now needed to complete the request, and...
+  await scopedRedisClient((reqPubClient, PREFIX) =>
+    reqPubClient.publish(PREFIX, JSON.stringify({ type })));
+  // ...(await handler.promise) waits for it to arrive
+  const { body, renderObj } = renderTemplate(renderType, (await handler.promise), handler.exp);
+  renderCache[name] = { renderType, renderObj };
+
+  return body;
 }
 
 redisListener.subscribe(PREFIX, (err) => {
@@ -54,10 +66,12 @@ redisListener.subscribe(PREFIX, (err) => {
   const reqPubClient = new Redis(config.redis.url);
 
   mkdirSyncIgnoreExist(config.http.staticDir);
+  console.log(`Using static path: ${config.http.staticDir}`);
 
   if (config.http.attachmentsDir) {
     const { attachmentsDir } = config.http;
     mkdirSyncIgnoreExist(attachmentsDir);
+    console.log(`Using attachments path: ${attachmentsDir}`);
 
     app.get('/attachments/:name', async (req, res) => {
       const attachmentPath = path.join(attachmentsDir, req.params.name);
@@ -74,9 +88,10 @@ redisListener.subscribe(PREFIX, (err) => {
 
   app.get('/static/:name', async (req, res) => {
     const assetPath = path.join(config.http.staticDir, req.params.name);
+    const mimeType = mimeTypes.lookup(path.parse(assetPath).ext || 'application/octet-stream');
 
     try {
-      return res.send(await fs.promises.readFile(assetPath));
+      return res.type(mimeType).send(await fs.promises.readFile(assetPath));
     } catch (e) {
       console.error(`failed to send ${assetPath}:`, e);
       return res.redirect(config.http.rootRedirectUrl);
@@ -84,16 +99,16 @@ redisListener.subscribe(PREFIX, (err) => {
   });
 
   app.get('/:id', async (req, res) => {
-    console.debug(`GET /${req.params.id}`, req.params, req.query);
+    console.log(`GET /${req.params.id}`, req.params, req.query);
     const handler = registered.get[req.params.id];
 
     if (!handler) {
-      console.warn('Bad handler!', req.params);
+      console.debug('Bad handler!', req.params);
       return res.redirect(config.http.rootRedirectUrl);
     }
 
     if (handler.exp && Number(new Date()) > handler.exp) {
-      console.warn('expiring!', req.params);
+      console.debug('expiring!', req.params);
       delete registered.get[req.params.id];
       return res.redirect(config.http.rootRedirectUrl);
     }
@@ -106,15 +121,8 @@ redisListener.subscribe(PREFIX, (err) => {
     }
 
     try {
-      const { name, renderType } = handler.parsed.data;
-      const type = ['http', 'get-req', name].join(':');
-
-      await reqPubClient.publish(PREFIX, JSON.stringify({ type }));
-      const { body, renderObj } = renderTemplate(renderType, (await handler.promise), handler.exp);
-
-      renderCache[req.params.id] = { renderType, renderObj };
       res.type('text/html; charset=utf-8');
-      res.send(body);
+      res.send(await renderAndCache(handler));
     } catch (err) {
       console.error(err);
       res.redirect(config.http.rootRedirectUrl);
@@ -150,7 +158,7 @@ redisListener.subscribe(PREFIX, (err) => {
               return;
             }
 
-            console.log(subSubType, 'Resolving!!');
+            console.log(subSubType, 'Resolving', handler.exp);
             handler.resolve(parsed.data);
           }
         }
@@ -161,7 +169,8 @@ redisListener.subscribe(PREFIX, (err) => {
           }
 
           const { name, options } = parsed.data;
-          console.debug('CREATE!', name, options);
+          const exp = expiryFromOptions(options);
+          console.log('createGetEndpoint', name, options, exp);
 
           let rr;
           const promise = new Promise((resolve, reject) => {
@@ -174,6 +183,16 @@ redisListener.subscribe(PREFIX, (err) => {
             promise,
             ...rr
           };
+
+          // force immediate render if no expiry to generate the static file
+          if (!exp) {
+            const cachePath = path.join(config.http.staticDir, name + '.html');
+            renderAndCache(registered.get[name])
+              .then((renderedBody) =>
+                fs.promises.writeFile(cachePath, renderedBody))
+              .then(() => console.log(`Persisted unexpiring ${cachePath}`))
+              .catch((err) => console.log('renderAndCache failed', err));
+          }
         } else if (subType === 'isHTTPRunningRequest' && type === 'isXRunning') {
           const { reqId } = parsed.data;
           console.log('isHTTPRunningRequest reqId', reqId);
