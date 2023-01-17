@@ -106,7 +106,7 @@ module.exports = async function (parsed, context) {
             if (hiList && Array.isArray(hiList) && hiList.some(x => e.message.match(new RegExp(`\\b(${x})\\b`, 'i')))) {
               if (config.user.markHilites) {
                 for (const x of hiList) {
-                  e.message = e.message.replace(new RegExp(`\\b(${x})\\b`, 'i'), '**_$1_**');
+                  e.message = e.message.replace(new RegExp(`\b(${x})\b`, 'i'), '**_$1_**');
                 }
               }
 

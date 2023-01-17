@@ -78,7 +78,8 @@ redisListener.subscribe(PREFIX, (err) => {
 
       try {
         console.log(`serving ${attachmentPath}`);
-        return res.send(await fs.promises.readFile(attachmentPath));
+        const mimeType = mimeTypes.lookup(path.parse(attachmentPath).ext || 'application/octet-stream');
+        return res.type(mimeType).send(await fs.promises.readFile(attachmentPath));
       } catch (e) {
         console.error(`failed to send ${attachmentPath}:`, e);
         return res.redirect(config.http.rootRedirectUrl);
