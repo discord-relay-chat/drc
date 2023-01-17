@@ -61,7 +61,7 @@ async function plotNickMsgsOverTimeUserCommand (context) {
     Math.floor((dateLastSeen - from) / 1000 / 60 / 60 / 24), lines, 0
   ], ...a]), []);
 
-  let title = `{/:Bold ${lastFirstDiffDays} days} of messages ` + 
+  let title = `{/:Bold ${lastFirstDiffDays} days} of messages ` +
     (dispName === '%' ? '' : `from {/:Bold ${dispName.replace('~', '\\\\~')}} `) +
     `on {/:Bold ${network}`;
 

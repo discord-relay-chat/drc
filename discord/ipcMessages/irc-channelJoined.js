@@ -102,28 +102,34 @@ module.exports = async function (parsed, context) {
             };
 
             const hiList = await userCommands('hilite')({ redis: ignoreClient }, e.__drcNetwork);
+            const anmsNoBrackets = allowedSpeakersMentionString(['', '']);
 
-            if (hiList && Array.isArray(hiList) && hiList.some(x => e.message.match(new RegExp(`\\b(${x})\\b`, 'i')))) {
+            if (hiList && Array.isArray(hiList) && hiList.some(x => e.message.match(new RegExp(x, 'i')))) {
               if (config.user.markHilites) {
                 for (const x of hiList) {
                   e.message = e.message.replace(new RegExp(`\b(${x})\b`, 'i'), '**_$1_**');
                 }
               }
 
-              e.message += ' ' + allowedSpeakersMentionString();
+              e.message += ' ' + anmsNoBrackets;
               await persistMsgWithAutoCapture('hilite');
             }
 
             const netNick = config.irc.registered[e.__drcNetwork].user.nick;
             let mentionIdx = e.message.search(new RegExp(netNick, 'i'));
-            if (mentionIdx !== -1) {
+            if (mentionIdx !== -1 && e.message.indexOf(anmsNoBrackets) === -1) {
               if (config.app.allowedSpeakersHighlightType === 'bracket') {
                 mentionIdx += netNick.length;
                 e.message = e.message.substring(0, mentionIdx) +
                   allowedSpeakersMentionString() +
                   e.message.substring(mentionIdx);
               } else if (config.app.allowedSpeakersHighlightType === 'replace') {
-                e.message = e.message.replace(netNick, allowedSpeakersMentionString(['', '']));
+                const orig = e.message;
+                e.message = e.message.replace(netNick, anmsNoBrackets);
+
+                if (orig === e.message) {
+                  e.message += ` ${anmsNoBrackets}`;
+                }
               }
 
               await persistMsgWithAutoCapture('mention');
