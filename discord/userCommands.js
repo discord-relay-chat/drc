@@ -1,8 +1,6 @@
 'use strict';
 
 const path = require('path');
-const uuid = require('uuid');
-const { nanoid } = require('nanoid');
 const {
   PREFIX,
   AmbiguousMatchResultError,
@@ -16,10 +14,8 @@ const {
   generateListManagementUCExport,
   clearSquelched,
   digest,
-  isHTTPRunning,
   getNetworkAndChanNameFromUCContext
 } = require('./common');
-const config = require('../config');
 
 const MODULENAME = path.join(__dirname, path.parse(__filename).name);
 
@@ -113,39 +109,6 @@ resolver.__functions = {
     });
   },
 
-  uuid (context) {
-    let f = uuid.v4;
-    if (context.options.v && uuid['v' + context.options.v]) {
-      f = uuid['v' + context.options.v];
-    }
-    return f();
-  },
-
-  nanoid () {
-    return nanoid();
-  },
-
-  rand (context) {
-    const length = context.options.length || 16;
-    const fmt = context.options.format || 'base64';
-    return Buffer.from(Array.from({ length }, () => Math.floor(Math.random() * 0xFF))).toString(fmt);
-  },
-
-  enableDebugging (context) {
-    let prefix = 'En';
-    if (context.argObj._[0]) {
-      require('../logger').enableLevel('debug');
-      console.debug('Debug logging enabled by user!');
-      scopedRedisClient((rc, pfx) => rc.publish(pfx + ':__c2::irc:debug_on', JSON.stringify({ type: 'debug_on' })));
-    } else {
-      require('../logger').disableLevel('debug');
-      prefix = 'Dis';
-      scopedRedisClient((rc, pfx) => rc.publish(pfx + ':__c2::irc:debug_off', JSON.stringify({ type: 'debug_off' })));
-    }
-
-    return `**${prefix}abled** debug logging.`;
-  },
-
   digest: (context) => {
     if (context.options._.length !== 2) {
       return;
@@ -155,22 +118,6 @@ resolver.__functions = {
     context.options._ = [network, 'digest', minutes];
     return resolver('logs')(context);
   },
-
-  isHTTPRunning: async (context) => {
-    const res = await isHTTPRunning(context.registerOneTimeHandler, context.removeOneTimeHandler);
-    let resStr = 'No.';
-    if (res) {
-      const { listenAddr, fqdn } = res;
-      resStr = `Yes, on \`${listenAddr}\` internally and as \`${fqdn}\` externally.`;
-    }
-    context.sendToBotChan(resStr);
-  },
-
-  plotMpm: async (context) => require('./plotting')
-    .plotMpmData(config.app.stats.mpmPlotTimeLimitHours, null, {
-      produceBackupIfExtant: true,
-      alwaysLogScale: true
-    }),
 
   userFirstSeen: async (context) => {
     const { network } = getNetworkAndChanNameFromUCContext(context);

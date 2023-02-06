@@ -1,10 +1,10 @@
-require('../logger')('irc');
+require('../logger')('liveNicks');
 
 class Nick {
-  constructor (initialNick) {
-    this.nicks = [];
+  constructor (initialNick, mergedHistory = []) {
+    this.nicks = [...mergedHistory];
     if (initialNick) {
-      this.nicks.push(initialNick);
+      this.add(initialNick);
     }
   }
 
@@ -31,10 +31,13 @@ class Nick {
 }
 
 module.exports = class LiveNicks {
-  constructor (fromList) {
+  constructor (fromList, mergeHistoryFrom) {
     this.nicks = {};
     if (fromList) {
-      this.nicks = fromList.reduce((a, nick) => ({ [nick]: new Nick(nick), ...a }), {});
+      this.nicks = fromList.reduce((a, nick) => ({
+        [nick]: new Nick(nick, mergeHistoryFrom?.get(nick)?.history() ?? []),
+        ...a
+      }), {});
     }
   }
 

@@ -1,8 +1,9 @@
 global.AbortSignal = {};
 
-const util = require('../util');
-
 process.env.NODE_ENV = 'test';
+
+const path = require('path');
+const util = require('../util');
 
 test('matchNetwork', () => {
   expect(util.matchNetwork('foo').network).toEqual('foo.bar.irc');
@@ -58,4 +59,39 @@ test('isObjPathExtant', () => {
     baz: 42
   }).toEqual(util.isObjPathExtant(x, ['foo', 'bar']))
   expect(42).toEqual(util.isObjPathExtant(x, ['foo', 'bar', 'baz']))
-})
+});
+
+test('Mapper', async () => {
+  const tmPath = path.join(__dirname, 'test.Mapper.json');
+  const tm = new util.Mapper(tmPath,  'TEST');
+  
+  try {
+    await tm.forNetwork('test.network');
+    expect(false).toEqual(true);
+  } catch {
+    expect(true).toEqual(true);
+  }
+
+  await tm.init();
+
+  const curNet = await tm.forNetwork('test.network');
+  expect(curNet.oldKey).toEqual('#oldValue');
+  expect(curNet.foo).toEqual('#bar');
+
+  await tm.set('test.network', 'baz', '42');
+  expect(await tm.get('test.network', 'baz')).toEqual('42');
+
+  await tm.set('another.test.network', 'foo', 'baz');
+  expect((await tm.forNetwork('another.test.network')).foo).toEqual('baz');
+
+  const all = await tm.all();
+  expect(all).toEqual({
+    'another.test.network': { foo: 'baz' },
+    'test.network': { oldKey: '#oldValue', foo: '#bar', baz: '42' }
+  });
+
+  await tm.set('test.network', 'anObject', { foo: 42 });
+  expect(await tm.get('test.network', 'anObject')).toEqual({ foo: 42 });
+
+  expect(await tm.findNetworkForKey('oldKey')).toEqual('test.network');
+});

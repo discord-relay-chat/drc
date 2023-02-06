@@ -51,7 +51,7 @@ module.exports = async (context, data) => {
     replyNick = senderNickFromMessage(replyMsg);
   }
 
-  if (data.channelId === config.irc.quitMsgChanId || data.content.match(/^\s*!/)) {
+  if (data.channelId === config.irc.quitMsgChanId || data.content.trim()[0] === config.app.allowedSpeakersCommandPrefixCharacter) {
     if (replyNick) {
       console.log(`Appending ${replyNick} to ${data.content} for user command in ${data.channelId}`);
       data.content = `${data.content} ${replyNick}`;
@@ -165,31 +165,30 @@ module.exports = async (context, data) => {
     }
 
     if (data.content.match(CHANNELS_PATTERN)) {
-      [...data.content.matchAll(CHANNELS_PATTERN)].forEach(([chanMatch, channelId]) => {
+      await Promise.all([...data.content.matchAll(CHANNELS_PATTERN)].map(async ([chanMatch, channelId]) => {
         const chanObj = channelsById[channelId];
         const parentObj = channelsById[chanObj.parent];
 
-        console.debug('CONTENT MATCH', chanMatch, channelId, channelsById[channelId], resolveNameForIRC(network.name, chanObj.name), parentObj);
-
-        let replacer = '#' + resolveNameForIRC(network.name, chanObj.name);
+        let replacer = '#' + await resolveNameForIRC(network.name, chanObj.name);
 
         if (parentObj?.name !== network.name && channel.parent !== config.discord.privMsgCategoryId) {
           replacer += ` (on ${network.name})`;
         }
 
         data.content = data.content.replace(chanMatch, replacer);
-      });
+      }));
     }
 
     if (channel.parent === config.discord.privMsgCategoryId) {
-      const network /* shadowed! */ = PrivmsgMappings.findNetworkForKey(data.channelId);
-      console.log('PM CAT', channel, data.channelId, network, PrivmsgMappings.forNetwork(network), data.content);
+      const network /* shadowed! */ = await PrivmsgMappings.findNetworkForKey(data.channelId);
+      console.log('PM CAT', channel, data.channelId, network, await PrivmsgMappings.forNetwork(network), data.content);
       ticklePmChanExpiry(network, data.channelId);
+      console.error('PM FN?!', await PrivmsgMappings.forNetwork(network));
       return await redisClient.publish(PREFIX, JSON.stringify({
         type: 'discord:requestSay:irc',
         data: {
           network,
-          target: PrivmsgMappings.forNetwork(network)[data.channelId].target,
+          target: (await PrivmsgMappings.forNetwork(network))[data.channelId].target,
           message: data.content
         }
       }));
@@ -199,7 +198,7 @@ module.exports = async (context, data) => {
       type: 'irc:' + subType,
       data: {
         network: { name: network.name },
-        channel: resolveNameForIRC(network.name, channel.name),
+        channel: await resolveNameForIRC(network.name, channel.name),
         message: data.content
       }
     }));

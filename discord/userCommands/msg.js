@@ -1,5 +1,5 @@
 
-const { PREFIX, matchNetwork, resolveNameForIRC } = require('../../util');
+const { PREFIX, matchNetwork, resolveNameForIRCSyncFromCache, ChannelXforms } = require('../../util');
 const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 
 // here we actually _want_ the unparsed `a` instead of argObj! so both are needed
@@ -9,12 +9,13 @@ async function f (context, ...a) {
   }
 
   const { network } = matchNetwork(a[0]);
+  const resolverCache = await ChannelXforms.all();
   const msgContent = a.slice(2).join(' ').replace(CHANNELS_PATTERN, (matchStr, channelId) => {
     if (context.channelsById[channelId]) {
       const chanSpec = context.channelsById[channelId];
       const parentNetwork = context.channelsById[chanSpec.parent];
       console.warn(`GOT CHANNEL ${chanSpec.name} in ${parentNetwork.name} for ${channelId}`);
-      return '#' + resolveNameForIRC(parentNetwork.name, chanSpec.name);
+      return '#' + resolveNameForIRCSyncFromCache(resolverCache, parentNetwork.name, chanSpec.name);
     }
 
     return matchStr;

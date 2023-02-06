@@ -61,7 +61,7 @@ module.exports = async function (parsed, context) {
     }
 
     serialize(async () => {
-      let chanId = Object.entries(PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
+      let chanId = Object.entries(await PrivmsgMappings.forNetwork(e.__drcNetwork)).find(([, obj]) => obj.target === e._orig.nick)?.[0];
       let newChan, created;
 
       if (chanId) {
@@ -92,7 +92,7 @@ module.exports = async function (parsed, context) {
         chanId = newChan.id;
 
         created = Number(created);
-        PrivmsgMappings.set(e.__drcNetwork, newChan.id, {
+        await PrivmsgMappings.set(e.__drcNetwork, newChan.id, {
           target: e._orig.nick,
           channelName: newChan.name,
           created

@@ -282,7 +282,7 @@ module.exports = async function (parsed, context) {
       console.debug(`Got onJoinList for ${onJoinOpts.join('_')}`, onJoinList);
       for (const onJoin of onJoinList) {
         console.log(await sendToBotChan(`Running join command for #${parsed.data.name} on \`${parsed.data.__drcNetwork}\`: \`${onJoin}\``));
-        await allowedSpeakerCommandHandler({ content: onJoin });
+        await allowedSpeakerCommandHandler({ content: onJoin }, null, { autoPrefixCurrentCommandChar: true });
       }
     });
   }

@@ -1,5 +1,6 @@
 'use strict';
 
+const config = require('../../config');
 const { MessageEmbed } = require('discord.js');
 
 function f (context) {
@@ -18,26 +19,46 @@ function f (context) {
     toSend = helpFunc(context);
   }
 
+  const ascpc = config.app.allowedSpeakersCommandPrefixCharacter;
   if (!toSend) {
-    const cmdListStr = Object.keys(reReq.__functions)
-      .filter((fk) => fk.indexOf('_') !== 0)
-      .sort()
-      .map((fk) =>
-        '• ' + (reReq.__functions[fk].__drcHelp ? `**${fk}**` : fk)
-      ).join('\n');
     const toSendEmbed = new MessageEmbed()
-      .setTitle('Command Listing')
-      .setDescription('**Bolded** have further help available via `!help [command]`.\n\n' +
+      .setTitle('DiscordRC User Command Help')
+      .setDescription('Those `<command>`s bulleted below with "**»**" (instead of "•") have further help available via any of these equivalent alternatives:\n• ' +
+        ['help <command>', '<command> -h', '<command> --help'].map(s => '`' + ascpc + s + '`').join('\n• ') + '\n\n' +
+        'Only the shortest unique prefix of a command name is required.\n\n' +
         'Multiple commands may be run _serially_ in a single invocation with `|>` or _concurrently_ with `!>`. ' +
         'These may be combined, with concurrent sections processed together as one serial section. For example:\n' +
-        '```\n!stats |> !whois libera outage-bot !> !sys |> !ps\n```\n' +
-        '`!stats` runs first serially. Then, `!whois` and `!sys` are run concurrently together. ' +
-        'When they have both completed, `!ps` is run.' +
+        `\`\`\`\n${ascpc}stats |> ${ascpc}whois libera outage-bot !> ${ascpc}sys |> ${ascpc}ps\n\`\`\`\n` +
+        `Here, \`${ascpc}stats\` runs first serially; then, \`${ascpc}whois\` and \`${ascpc}sys\` are run concurrently together; ` +
+        `finally, once they have both completed, \`${ascpc}ps\` is run.` +
         '\n\n')
-      .setColor('#0011ff')
-      .setTimestamp()
-      .addField('Available Commands:', cmdListStr);
+      .setColor('#0011ff');
+
     context.sendToBotChan(toSendEmbed, true);
+
+    let sortedChonkers = Object.entries(reReq.__functions)
+      .filter(([fk]) => fk.indexOf('_') !== 0)
+      .sort();
+
+    const FIELD_AMT_LIMIT = 25;
+    for (let page = 1; sortedChonkers.length; page++) {
+      const chonkEmbed = new MessageEmbed()
+        .setTitle(`Available commands, page ${page}`)
+        .setColor('#0011ff');
+
+      sortedChonkers.slice(0, FIELD_AMT_LIMIT).forEach(([fk, { __drcHelp }]) => {
+        let titleStr = ' ';
+
+        if (__drcHelp && typeof (__drcHelp) === 'function' && __drcHelp().title) {
+          titleStr = `_${__drcHelp().title}_`;
+        }
+
+        chonkEmbed.addField((__drcHelp ? '**»**' : '•') + ' ' + fk, titleStr);
+      });
+
+      sortedChonkers = sortedChonkers.slice(FIELD_AMT_LIMIT);
+      context.sendToBotChan(chonkEmbed, true);
+    }
   } else {
     if (typeof toSend === 'string') {
       toSend = '```\n' + toSend + '\n```';
@@ -48,14 +69,16 @@ function f (context) {
           throw new Error('bad shape of help object');
         }
 
+        const styledTitle = '_**' + toSend.title + '**_';
         const toSendEmbed = new MessageEmbed()
-          .setTitle(toSend.title)
+          .setTitle('`' + config.app.allowedSpeakersCommandPrefixCharacter + cmd + '`')
+          .setDescription(styledTitle)
           .setColor(toSend.color || '#0011ff')
-          .addField('Usage', '`!' + cmd + ' ' + toSend.usage + '`')
+          .addField('Usage', '`' + config.app.allowedSpeakersCommandPrefixCharacter + cmd + ' ' + toSend.usage + '`')
           .setTimestamp();
 
         if (toSend.notes) {
-          toSendEmbed.setDescription(toSend.notes);
+          toSendEmbed.setDescription(styledTitle + '\n\n' + toSend.notes);
         }
 
         if (toSend.options && Array.isArray(toSend.options)) {

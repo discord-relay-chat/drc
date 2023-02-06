@@ -24,7 +24,10 @@ async function _spawnGnuplotLocal (gnuplotCmds, tName, fName) {
     gnuplot.stdin.end();
 
     gnuplot.stderr.on('data', (data) => {
-      console.error('_spawnGnuplotLocal child stderr', data.toString('utf8'));
+      const trimmed = data.toString('utf8').trim();
+      if (trimmed.length) {
+        console.error('_spawnGnuplotLocal child stderr', trimmed);
+      }
     });
   });
 }
@@ -61,7 +64,7 @@ async function plotMpmDataRender (data, maxY, {
       toGifProc.on('close', () => console.log(`Finished ${toGifScriptPath}`));
       toGifProc.on('error', (e) => console.error(`${toGifScriptPath} errored`, e));
       toGifProc.stderr.on('data', (data) => console.error(`${toGifScriptPath} STDERR`, data.toString('utf8')));
-      toGifProc.stdout.on('data', (data) => console.error(`${toGifScriptPath}:`, data.toString('utf8')));
+      toGifProc.stdout.on('data', (data) => console.info(`${toGifScriptPath}:`, data.toString('utf8')));
     }
   }
 

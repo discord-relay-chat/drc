@@ -25,28 +25,36 @@ function contextMenuHandlerCommonInitial (context, ...a) {
   return { interaction, message, senderNick };
 }
 
-async function _contextMenuCommonHandler (ephemeral, innerHandler, context, ...a) {
+async function _contextMenuCommonHandler (ephemeral, defer, innerHandler, context, ...a) {
   const { interaction, message, senderNick } = contextMenuHandlerCommonInitial(context, ...a);
   let replyEmbed = new MessageEmbed()
     .setTitle('Unable to determine IRC nickname from that message. Sorry!')
     .setTimestamp();
 
+  if (defer) {
+    await interaction.deferReply({ ephemeral });
+  }
+
   if (message && senderNick) {
     replyEmbed = await innerHandler({ interaction, message, senderNick });
   }
 
-  interaction.reply({
+  return (defer ? interaction.editReply : interaction.reply).bind(interaction)({
     embeds: [replyEmbed],
     ephemeral
-  }).catch(console.error);
+  });
 }
 
 async function contextMenuCommonHandlerNonEphemeral (innerHandler, context, ...a) {
-  return _contextMenuCommonHandler(false, innerHandler, context, ...a);
+  return _contextMenuCommonHandler(false, false, innerHandler, context, ...a);
 }
 
 async function contextMenuCommonHandler (innerHandler, context, ...a) {
-  return _contextMenuCommonHandler(true, innerHandler, context, ...a);
+  return _contextMenuCommonHandler(true, false, innerHandler, context, ...a);
+}
+
+async function contextMenuCommonHandlerDefered (innerHandler, context, ...a) {
+  return _contextMenuCommonHandler(true, true, innerHandler, context, ...a);
 }
 
 function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
@@ -251,10 +259,10 @@ function simpleEscapeForDiscord (s) {
   return accum;
 }
 
-function convertDiscordChannelsToIRCInString (targetString, context, network) {
+async function convertDiscordChannelsToIRCInString (targetString, context, network) {
   if (targetString.match(CHANNELS_PATTERN)) {
     const [chanMatch, channelId] = [...targetString.matchAll(CHANNELS_PATTERN)][0];
-    const ircName = '#' + resolveNameForIRC(network, '#' + context.getDiscordChannelById(channelId).name);
+    const ircName = '#' + await resolveNameForIRC(network, context.getDiscordChannelById(channelId).name);
     targetString = targetString.replace(chanMatch, ircName);
   }
   return targetString;
@@ -280,7 +288,7 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
 
     const key = [PREFIX, commandName, network].join(':');
 
-    const argStr = () => {
+    const argStr = async () => {
       if (a.length < 3) {
         throw new Error(`Not enough args for ${cmd}!`);
       }
@@ -291,7 +299,7 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
     return scopedRedisClient(async (redis) => {
       switch (cmd) {
         case 'add':
-          await redis.sadd(key, argStr());
+          await redis.sadd(key, await argStr());
           break;
         case 'clear':
           // this really should be a button for confirmation instead of hardcoded!
@@ -300,7 +308,7 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
           }
           break;
         case 'remove':
-          await redis.srem(key, argStr());
+          await redis.srem(key, await argStr());
           break;
       }
 
@@ -321,20 +329,33 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
     });
   };
 
+  const addlCommandsHelp = Object.entries(additionalCommands ?? {})
+    .filter(([k]) => k.indexOf('_') !== 0)
+    .reduce((a, [k, v]) => ({
+      [k]: {
+        text: k
+      },
+      ...a
+    }), {});
+
   f.__drcHelp = () => {
     return {
       title: `Add or remove strings to the \`${commandName}\` list.`,
       usage: 'network subcommand [string]',
       subcommands: {
         add: {
+          header: 'Notes',
           text: `Adds \`string\` to the \`${commandName}\` list.`
         },
         remove: {
+          header: 'Notes',
           text: `Removes \`string\` from the \`${commandName}\` list.`
         },
         clear: {
+          header: 'Notes',
           text: `Removes all strings from the \`${commandName}\` list.`
-        }
+        },
+        ...addlCommandsHelp
       }
     };
   };
@@ -355,11 +376,15 @@ const persistOrClearPmChan = async (network, chanId, persist = true) => {
   });
 };
 
-const formatKVsWithOptsDefaults = { delim: ':\t' };
+const formatKVsWithOptsDefaults = {
+  delim: ':\t',
+  nameBoundary: '`'
+};
 
 function formatKVsWithOpts (obj, opts) {
   opts = { ...formatKVsWithOptsDefaults, ...opts };
-  const { delim, sortByValue } = opts;
+  let { delim, sortByValue, nameBoundary } = opts;
+  console.debug('formatKVsWithOpts USING OPTS', opts);
   const typeFmt = (v, k) => {
     switch (typeof v) {
       case 'object':
@@ -390,6 +415,10 @@ function formatKVsWithOpts (obj, opts) {
   };
 
   const sorter = (a, b) => {
+    if (typeof sortByValue === 'boolean' && sortByValue) {
+      sortByValue = 1;
+    }
+
     if (typeof sortByValue === 'number') {
       return a[1] + (b[1] * sortByValue);
     }
@@ -399,8 +428,11 @@ function formatKVsWithOpts (obj, opts) {
 
   const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
   return Object.entries(obj).sort(sorter)
-    .filter(([k, v]) => typeof (v) !== 'function')
-    .map(([k, v]) => `\`${k.padStart(maxPropLen, ' ')}\`${delim}${vFmt(v, k)}`).join('\n');
+    .filter(([, v]) => typeof (v) !== 'function')
+    .map(([k, v]) =>
+      `${nameBoundary}${k.padStart(maxPropLen, ' ')}${nameBoundary}` +
+      `${delim}${vFmt(v, k)}`
+    ).join('\n');
 }
 
 module.exports = {
@@ -412,6 +444,7 @@ module.exports = {
   senderNickFromMessage,
   contextMenuCommonHandler,
   contextMenuCommonHandlerNonEphemeral,
+  contextMenuCommonHandlerDefered,
 
   getNetworkAndChanNameFromUCContext (context) {
     const [netStub, chanId] = context.options._;

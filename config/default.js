@@ -75,6 +75,7 @@ const _config = {
     // 'replace' (replace IRC nick with Discord ASers)
     // 'bracket' (turns into: IRCNick[DiscordASers])
     allowedSpeakersHighlightType: 'replace',
+    allowedSpeakersCommandPrefixCharacter: ';',
     timeout: 30,
     statsTopChannelCount: 10,
     statsMaxNumQuits: 50,
@@ -155,7 +156,7 @@ const _config = {
   },
 
   nmap: {
-    defaultOptions: ['-v', '-Pn', '-O', '--traceroute']
+    defaultOptions: ['-v', '-Pn']
   },
 
   shodan: {

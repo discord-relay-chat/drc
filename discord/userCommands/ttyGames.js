@@ -51,7 +51,7 @@ async function newGame (gameName, context, ...a) {
   const proc = spawn(gameName);
   const gameEnd = () => {
     delete active[chanName];
-    proc.disconnect();
+    proc?.disconnect();
     channel.send('**The game has ended.**');
     if (config.user.destroyGameChannelsWhenDone) {
       channel.send('This channel will self-destruct in 1 minute...');

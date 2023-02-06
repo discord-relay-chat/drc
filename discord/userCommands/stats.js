@@ -2,8 +2,6 @@
 
 const _ = require('lodash');
 const os = require('os');
-const fs = require('fs');
-const path = require('path');
 const config = require('config');
 const { execSync } = require('child_process');
 const { MessageEmbed, MessageAttachment } = require('discord.js');
@@ -18,7 +16,6 @@ const {
   sizeAtPath,
   scopedRedisClient
 } = require('../../util');
-const { plotMpmOutputFilename } = require('../plotting');
 
 async function f (context) {
   const promise = new Promise((resolve, reject) => {
@@ -149,13 +146,13 @@ async function f (context) {
     lastAnnounceFormatted: fmtDuration(stats.lastAnnounce),
     uptimeFormatted: fmtDuration(stats.upSince),
     systemUptime,
-    channelsCountsStr: channelsCountToStr(
+    channelsCountsStr: await channelsCountToStr(
       stats.messages.channels,
       stats.messagesLastAnnounce.channels,
       durationInS,
       !context.options.sortByCount
     ),
-    channelsCountProcessed: channelsCountProcessed(
+    channelsCountProcessed: await channelsCountProcessed(
       stats.messages.channels,
       stats.messagesLastAnnounce.channels,
       durationInS
@@ -188,18 +185,8 @@ async function f (context) {
       .setURL(`https://${config.http.fqdn}/${name}`);
 
     if (config.app.stats.plotEnabled) {
-      const { dir, name } = path.parse(plotMpmOutputFilename());
-      const plotGif = path.join(dir, name + '.gif');
-      console.log(plotGif, '???', fs.existsSync(plotGif));
-      if (fs.existsSync(plotGif)) {
-        const { base } = path.parse(plotGif);
-        console.log('!!', config.app.stats.getMpmPlotFqdn(base));
-        embed.setImage(`attachment://${name + '.gif'}`);
-        files.push(new MessageAttachment(config.app.stats.getMpmPlotFqdn(base)));
-      } else {
-        embed.setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
-        files.push(new MessageAttachment(serveOpts.mpmPlotFqdn));
-      }
+      embed.setImage(`attachment://${config.app.stats.MPM_PLOT_FILE_NAME}`);
+      files.push(new MessageAttachment(serveOpts.mpmPlotFqdn));
     }
 
     embed

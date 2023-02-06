@@ -184,30 +184,30 @@ module.exports = async function (parsed, context) {
         await logsSearch(network, d, logsEmbed, [...aliases]);
         moreEmbeds.push(logsEmbed);
       }
-
-      const notes = await userCommands('notes')(Object.assign({
-        options: parsed.data?.requestData?.options
-      }, context), ...parsed.data?.requestData?.options._);
-      if (notes && notes.length) {
-        const notesEmbed = new MessageEmbed()
-          .setColor('#2c759c')
-          .setTitle(`Notes regarding \`${d.nick}\` on \`${network}\``);
-        moreEmbeds.push(notesEmbed);
-        notesEmbed.setDescription(notes.reduce((a, note) => {
-          if (typeof note === 'string') {
-            a += `• ${note}\n`;
-          }
-          return a;
-        }, ''));
-      }
-
-      await scopedRedisClient(async (rc, pfx) => {
-        const zScore = await rc.zscore(`${pfx}:kicks:${network}:kickee`, d.nick);
-        if (zScore > 2) {
-          embed.addField('Toxic user alert!', `**${d.nick}** has been kicked from channels **${zScore}** times on this network!`);
-        }
-      });
     }
+
+    const notes = await userCommands('notes')(Object.assign({
+      options: parsed.data?.requestData?.options
+    }, context), ...parsed.data?.requestData?.options._);
+    if (notes && notes.length) {
+      const notesEmbed = new MessageEmbed()
+        .setColor('#2c759c')
+        .setTitle(`Notes regarding \`${d.nick}\` on \`${network}\``);
+      moreEmbeds.push(notesEmbed);
+      notesEmbed.setDescription(notes.reduce((a, note) => {
+        if (typeof note === 'string') {
+          a += `• ${note}\n`;
+        }
+        return a;
+      }, ''));
+    }
+
+    await scopedRedisClient(async (rc, pfx) => {
+      const zScore = await rc.zscore(`${pfx}:kicks:${network}:kickee`, d.nick);
+      if (zScore > 2) {
+        embed.addField('Toxic user alert!', `**${d.nick}** has been kicked from channels **${zScore}** times on this network!`);
+      }
+    });
   }
 
   if (!d.error) {

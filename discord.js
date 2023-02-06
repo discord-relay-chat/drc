@@ -9,13 +9,23 @@ const yargs = require('yargs');
 const { fetch } = require('undici');
 const ipcMessageHandler = require('./discord/ipcMessage');
 const { banner, setDefaultFont } = require('./discord/figletBanners');
-const { PREFIX, replaceIrcEscapes, PrivmsgMappings, NetworkNotMatchedError, UserCommandNotFound, scopedRedisClient } = require('./util');
 const userCommands = require('./discord/userCommands');
 const { formatKVs, aliveKey, ticklePmChanExpiry } = require('./discord/common');
 const { plotMpmData } = require('./discord/plotting');
 const eventHandlers = require('./discord/events');
 const registerContextMenus = require('./discord/contextMenus');
 const parsers = require('./lib/parsers');
+const UCHistory = require('./discord/userCommandHistory');
+const {
+  PREFIX,
+  replaceIrcEscapes,
+  PrivmsgMappings,
+  NetworkNotMatchedError,
+  AmbiguousMatchResultError,
+  UserCommandNotFound,
+  scopedRedisClient,
+  fmtDuration
+} = require('./util');
 
 require('./logger')('discord');
 
@@ -198,7 +208,11 @@ async function alivenessCheck () {
         delete pendingAliveChecks[nick];
       }, 30 * 1000);
 
-      await msg(ctx, network, nick, ...messageComps);
+      try {
+        await msg(ctx, network, nick, ...messageComps);
+      } catch (e) {
+        console.error(`Aliveness check for ${network}/${nick} threw!`, e);
+      }
     }
   }
 
@@ -366,36 +380,41 @@ client.once('ready', async () => {
 
   siteCheck();
 
+  const getDiscordChannelById = (id) => client.channels.cache.get(id);
   let allowedSpeakerCommandHandler = () => {
     throw new Error('allowedSpeakerCommandHandler not initialized! not configured?');
   };
 
   if (config.app.allowedSpeakers.length) {
-    allowedSpeakerCommandHandler = async (data, toChanId) => {
+    allowedSpeakerCommandHandler = async (data, toChanId, {
+      autoPrefixCurrentCommandChar = false
+    } = {}) => {
       const trimContent = data.content.replace(/^\s+/, '');
-      if (trimContent[0] !== '!') {
+
+      if (!autoPrefixCurrentCommandChar && trimContent[0] !== config.app.allowedSpeakersCommandPrefixCharacter) {
         return;
       }
 
       const pipedHandler = parsers.parseMessageStringForPipes(trimContent, (content) =>
-        allowedSpeakerCommandHandler(Object.assign({}, data, { content }), toChanId));
+        allowedSpeakerCommandHandler(Object.assign({}, data, { content }), toChanId, { autoPrefixCurrentCommandChar }));
 
       if (pipedHandler) {
         return pipedHandler();
       }
 
-      let { command, args } = parsers.parseCommandAndArgs(trimContent);
+      let { command, args } = parsers.parseCommandAndArgs(trimContent, { autoPrefixCurrentCommandChar });
+      console.log(trimContent, '-> user command parsed ->', { command, args });
       args = parsers.parseArgsForQuotes(args);
+      console.debug('args parsed for quotes', args);
 
       const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
-      console.log(trimContent, 'USER CMD PARSED', command, fmtedCmdStr, args);
       const redis = new Redis(config.redis.url);
 
       const zEvents = [];
       let resolvedName;
       try {
         const cmdFunc = userCommands(command);
-        resolvedName = cmdFunc?.__resolvedFullCommandName;
+        resolvedName = cmdFunc?.__resolvedFullCommandName ?? command;
 
         // this should be removed ASAP in favor of scopedRedisClient,
         // but need to find all uses of it first...
@@ -444,7 +463,7 @@ client.once('ready', async () => {
           throw new UserCommandNotFound();
         }
 
-        const result = await cmdFunc({
+        const context = {
           stats,
           redis,
           publish, // TODO: replace all uses of `redis` with `publish` (and others if needed)
@@ -462,11 +481,18 @@ client.once('ready', async () => {
           channelsById,
           categoriesByName,
           toChanId,
-          getDiscordChannelById: (id) => client.channels.cache.get(id),
+          getDiscordChannelById,
           discordMessage: data
-        }, ...args);
+        };
 
-        console.log(`Exec'ed user command ${command} with args [${args.join(', ')}]`, argObj, '-->', result);
+        if (argObj.help || argObj.h) {
+          context.options._ = [resolvedName];
+          zEvents.push('commandSuccess');
+          return userCommands('help')(context);
+        }
+
+        const result = await cmdFunc(context, ...args);
+        console.log(`Executed user command "${command}" (${resolvedName}) with result -->\n`, result);
 
         let toBotChan;
         if (result && result.__drcFormatter) {
@@ -494,6 +520,15 @@ client.once('ready', async () => {
         if (ucErr instanceof NetworkNotMatchedError) {
           sendToBotChan(`Unable to find a matching network for "${ucErr.message}"`);
           zEvents.push('netNotMatched');
+        } else if (ucErr instanceof AmbiguousMatchResultError) {
+          sendToBotChan({
+            embeds: [
+              new MessageEmbed()
+                .setTitle(`Ambiguous command name "\`${fmtedCmdStr.trim()}\`"`)
+                .setColor('RED')
+                .setDescription(ucErr.message)
+            ]
+          }, true);
         } else {
           sendToBotChan(fmtedCmdStr + `threw an error! (${ucErr.name}):` +
             ' `' + ucErr.message + '`');
@@ -501,12 +536,24 @@ client.once('ready', async () => {
         }
       } finally {
         redis.disconnect();
+
+        const chan = await getDiscordChannelById(data.channelId);
+        const { hashKey } = await UCHistory.push(trimContent, {
+          zEvents,
+          sentBy: data.author?.tag ?? '<system>',
+          sentIn: {
+            channel: chan?.name ?? '<system>',
+            guild: chan?.guild?.name ?? '<system>'
+          }
+        });
+
         scopedRedisClient(async (client, prefix) => {
           const keyArr = [prefix, 'userCommandCalls'];
           const zNewCounts = await Promise.all(
             zEvents.map((evName) => client.zincrby([...keyArr, evName].join(':'), '1', resolvedName ?? command))
           );
-          console.log('Logging UC zEvents!', command, 'is', resolvedName, '||', zEvents, '->>', zNewCounts);
+          console.log(`User command logged as ${hashKey}:`,
+            command, 'is', resolvedName, '/ events:', zEvents, '->>', zNewCounts);
         });
       }
     };
@@ -549,12 +596,28 @@ client.once('ready', async () => {
   const uCfg = await scopedRedisClient(async (redis) => userCommands('config')({ redis }, 'load'));
 
   if (uCfg.error) {
-    sendToBotChan(`\nReloading user configuration failed:\n\n**${uCfg.error.message}**\n`);
-    sendToBotChan('\nUsing default user configuration:\n\n' + formatKVs(config.user));
+    sendToBotChan({
+      embeds: [
+        new MessageEmbed()
+          .setTitle('Reloading configuration failed: using defaults!')
+          .setDescription(formatKVs(config.user)).setColor('RED')
+      ]
+    }, true);
     console.warn('Reloading user config failed', uCfg.error);
   } else {
-    sendToBotChan('\nUser configuration:\n\n' + formatKVs(uCfg));
+    sendToBotChan({
+      embeds: [
+        new MessageEmbed().setTitle('User configuration').setDescription(formatKVs(uCfg)).setColor('AQUA')
+      ]
+    }, true);
   }
+
+  sendToBotChan({
+    embeds: [
+      new MessageEmbed().setTitle(config.app.allowedSpeakersCommandPrefixCharacter)
+        .setDescription('is the user command prefix character.').setColor('ORANGE')
+    ]
+  }, true);
 
   console.log('Discovered private messaging category:', config.discord.privMsgCategoryId, channelsById[config.discord.privMsgCategoryId]);
   if (!config.discord.privMsgCategoryId || !channelsById[config.discord.privMsgCategoryId]) {
@@ -592,10 +655,25 @@ client.once('ready', async () => {
     const realDel = await scopedRedisClient(async (aliveClient) => {
       const realDel = [];
       for (const [chanId, o] of toDel) {
-        const network = PrivmsgMappings.findNetworkForKey(chanId);
-        // only delete channels that have expired in Redis (assuming here that we've missed the keyspace notification for some reason)
-        if (!(await aliveClient.get(aliveKey(network, chanId)))) {
+        const network = await PrivmsgMappings.findNetworkForKey(chanId);
+        if (!network) {
+          console.warn(`No network found for PM channel ${chanId}! Removing.`);
           realDel.push([chanId, o]);
+          continue;
+        }
+
+        const aKey = aliveKey(network, chanId);
+        const pmChanTTL = await aliveClient.ttl(aKey);
+        if (pmChanTTL === -1) {
+          continue;
+        }
+
+        // only delete channels that have expired in Redis (assuming here that we've missed the keyspace notification for some reason)
+        if (!(await aliveClient.get(aKey))) {
+          realDel.push([chanId, o]);
+        } else {
+          const chanObj = await PrivmsgMappings.get(network, chanId);
+          console.info(`PM channel for ${chanObj.target} on ${network} (${chanId}) still has ${fmtDuration(0, true, pmChanTTL * 1000)} to live.`);
         }
       }
       return realDel;
@@ -618,8 +696,13 @@ client.once('ready', async () => {
 
     const privMsgExpiryListener = new Redis(config.redis.url);
     privMsgExpiryListener.on('pmessage', async (_chan, key, event) => {
-      console.log('EXPIRY MSG', key, event);
+      console.log('Expiry message', key, event);
       const [, prefix, type, trackingType, id, network] = key.split(':');
+
+      if (!(await client.channels.cache.get(id))) {
+        console.error(`Expiry message for unknown channel ID ${id}!`, prefix, type, trackingType, network);
+        return;
+      }
 
       if (prefix !== PREFIX) {
         stats.errors++;
@@ -631,9 +714,9 @@ client.once('ready', async () => {
         if (type === 'pmchan') {
           if (trackingType === 'aliveness') {
             console.log(`PM channel ${id}:${network} expired! Removing...`);
-            const chInfo = Object.entries(PrivmsgMappings.forNetwork(network)).find(([chId]) => chId == id)?.[1]; // eslint-disable-line eqeqeq
+            const chInfo = Object.entries(await PrivmsgMappings.forNetwork(network)).find(([chId]) => chId == id)?.[1]; // eslint-disable-line eqeqeq
             if (!chInfo || !chInfo.target || !channelsById[id]) {
-              console.error('bad chinfo?!', key, event, chInfo, channelsById[id], PrivmsgMappings.forNetwork(network));
+              console.error('bad chinfo?!', key, event, chInfo, channelsById[id], await PrivmsgMappings.forNetwork(network));
               return;
             }
 
@@ -643,13 +726,14 @@ client.once('ready', async () => {
             }
 
             const toTime = Number(new Date());
-            const queryArgs = [network, 'get', chInfo.target, `--from=${chInfo.created}`, `--to=${toTime}`];
+            const queryArgs = [network, chInfo.target, `--from=${chInfo.created}`, `--to=${toTime}`, '--everything'];
 
             const rmEmbed = new MessageEmbed()
               .setColor(config.app.stats.embedColors.irc.privMsg)
               .setTitle('Private Message channel cleanup')
               .setDescription('I removed the following channel due to inactivity:')
-              .addField(channelsById[id].name, 'Query logs for this session with:\n`' + `!logs ${queryArgs.join(' ')}` + '`');
+              .addField(channelsById[id].name, 'Query logs for this session with:\n`' +
+                config.app.allowedSpeakersCommandPrefixCharacter + `logs ${queryArgs.join(' ')}` + '`');
 
             const buttonId = [id, crypto.randomBytes(8).toString('hex')].join('-');
             const actRow = new MessageActionRow()
@@ -664,13 +748,16 @@ client.once('ready', async () => {
                 sendToBotChan,
                 channelsById,
                 network,
+                categoriesByName,
                 publish: eventHandlerContext.publish,
                 argObj: {
                   _: queryArgs
                 },
                 options: {
                   from: chInfo.created,
-                  to: toTime
+                  to: toTime,
+                  everything: true,
+                  _: queryArgs.slice(0, 2)
                 }
               }, ...queryArgs);
 
@@ -678,13 +765,13 @@ client.once('ready', async () => {
               sendToBotChan(logs);
             });
 
-            sendToBotChan(`:arrow_down: :rotating_light: :mega: ${allowedSpeakersMentionString(['', ''])}`);
             client.channels.cache.get(config.irc.quitMsgChanId).send({
               embeds: [new MessageEmbed()
                 .setColor(config.app.stats.embedColors.irc.privMsg)
                 .setTitle('Private Message channel cleanup')
                 .setDescription('I removed the following channel due to inactivity:')
-                .addField(channelsById[id].name, 'Query logs for this session with the button below or:\n`' + `!logs ${queryArgs.join(' ')}` + '`')],
+                .addField(channelsById[id].name, 'Query logs for this session with the button below or:\n`' +
+                  config.app.allowedSpeakersCommandPrefixCharacter + `logs ${queryArgs.join(' ')}` + '`')],
               components: [actRow]
             });
 
@@ -722,7 +809,7 @@ client.once('ready', async () => {
               });
             } catch (err) {
               stats.errors++;
-              console.error('removalWarning KS notification threw', err);
+              console.error(`removalWarning KS notification threw (chan ${id})`, err);
             }
           }
         }
@@ -785,7 +872,7 @@ client.once('ready', async () => {
 
           for (const connectCmd of onConnectCmds) {
             console.log(await sendToBotChan(`Running connect command for \`${network}\`: \`${connectCmd}\``));
-            await allowedSpeakerCommandHandler({ content: connectCmd });
+            await allowedSpeakerCommandHandler({ content: connectCmd }, null, { autoPrefixCurrentCommandChar: true });
           }
         }
       });
@@ -821,7 +908,7 @@ client.once('ready', async () => {
       console.log('Re-connected!');
     }
 
-    const HB_FUDGE_FACTOR = 1.01;
+    const HB_FUDGE_FACTOR = 1.05;
     let ircLastHeartbeat = Number(new Date());
     ircHeartbeatListener = new Redis(config.redis.url);
     ircHeartbeatListener.on('message', (...a) => {
@@ -902,7 +989,6 @@ client.once('ready', async () => {
     }));
 
     console.log('Waiting for irc:ready...');
-    sendToBotChan('Waiting for IRC bridge...');
     const readyRes = await ircReady.promise;
     _isReconnect = readyRes?.isReconnect;
 

@@ -8,6 +8,51 @@ const LiveNicks = require('./liveNicks');
 
 let categories = {};
 
+async function updateUsersForNetworkChannelBase (
+  connectedIRC, specServers, createNewChanSpec, network, channel
+) {
+  const client = connectedIRC.bots[network];
+
+  if (!client) {
+    console.error('updateUsersForNetworkChannel -- no client!!', network, channel);
+    return;
+  }
+
+  const clientChan = client.channel(channel);
+  return new Promise((resolve) => {
+    clientChan.updateUsers(async (updatedChannel) => {
+      const { users, name } = updatedChannel;
+      const resChannel = await resolveNameForDiscord(network, channel);
+      let [chanSpec] = specServers[network].channels.filter(c => c.name === resChannel);
+
+      // will be undefined if !chanSpec below which is desired because a newly-created
+      // spec should not be merged with anything
+      const mergeCollection = chanSpec?.liveNicks;
+
+      // can happen if the user has just created this channel recently and quickly
+      // issues !users on it (not an uncommon thing to do...)
+      if (!chanSpec) {
+        chanSpec = createNewChanSpec(name, clientChan.id, clientChan.parentId);
+        console.error(`No chanSpec for ${network}/${channel} in updateUsers path! Filling it in with:`, chanSpec);
+        console.error('clientChan', clientChan);
+        specServers[network].channels.push(chanSpec);
+      }
+
+      chanSpec.liveNicks = new LiveNicks(users.map(({ nick }) => nick), mergeCollection);
+      users.forEach(({ nick }) => console.debug(`<LIVE NICKS> ADD      event=!UP! channel=${chanSpec.name} nick=${nick}`));
+      console.log(`Updated live nicks for ${network}/${channel}`);
+
+      resolve({
+        channel: {
+          name,
+          users
+        },
+        network
+      });
+    });
+  });
+}
+
 module.exports = async (context, chan, msg) => {
   const {
     connectedIRC,
@@ -24,22 +69,26 @@ module.exports = async (context, chan, msg) => {
   const pubClient = new Redis(config.redis.url);
   console.debug('Redis msg!', chan, msg);
 
+  const updateUsersForNetworkChannel = updateUsersForNetworkChannelBase.bind(null, connectedIRC, specServers, createNewChanSpec);
+
   try {
     const parsed = JSON.parse(msg);
 
     // returns an async function if pushTarget is null, otherwish pushes that function
     // onto pushTarget and returns an object detailing the channel specification
-    const getChannelJoinFunc = (pushTarget = null, serverSpec, chan) => {
+    const getChannelJoinFunc = async (pushTarget = null, serverSpec, chan) => {
       const botClient = connectedIRC.bots[serverSpec.name];
 
       if (!botClient) {
         throw new Error(`!botClient ${serverSpec.name}`);
       }
 
-      const resName = resolveNameForIRC(serverSpec.name, chan.name);
+      const resName = await resolveNameForIRC(serverSpec.name, chan.name);
       const ircName = `#${resName}`;
       const channel = [PREFIX, serverSpec.name, resName, chan.id].join(':');
       const chanSpec = { channel, name: chan.name, ircName, id: chan.id, __drcNetwork: serverSpec.name };
+
+      serverSpec.uniqueNicks = new Set();
 
       if (!msgHandlers[serverSpec.name]) {
         msgHandlers[serverSpec.name] = {};
@@ -73,6 +122,8 @@ module.exports = async (context, chan, msg) => {
             })));
 
             chan.liveNicks = new LiveNicks(channel.users.map(u => u.nick));
+            channel.users.forEach(({ nick }) => serverSpec.uniqueNicks.add(nick));
+            channel.users.forEach(({ nick }) => console.debug(`<LIVE NICKS> ADD      event=!IN! channel=${chan.name} nick=${nick}`));
             console.log(`Joined ${ircName}, it has ${channel.users.length} users`);
             resolve(chanSpec);
           });
@@ -141,7 +192,7 @@ module.exports = async (context, chan, msg) => {
         console.log(`Joining channels on ${serverSpec.name}...`);
 
         const joinFuncs = [];
-        chanPrefixes[serverSpec.name] = serverSpec.channels.map(getChannelJoinFunc.bind(null, joinFuncs, serverSpec), []);
+        chanPrefixes[serverSpec.name] = await Promise.all(serverSpec.channels.map(getChannelJoinFunc.bind(null, joinFuncs, serverSpec), []));
 
         // XXX: pretty sure this function is never actually called on the reconnect path!
         if (isReconnect) {
@@ -157,6 +208,7 @@ module.exports = async (context, chan, msg) => {
           type: 'irc:joined',
           data: {
             network: serverSpec.name,
+            uniqueNickCount: serverSpec.uniqueNicks.size,
             channels: chanPrefixes[serverSpec.name]
           }
         }));
@@ -187,9 +239,12 @@ module.exports = async (context, chan, msg) => {
           console.error('Too many chan specs!', e, chanSpecs);
         }
 
+        // take advantage of the side-effect of this method that updates the LiveNicks struct
+        const ircName = '#' + await resolveNameForIRC(e.network, e.channel);
+        await updateUsersForNetworkChannel(e.network, ircName);
+
         const [{ liveNicks }] = chanSpecs;
         nickInChan = liveNicks.has(e.nick);
-        console.debug(liveNicks);
 
         if (!nickInChan) {
           const wasOnce = liveNicks.had(e.nick);
@@ -269,7 +324,7 @@ module.exports = async (context, chan, msg) => {
         return;
       }
 
-      const ircName = '#' + resolveNameForIRC(e.network, e.name);
+      const ircName = '#' + await resolveNameForIRC(e.network, e.name);
       botClient?.part(ircName);
       delete msgHandlers[e.network][ircName];
       chanPrefixes[e.network] = chanPrefixes[e.network].filter(o => o.ircName !== ircName);
@@ -280,8 +335,7 @@ module.exports = async (context, chan, msg) => {
       // "irc:topic" to be handled correctly...
       await pubClient.publish(PREFIX, JSON.stringify({ type: 'irc:responseJoinChannel', data: parsed.data }));
 
-      const { name, id, parentId } = parsed.data;
-      const networkName = categories[parsed.data.parentId]?.name;
+      const { name, id, parentId, networkName } = parsed.data;
 
       let chanSpec;
       if (networkName) {
@@ -300,7 +354,7 @@ module.exports = async (context, chan, msg) => {
         console.warn('requestJoinChannel> missing networkName!', networkName, chanSpec, parsed.data, categories);
       }
 
-      const chanPrefix = await (getChannelJoinFunc(null, categories[parsed.data.parentId], chanSpec)());
+      const chanPrefix = await ((await getChannelJoinFunc(null, categories[parsed.data.parentId], chanSpec))());
       chanPrefixes[categories[parsed.data.parentId].name].push(chanPrefix);
     } else if (parsed.type === 'discord:requestSay:irc') { // similar to 'irc:say' below; refactor?
       if (!e.network || !e.target || !e.message) {
@@ -427,42 +481,10 @@ module.exports = async (context, chan, msg) => {
       client.ctcpRequest(nick, type, params);
     } else if (parsed.type === 'discord:requestUserList:irc') {
       const { network, channel } = parsed.data;
-      const client = connectedIRC.bots[network];
-
-      if (!client) {
-        console.error('requestUserList -- no client!!', parsed);
-        return;
-      }
-
-      const clientChan = client.channel(channel);
-      clientChan.updateUsers(async (updatedChannel) => {
-        const { users, name } = updatedChannel;
-        const resChannel = resolveNameForDiscord(network, channel);
-        let [chanSpec] = specServers[network].channels.filter(c => c.name === resChannel);
-
-        // can happen if the user has just created this channel recently and quickly
-        // issues !users on it (not an uncommon thing to do...)
-        if (!chanSpec) {
-          chanSpec = createNewChanSpec(name, clientChan.id, clientChan.parentId);
-          console.error(`No chanSpec for ${network}/${channel} in updateUsers path! Filling it in with:`, chanSpec);
-          console.error('clientChan', clientChan);
-          specServers[network].channels.push(chanSpec);
-        }
-
-        chanSpec.liveNicks = new LiveNicks(users.map(u => u.nick));
-        console.log(`Updated live nicks for ${network}/${channel}`);
-
-        await scopedRedisClient(async (c) => c.publish(PREFIX, JSON.stringify({
-          type: 'irc:responseUserList',
-          data: {
-            channel: {
-              name,
-              users
-            },
-            network
-          }
-        })));
-      });
+      await scopedRedisClient(async (c) => c.publish(PREFIX, JSON.stringify({
+        type: 'irc:responseUserList',
+        data: await updateUsersForNetworkChannel(network, channel)
+      })));
     } else if (parsed.type === 'irc:say' || parsed.type === 'irc:action') {
       const networkSpec = specServers[parsed.data.network.name];
       const [, subType] = parsed.type.split(':');

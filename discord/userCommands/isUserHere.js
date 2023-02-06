@@ -19,7 +19,7 @@ module.exports = async (context, ...a) => {
     const parentNetworkName = context.channelsById[chanObj?.parent]?.name ?? null;
 
     if (chanObj?.name && parentNetworkName && config.irc.registered[parentNetworkName]) {
-      const ircChanName = '#' + resolveNameForIRC(parentNetworkName, chanObj?.name);
+      const ircChanName = '#' + await resolveNameForIRC(parentNetworkName, chanObj?.name);
       const { nickInChan, newNick } = await isNickInChan(userNick, chanObj?.name, parentNetworkName, context.registerOneTimeHandler);
       console.log(userNick, 'in ', ircChanName, '/', parentNetworkName, '? -->', { nickInChan, newNick });
       const [nickEsc, newEsc] = [userNick, newNick].map(simpleEscapeForDiscord);

@@ -2,12 +2,12 @@
 
 const { MessageEmbed } = require('discord.js');
 const userCommands = require('../userCommands');
-const { createArgObjOnContext, simpleEscapeForDiscord, contextMenuCommonHandler } = require('../common');
+const { createArgObjOnContext, simpleEscapeForDiscord, contextMenuCommonHandlerDefered } = require('../common');
 
 module.exports = {
   commandName: 'Is user here?',
   handler: async function (context, ...a) {
-    return contextMenuCommonHandler(async ({ message, senderNick }) => {
+    return contextMenuCommonHandlerDefered(async ({ message, senderNick }) => {
       const data = { message };
       context.discordMessage = message;
       context.isFromReaction = true;

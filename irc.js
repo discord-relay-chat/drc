@@ -294,8 +294,13 @@ async function main () {
     };
 
     const channelUserModifyingEvents = ['quit', 'kick', 'join', 'part', 'nick'];
-    function adjustChannelUsersOnEvent (host, event, data) {
+    async function adjustChannelUsersOnEvent (host, event, data) {
       if (!channelUserModifyingEvents.includes(event)) {
+        return;
+      }
+
+      if (!specServers[host]) {
+        console.error(`adjustChannelUsersOnEvent(${host}, ${event}, ->) called before specServers[${host}] initialized!`, data);
         return;
       }
 
@@ -303,7 +308,7 @@ async function main () {
       let chanSpec;
 
       if (channel) {
-        channel = resolveNameForDiscord(host, channel);
+        channel = await resolveNameForDiscord(host, channel);
         const chanSpecs = specServers[host].channels.filter(x => x.name === channel);
         if (chanSpecs.length > 1) {
           console.error(`Duplicate channel specs found for ${host}/${channel}, full list:`, chanSpecs);
@@ -316,20 +321,24 @@ async function main () {
 
       try {
         if (event === 'join') {
+          console.debug(`<LIVE NICKS> ADD      event=${event} channel=${chanSpec.name} nick=${nick}`);
           chanSpec.liveNicks.add(nick);
         } else if (['part', 'kick'].includes(event)) {
+          console.debug(`<LIVE NICKS> DEL      event=${event} channel=${chanSpec.name} nick=${nick}`);
           chanSpec.liveNicks.delete(nick);
         } else if (event === 'quit') {
           // have to find _all_ channels where `nick` was!
-          for (const { liveNicks } of specServers[host].channels) {
+          for (const { liveNicks, name } of specServers[host].channels) {
             if (liveNicks.has(nick)) {
+              console.debug(`<LIVE NICKS> HAS/DEL  event=${event} channel=${name} nick=${nick}`);
               liveNicks.delete(nick);
             }
           }
         } else if (event === 'nick') {
           const { new_nick } = data; // eslint-disable-line camelcase
-          for (const { liveNicks } of specServers[host].channels) {
+          for (const { liveNicks, name } of specServers[host].channels) {
             if (liveNicks.has(nick)) {
+              console.debug(`<LIVE NICKS> HAS/SWP  event=${event} channel=${name} nick=${nick} new_nick=${new_nick}`); // eslint-disable-line camelcase
               liveNicks.swap(nick, new_nick);
             }
           }
@@ -421,7 +430,7 @@ async function main () {
         return;
       }
 
-      const handler = msgHandlers[host][data.target.toLowerCase()];
+      const handler = msgHandlers[host]?.[data.target.toLowerCase()];
 
       if (!handler) {
         return;

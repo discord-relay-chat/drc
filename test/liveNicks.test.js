@@ -69,3 +69,34 @@ test('LiveNicks corner cases', () => {
   const l = new LiveNicks();
   expect(l.swap('DNEnick', 'newNick')).toEqual(false);
 });
+
+test('LiveNicks merge', () => {
+  const l1 = new LiveNicks(['l1_a','l1_b','l1_c','l1_d','l1_e']);
+  l1.swap('l1_a', 'l1_aa');
+  l1.swap('l1_aa', 'l1_aaa');
+  l1.swap('l1_aaa', 'l1_aaaa');
+
+  expect(l1.get('l1_aaaa').history())
+    .toEqual(['l1_aaaa', 'l1_aaa', 'l1_aa', 'l1_a']);
+
+  const l2 = new LiveNicks(['l1_aaaa','l1_b','l1_c','l1_d','l1_e'], l1);
+  expect(l2.get('l1_aaaa').history())
+    .toEqual(['l1_aaaa', 'l1_aaa', 'l1_aa', 'l1_a']);
+    
+  l2.swap('l1_d', 'l1_dd');
+  l2.swap('l1_dd', 'l1_ddd');
+  l2.swap('l1_ddd', 'l1_dddd');
+  expect(l2.get('l1_dddd').history())
+    .toEqual(['l1_dddd', 'l1_ddd', 'l1_dd', 'l1_d']);
+
+  const l3 = new LiveNicks(['l1_aaaa', 'l1_dddd'], l2);
+  expect(l3.get('l1_aaaa').history())
+    .toEqual(['l1_aaaa', 'l1_aaa', 'l1_aa', 'l1_a']);
+  expect(l3.get('l1_dddd').history())
+    .toEqual(['l1_dddd', 'l1_ddd', 'l1_dd', 'l1_d']);
+
+  // should have no effect (idempotent)
+  l3.add('l1_dddd');
+  expect(l3.get('l1_dddd').history())
+    .toEqual(['l1_dddd', 'l1_ddd', 'l1_dd', 'l1_d']);
+})

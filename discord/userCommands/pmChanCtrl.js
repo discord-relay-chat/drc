@@ -18,7 +18,7 @@ const subCommands = {
 subCommands.ttl = subCommands.aliveness;
 
 async function f (context) {
-  const network = PrivmsgMappings.findNetworkForKey(context.toChanId);
+  const network = await PrivmsgMappings.findNetworkForKey(context.toChanId);
   const [subCmd] = context.argObj._;
 
   if (!subCommands[subCmd]) {
@@ -27,5 +27,14 @@ async function f (context) {
 
   return subCommands[subCmd]?.(context, network);
 }
+
+f.__drcHelp = () => {
+  return {
+    title: 'Query Private Message channel attributes',
+    usage: '[subcommand]',
+    notes: 'Must be run **in** the PM channel of interest. The only currently-available subcommand is `aliveness`, ' +
+      'which will return the time-to-live information of the channel.'
+  };
+};
 
 module.exports = f;

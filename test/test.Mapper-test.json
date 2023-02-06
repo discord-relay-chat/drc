@@ -1,0 +1,6 @@
+{
+  "test.network":{
+    "oldKey": "#oldValue",
+    "foo": "#bar"
+  }
+}

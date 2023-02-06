@@ -28,7 +28,8 @@ module.exports = async (context, data) => {
     return;
   }
 
-  const curXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
+  const curXform = await ChannelXforms.get(parentCat.name, name);
+  console.debug(curXform, parentCat.name, name, await ChannelXforms.forNetwork(parentCat.name));
   const buttonId = [parentId, id, crypto.randomBytes(8).toString('hex')].join('-');
   const embed = new MessageEmbed()
     .setTitle(`Ready to join \`#${name}\` on \`${parentCat.name}\`?`)
@@ -54,7 +55,7 @@ module.exports = async (context, data) => {
     );
 
   registerButtonHandler(buttonId + '-ok', async (interaction) => {
-    const refreshedXform = ChannelXforms.forNetwork(parentCat.name)?.[name];
+    const refreshedXform = await ChannelXforms.forNetwork(parentCat.name)?.[name];
     interaction.update({
       components: [],
       embeds: [
@@ -85,7 +86,8 @@ module.exports = async (context, data) => {
         data: {
           name,
           id,
-          parentId
+          parentId,
+          networkName: parentCat.name
         }
       }));
     });

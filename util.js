@@ -1,11 +1,10 @@
 'use strict';
 
 const fs = require('fs');
-const _ = require('lodash');
 const path = require('path');
 const dfns = require('date-fns');
 const config = require('config');
-const Redis = require('ioredis');
+const Redis = require(process.env.NODE_ENV === 'test' ? 'ioredis-mock' : 'ioredis');
 const { fetch } = require('undici');
 const dns = require('dns').promises;
 const shodan = require('shodan-client');
@@ -23,8 +22,6 @@ const CTCPVersion = config.irc.ctcpVersionOverride || `${config.irc.ctcpVersionP
 const SearchFileTypes = Object.freeze({
   sqlite: '.sqlite3'
 });
-
-let resolverRev;
 
 Date.prototype.toDRCString = function () { // eslint-disable-line no-extend-native
   return this.toString().replace(/\sGMT.*/, '');
@@ -78,150 +75,126 @@ async function isXRunningRequestListener (xName, messageCallback) {
   return client;
 }
 
-class JsonMapper {
-  constructor (path, name, { createOnNotFound = true, createNetworksOnNotFound = false, redisBacked = false } = {}) {
+class Mapper {
+  /* The `path` parameter persists here for legacy reasons but it is no longer
+     the primary data source: instead it is used to prime (first run) or
+     supplement (later runs) the primary source in Redis. Any entries in the
+     `path` file will be added to the Redis store _only if they do not already exist_.
+  */
+  constructor (path, name) {
     this._path = path;
     this._name = name;
-    this._options = {
-      createOnNotFound,
-      createNetworksOnNotFound,
-      redisBacked
-    };
-    this._ioops = null;
-
-    if (!this._options.redisBacked) {
-      this._ioops = {
-        read: async () => fs.promises.readFile(this.path),
-        readSync: () => fs.readFileSync(this.path),
-        write: async (data) => fs.promises.writeFile(this.path, JSON.stringify(data))
-      };
-    } else {
-      const rkeyPostfix = `JsonMapper::${name}`;
-      console.debug(`JsonMapper for ${name} created with redis backing ${rkeyPostfix}`);
-      this._ioops = {
-        read: async () => scopedRedisClient((client, PREFIX) => client.get(`${PREFIX}:${rkeyPostfix}`)),
-        write: async (data) => scopedRedisClient((client, PREFIX) => client.set(`${PREFIX}:${rkeyPostfix}`, JSON.stringify(data)))
-      };
-    }
-
-    this._initialized = false;
-    this._resolve().then(() => this._load());
+    this._ready = false;
   }
 
-  async _resolve () {
-    if (this._options.redisBacked) {
-      return this._ioops.write({});
-    }
+  _keyForNetwork (prefix, network) {
+    return [prefix, 'Mapper', this._name, network].join(':');
+  }
 
-    let resolvePath = this._path;
+  async init () {
+    if (this._path) {
+      if (process.env.NODE_ENV) {
+        const pathComps = path.parse(this._path);
+        this._path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
+      }
 
-    if (process.env.NODE_ENV) {
-      const pathComps = path.parse(this._path);
-      this.path = path.resolve(path.join(pathComps.dir, `${pathComps.name}-${process.env.NODE_ENV}${pathComps.ext}`));
+      if (!fs.existsSync(this._path)) {
+        throw new Error(`Mapper given bad path: ${this._path}`);
+      }
 
-      try {
-        await this._load();
-        resolvePath = this.path;
-      } catch (err) {
-        console.warn(`Failed to find ${this.path}: ${this._options.createOnNotFound ? 'creating!' : 'falling back to default!'}`);
-
-        if (this._options.createOnNotFound) {
-          resolvePath = this.path;
-          await this._ioops.write({});
-        } else {
-          resolvePath = this._path;
+      const pathContents = JSON.parse(fs.readFileSync(this._path));
+      await scopedRedisClient(async (client, prefix) => {
+        for (const [network, netDict] of Object.entries(pathContents)) {
+          for (const [key, val] of Object.entries(netDict)) {
+            await client.hsetnx(this._keyForNetwork(prefix, network), key, JSON.stringify(val));
+          }
         }
-      }
+      });
     }
 
-    this.path = path.resolve(resolvePath);
+    this._ready = true;
   }
 
-  async _load () {
-    this.cache = JSON.parse(await this._ioops.read());
-    this._initialized = true;
-  }
-
-  _loadSync () {
-    this.cache = JSON.parse(this._ioops.readSync());
-    this._initialized = true;
-  }
-
-  async _mutate (network, key, value) {
-    if (!this._initialized) {
-      await this._load();
+  async _guardAccess (scopedFn) {
+    if (!this._ready) {
+      throw new Error('Mapper mutate method called before ready!');
     }
 
-    if (!this.cache[network]) {
-      if (!this._options.createNetworksOnNotFound) {
-        return null;
+    return scopedRedisClient(scopedFn);
+  }
+
+  async all () {
+    return this._guardAccess(async (client, prefix) => {
+      const retDict = {};
+      const allNets = (await client.keys(this._keyForNetwork(prefix, '*')))
+        .map((s) => s.split(':').slice(-1)[0]);
+
+      for (const net of allNets) {
+        retDict[net] = await this.forNetwork(net);
       }
 
-      this.cache[network] = {};
-    }
-
-    const net = this.cache[network];
-
-    if (value) {
-      net[key] = value;
-    } else {
-      if (!net[key]) {
-        return null;
-      }
-
-      delete net[key];
-    }
-
-    return this._ioops.write(this.cache);
+      return retDict;
+    });
   }
 
-  forNetwork (network) {
-    if (this.cache?.[network]) {
-      return _.cloneDeep(this.cache[network]);
-    }
-
-    return {};
+  async forNetwork (network) {
+    return this._guardAccess(async (client, prefix) =>
+      Object.entries(await client.hgetall(this._keyForNetwork(prefix, network)))
+        .reduce((a, [k, vStr]) => ({ [k]: JSON.parse(vStr), ...a }), {}));
   }
 
-  findNetworkForKey (key) {
-    return Object.entries(this.cache).find(([, netMap]) => Object.entries(netMap).find(([k]) => k === key))?.[0] ?? {};
+  // does not account for multiple 'key's across networks! take care when using accordingly
+  async findNetworkForKey (key) {
+    return Object.entries((await this.all())).reduce((a, [network, netMap]) =>
+      (Object.entries(netMap).find(([k]) => k === key) ? network : a), null);
+  }
+
+  async get (network, key) {
+    return JSON.parse(await this._guardAccess(async (client, prefix) =>
+      client.hget(this._keyForNetwork(prefix, network), key)));
   }
 
   async set (network, key, value) {
-    return this._mutate(network, key, value);
+    return this._guardAccess(async (client, prefix) =>
+      client.hset(this._keyForNetwork(prefix, network), key, JSON.stringify(value)));
   }
 
   async remove (network, key) {
-    return this._mutate(network, key, null);
+    return this._guardAccess(async (client, prefix) =>
+      client.hdel(this._keyForNetwork(prefix, network), key));
   }
 }
 
-const ChannelXforms = new JsonMapper(config.irc.channelXformsPath, 'ChannelXforms');
-const PrivmsgMappings = new JsonMapper(config.irc.privmsgMappingsPath, 'PrivmsgMappings', {
-  createNetworksOnNotFound: true,
-  redisBacked: true
-});
+const ChannelXforms = new Mapper(config.irc.channelXformsPath, 'ChannelXforms');
+const PrivmsgMappings = new Mapper(null, 'PrivmsgMappings');
 
-function resolveNameForIRC (network, name) {
-  ChannelXforms._loadSync();
-  const xforms = ChannelXforms.cache[network];
+ChannelXforms.init();
+PrivmsgMappings.init();
+
+function _resolveNameForIRC (xforms, name) {
   return (xforms && xforms[name]) || name;
 }
 
-function resolveNameForDiscord (network, ircName) {
-  ChannelXforms._loadSync();
-  if (!resolverRev) {
-    resolverRev = Object.entries(ChannelXforms.cache).reduce((a, [network, nEnt]) => {
-      return { [network]: Object.entries(nEnt).reduce((b, [k, v]) => ({ [v]: k, ...b }), {}), ...a };
-    }, {});
-  }
+async function resolveNameForIRC (network, name) {
+  return _resolveNameForIRC(await ChannelXforms.forNetwork(network), name);
+}
+
+function resolveNameForIRCSyncFromCache (allCache, network, name) {
+  return _resolveNameForIRC(allCache[network], name);
+}
+
+async function resolveNameForDiscord (network, ircName) {
+  const resolverRev = Object.entries(await ChannelXforms.all()).reduce((a, [network, nEnt]) => {
+    return { [network]: Object.entries(nEnt).reduce((b, [k, v]) => ({ [v]: k, ...b }), {}), ...a };
+  }, {});
 
   return ((network && ircName && (resolverRev && resolverRev[network] &&
     resolverRev[network][ircName.toLowerCase().slice(1)])) || ircName.replace(/^#/, '')).toLowerCase();
 }
 
-function channelsCountProcessed (channels, prev, durationInS) {
-  return Object.entries(channels).reduce((a, [ch, count]) => {
+async function channelsCountProcessed (channels, prev, durationInS) {
+  const a = {};
+  for (const [ch, count] of Object.entries(channels)) {
     const [_, net, chan] = ch.split(':'); // eslint-disable-line no-unused-vars
     if (!a[net]) {
       a[net] = [];
@@ -236,7 +209,7 @@ function channelsCountProcessed (channels, prev, durationInS) {
       suffixFields = { delta, mpm };
     }
 
-    const discordName = resolveNameForDiscord(net, '#' + chan);
+    const discordName = await resolveNameForDiscord(net, '#' + chan);
     a[net].push({
       count,
       network: net,
@@ -247,12 +220,13 @@ function channelsCountProcessed (channels, prev, durationInS) {
       msg: `\t**${count}** in **#${discordName}**${suffix}`,
       ...suffixFields
     });
-    return a;
-  }, {});
+  }
+
+  return a;
 }
 
-function channelsCountToStr (channels, prev, durationInS, sortByMpm) {
-  const mapped = channelsCountProcessed(channels, prev, durationInS);
+async function channelsCountToStr (channels, prev, durationInS, sortByMpm) {
+  const mapped = await channelsCountProcessed(channels, prev, durationInS);
 
   let sorter = (a, b) => b.count - a.count;
 
@@ -881,11 +855,14 @@ module.exports = {
   CTCPVersion,
   IRCColorsStripMax,
 
+  Mapper,
   ChannelXforms,
   PrivmsgMappings,
 
   resolveNameForIRC,
+  resolveNameForIRCSyncFromCache,
   resolveNameForDiscord,
+
   channelsCountProcessed,
   channelsCountToStr,
   floodProtect,

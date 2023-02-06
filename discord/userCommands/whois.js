@@ -3,7 +3,7 @@
 const { shodanHostLookup, matchNetwork, scopedRedisClient } = require('../../util');
 const { PREFIX } = require('../../util');
 
-module.exports = async function (context, ...a) {
+async function whois (context, ...a) {
   if (context.argObj._.length < 2) {
     throw new Error('not enough args');
   }
@@ -55,4 +55,17 @@ module.exports = async function (context, ...a) {
 
   console.debug('whois PUB', reqObj);
   await context.publish(reqObj);
+}
+
+whois.__drcHelp = () => {
+  return {
+    title: 'Run `/whois` on a given nickname.',
+    usage: '<network> <nickname>',
+    options: [
+      ['--full', 'Run a deep alias check as well. **Warning**: may be very resource-heavy!'],
+      ['--nmap', "If the user's hostname is a valid IP address, run `nmap` on it."]
+    ]
+  };
 };
+
+module.exports = whois;

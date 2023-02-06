@@ -12,7 +12,7 @@ async function f (context, ...a) {
   }
 
   console.log(network, channelName);
-  const channel = '#' + resolveNameForIRC(network, channelName);
+  const channel = '#' + await resolveNameForIRC(network, channelName);
   context.registerOneTimeHandler('irc:responseUserList', channel, async (data) => {
     const { channel: { name, users }, network } = data;
 
@@ -89,5 +89,16 @@ async function f (context, ...a) {
     }
   });
 }
+
+f.__drcHelp = () => {
+  return {
+    title: 'Query the list of users in a given channel',
+    usage: '[<network>] [<channel>]',
+    notes: '`network` and `channel` are not required when calling from the channel-in-question.',
+    options: [
+      ['--full', 'List _all_ channel users. **Warning**: this can be very large!']
+    ]
+  };
+};
 
 module.exports = f;

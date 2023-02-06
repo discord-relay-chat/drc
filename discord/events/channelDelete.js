@@ -14,7 +14,7 @@ module.exports = async (context, data) => {
   const parentCat = categories[parentId];
 
   if (parentId === config.discord.privMsgCategoryId) {
-    const network = PrivmsgMappings.findNetworkForKey(id);
+    const network = await PrivmsgMappings.findNetworkForKey(id);
     PrivmsgMappings.remove(network, id);
     return removePmChan(network, id);
   }

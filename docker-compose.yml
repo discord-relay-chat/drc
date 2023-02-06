@@ -16,6 +16,7 @@ services:
         target: /app/drc/http/templates
         source: ${DRC_HTTP_TEMPLATES_PATH_HOST:?"Must define DRC_HTTP_TEMPLATES_PATH_HOST as the absolute path to http templates source on the host."}
     network_mode: "host"
+    restart: "on-failure"
 
   irc:
     build:
@@ -26,6 +27,7 @@ services:
         source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
         target: /logs
     network_mode: "host"
+    restart: "on-failure"
 
   discord:
     build:

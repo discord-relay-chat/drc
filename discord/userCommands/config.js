@@ -3,7 +3,7 @@ const config = require('config');
 const { PREFIX } = require('../../util');
 const { formatKVs } = require('../common');
 
-module.exports = async function (context, ...a) {
+async function userCommandConfig (context, ...a) {
   const key = PREFIX + ':userConfig';
 
   switch (a[0]) {
@@ -64,4 +64,6 @@ module.exports = async function (context, ...a) {
       }
     }
   }
-};
+}
+
+module.exports = userCommandConfig;

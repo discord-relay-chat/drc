@@ -10,7 +10,7 @@ async function f (context) {
 
   const { network } = matchNetwork(context.argObj._[0]);
   let [, nickOrChan] = context.argObj._;
-  nickOrChan = convertDiscordChannelsToIRCInString(nickOrChan, context, network);
+  nickOrChan = await convertDiscordChannelsToIRCInString(nickOrChan, context, network);
 
   let retStr;
   if (context.argObj._.length < 3) {

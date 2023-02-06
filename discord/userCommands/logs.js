@@ -1,12 +1,14 @@
 'use strict';
 
-const { matchNetwork, searchLogs, fmtDuration } = require('../../util');
-const { serveMessages, formatKVs } = require('../common');
+const { MessageEmbed } = require('discord.js');
+const { matchNetwork, searchLogs, fmtDuration, resolveNameForDiscord } = require('../../util');
+const { serveMessages } = require('../common');
 
 const search = async (context, network, titleMessage = `Searching **${network}**...`) => {
   const start = new Date();
   context.sendToBotChan(titleMessage);
 
+  console.log('SEARCH opts', context.options);
   const { totalLines, searchResults, error } = await searchLogs(network, context.options);
 
   if (error) {
@@ -17,18 +19,42 @@ const search = async (context, network, titleMessage = `Searching **${network}**
   const durFmtted = fmtDuration(start, true);
   const delta = new Date() - start;
   const foundLines = Object.values(searchResults).reduce((a, x) => a + x.length, 0);
+  const { categoriesByName, channelsById } = context;
 
   if (!foundLines) {
     context.sendToBotChan(`Found no matching lines out of **${totalLines}** total.\n` +
     'Not expecting zero results? Try with `--everything`, `--or`, and/or a different `--type`.\n' +
     `Search completed in **${durFmtted.length ? durFmtted : 'no time'}** (${delta}).`);
   } else {
-    context.sendToBotChan(`\nFound **${foundLines}** matching lines:\n\n` +
-      formatKVs(Object.entries(searchResults).reduce((a, [chan, lines]) => ({
-        [chan]: `${lines.length} line(s) found`,
+    const networkCatIds = Object.fromEntries(Object.entries(categoriesByName).filter(([k]) => k === network))[network];
+    const networkChannels = Object.entries(channelsById)
+      .filter(([, { parent }]) => networkCatIds.includes(parent))
+      .reduce((a, [id, { name }]) => ({
+        [name]: id,
         ...a
-      }), {})) +
-      `\n\n_Search completed in **${durFmtted.length ? durFmtted : 'no time'}**_ (${delta})`);
+      }), {});
+
+    const embed = new MessageEmbed()
+      .setTitle(`**${foundLines}** matching lines`)
+      .setColor('DARK_GOLD')
+      .setFooter(`Search completed in ${durFmtted.length ? durFmtted : 'no time'} (${delta})`);
+
+    const cTrim = (cs) => cs.replaceAll('#', '').toLowerCase();
+    await Promise.all(Object.entries(searchResults)
+      .sort(([chanA], [chanB]) => cTrim(chanA).localeCompare(cTrim(chanB)))
+      .sort(([, linesA], [, linesB]) => linesB.length - linesA.length)
+      .map(async ([chan, lines]) => {
+        const discResolved = await resolveNameForDiscord(network, chan);
+        const discordChannelId = networkChannels[discResolved];
+        if (!discordChannelId) {
+          console.warn('No channel ID! (may be expected if channel was a PM channel or was otherwise removed)',
+            discordChannelId, networkChannels, cTrim(chan), chan, discResolved);
+        }
+        chan = discordChannelId ? `<#${discordChannelId}>` : chan;
+        embed.addField(`${lines.length} line(s) found in`, chan);
+      }));
+
+    context.sendToBotChan({ embeds: [embed] }, true);
 
     serveMessages({ network, ...context }, Object.values(searchResults).reduce((a, l) => a.concat(l), []).map((data) => ({
       timestamp: data.__drcIrcRxTs,
@@ -49,7 +75,11 @@ async function f (context) {
     }
   }
 
-  return search(context, network);
+  return search(context, network)
+    .catch(e => {
+      console.error('search failed', e);
+      context.sendToBotChan(`Search failed: ${e}`);
+    });
 }
 
 f.__drcHelp = () => {
@@ -58,7 +88,10 @@ f.__drcHelp = () => {
     usage: '<network> [arguments] [options]',
     notes: 'Anywhere a time value is required, it may be anything parseable by `new Date()`, ' +
       '_or_ a duration value (negative of course, as searching into the future isn\'t quite perfect yet).' +
-      '\n\nExamples:\n\t• `-1h` for "one hour in the past".\n\t• `2022-12-25T23:59:00` for "right before Santa arrives"\n\n' +
+      '\n\nExamples:\n\t• `-1h` for "one hour in the past".\n\t' +
+      '• `2022-12-25T23:59:00` for "right before Santa arrives"\n' +
+      '• `"Mon Jan 23 2023 20:58:00 PST"` for "9:58PM on Monday January 23rd 2023 in the Pacific Time Zone"\n' +
+      '• `"three days ago"` for "three days ago"\n\n' +
       'Fields that take string arguments (pretty much any *but* time' +
       'fields) may include the SQLite wildcard characters "%" and "_", where their meaning is as-expected.',
     options: [

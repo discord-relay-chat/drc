@@ -8,7 +8,7 @@ const { nanoid } = require('nanoid');
 async function formattedGet (network) {
   return `\nChannel transforms for **${network}** (\`Discord\` → IRC):\n` +
     formatKVs(Object.fromEntries(Object.entries(
-      ChannelXforms.forNetwork(network)).map(([k, v]) => [k, `#${v}`])), ' → ');
+      (await ChannelXforms.forNetwork(network))).map(([k, v]) => [`#${k}`, `#${v}`])), ' → ');
 }
 
 const serveCache = {};
@@ -17,7 +17,7 @@ const subCommands = {
   get: async (context, network) => formattedGet(network),
 
   set: async (context, network, dChan, iChan) => {
-    iChan = convertDiscordChannelsToIRCInString(iChan, context);
+    iChan = await convertDiscordChannelsToIRCInString(iChan, context);
     await ChannelXforms.set(network, dChan, iChan.replace(/\\/g, ''));
     return formattedGet(network);
   },
@@ -28,7 +28,7 @@ const subCommands = {
   },
 
   serve: async (context, network) => {
-    const transforms = Object.entries(ChannelXforms.forNetwork(network))
+    const transforms = Object.entries(await ChannelXforms.forNetwork(network))
       .map(([discord, irc]) => ({ discord, irc, id: nanoid() }));
 
     const serveId = await servePage(context, {
@@ -58,8 +58,7 @@ module.exports = async function (context) {
   const [netStub, subCmd] = context.argObj._;
 
   if (netStub === 'reload') {
-    ChannelXforms._load();
-    return ChannelXforms.cache;
+    return ChannelXforms.all();
   }
 
   const { network } = matchNetwork(netStub);

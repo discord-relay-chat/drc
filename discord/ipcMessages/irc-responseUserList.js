@@ -13,7 +13,7 @@ module.exports = async function (parsed, context) {
     runOneTimeHandlers
   } = context;
 
-  const discName = resolveNameForDiscord(parsed.data.network, parsed.data.channel.name);
+  const discName = await resolveNameForDiscord(parsed.data.network, parsed.data.channel.name);
   const discId = channelsByName[parsed.data.network][discName];
   const [chanSpec] = categoriesByName[parsed.data.network]
     .map((catId) => categories[catId].channels[discId]).filter(x => !!x);

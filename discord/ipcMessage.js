@@ -122,6 +122,11 @@ module.exports = async (context, _channel, msg) => {
           .setTitle(`Fully joined network \`${parsed.data.network}\``)
           .setDescription('Listening to ' + `**${parsed.data.channels.length}** channels`)
           .setTimestamp();
+
+        if (parsed.data.uniqueNickCount) {
+          embed.addField('Visible Unique Nickname Count', `**${parsed.data.uniqueNickCount}** nicknames`);
+        }
+
         sendToBotChan(embed, true);
       } else if (parsed.type === 'irc:quit') {
         const e = parsed.data;
@@ -162,7 +167,7 @@ module.exports = async (context, _channel, msg) => {
         sendToBotChan('`IRC:' + subSubType + '` on ' + `\`${parsed.data.hostname || parsed.data.__drcNetwork}\`:\n>>> ${parsed.data.parsed ?? JSON.stringify(parsed.data.params)}`);
       } else if (type === 'irc' &&
         (subType === 'topic' || subType === 'join' || subType === 'part' || subType === 'kick')) {
-        const discName = resolveNameForDiscord(parsed.data.__drcNetwork, parsed.data.channel);
+        const discName = await resolveNameForDiscord(parsed.data.__drcNetwork, parsed.data.channel);
         const discId = channelsByName[parsed.data.__drcNetwork][discName];
         const [chanSpec] = categoriesByName[parsed.data.__drcNetwork]
           .map((catId) => categories[catId].channels[discId]).filter(x => !!x);

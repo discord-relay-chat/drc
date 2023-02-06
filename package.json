@@ -21,7 +21,7 @@
     "discord.js": "^13.3.1",
     "fastify": "^3.29.4",
     "inquirer": "^8.2.0",
-    "ioredis": "^4.28.0",
+    "ioredis": "^5.3.0",
     "irc-framework": "^4.11.0",
     "lodash": "^4.17.21",
     "mime-types": "^2.1.35",
@@ -36,6 +36,7 @@
     "yargs": "^17.2.1"
   },
   "devDependencies": {
+    "ioredis-mock": "^8.2.6",
     "jest": "^27.3.1",
     "semistandard": "^16.0.1"
   },
