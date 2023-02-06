@@ -40,19 +40,24 @@ const search = async (context, network, titleMessage = `Searching **${network}**
       .setFooter(`Search completed in ${durFmtted.length ? durFmtted : 'no time'} (${delta})`);
 
     const cTrim = (cs) => cs.replaceAll('#', '').toLowerCase();
-    await Promise.all(Object.entries(searchResults)
+
+    const resolveMeSerially = Object.entries(searchResults)
       .sort(([chanA], [chanB]) => cTrim(chanA).localeCompare(cTrim(chanB)))
       .sort(([, linesA], [, linesB]) => linesB.length - linesA.length)
       .map(async ([chan, lines]) => {
-        const discResolved = await resolveNameForDiscord(network, chan);
-        const discordChannelId = networkChannels[discResolved];
-        if (!discordChannelId) {
-          console.warn('No channel ID! (may be expected if channel was a PM channel or was otherwise removed)',
-            discordChannelId, networkChannels, cTrim(chan), chan, discResolved);
-        }
-        chan = discordChannelId ? `<#${discordChannelId}>` : chan;
-        embed.addField(`${lines.length} line(s) found in`, chan);
-      }));
+        return [chan, lines, await resolveNameForDiscord(network, chan)];
+      });
+
+    for (const r of resolveMeSerially) {
+      let [chan, lines, discResolved] = await r;
+      const discordChannelId = networkChannels[discResolved];
+      if (!discordChannelId) {
+        console.warn('No channel ID! (may be expected if channel was a PM channel or was otherwise removed)',
+          discordChannelId, networkChannels, cTrim(chan), chan, discResolved);
+      }
+      chan = discordChannelId ? `<#${discordChannelId}>` : chan;
+      embed.addField(`${lines.length} line(s) found in`, chan);
+    }
 
     context.sendToBotChan({ embeds: [embed] }, true);
 
