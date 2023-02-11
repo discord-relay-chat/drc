@@ -224,24 +224,6 @@ setTimeout(alivenessCheck, 15 * 1000);
 
 const ignoreSquelched = [];
 
-const captureSpecs = {};
-
-if (config.capture.enabled) {
-  console.log(`Capture enabled: running cleanup loop on ${config.capture.cleanupLoopFreqSeconds} second frequency`);
-  setInterval(() => {
-    const nowNum = Number(new Date());
-    Object.entries(captureSpecs).forEach(([network, netSpec]) => {
-      Object.entries(netSpec).forEach(([channelId, chanSpec]) => {
-        if (chanSpec && chanSpec.exp > (nowNum / 100) && nowNum > chanSpec.exp) {
-          console.log(`Capture spec cleanup loop expiring ${network}:${channelId}`, chanSpec);
-          sendToBotChan(`\`SYSTEM\` Expiring channel capture for <#${channelId}> on \`${network}\` having captured ${chanSpec.captured} messages.`);
-          delete captureSpecs[network][channelId];
-        }
-      });
-    });
-  }, config.capture.cleanupLoopFreqSeconds * 1000);
-}
-
 setDefaultFont(config.figletBanners.font);
 
 console.log(`${PREFIX} Discord controller starting...`);
@@ -259,7 +241,11 @@ client.once('ready', async () => {
   client.user.setActivity('the IRC daemon...', { type: 'LISTENING' });
 
   const onExit = async (s) => {
-    sendToBotChan('\n```\n' + (await banner(s)) + '\n```\n');
+    sendToBotChan({
+      embeds: [
+        new MessageEmbed().setDescription('\n```\n' + (await banner(s)) + '\n```\n')
+      ]
+    }, true);
     client.user.setStatus('invisible');
     client.user.setActivity('nothing! (I\'m offline!)', { type: 'LISTENING' });
   };
@@ -376,7 +362,11 @@ client.once('ready', async () => {
     stbcServicer();
   }
 
-  sendToBotChan('\n```\n' + (await banner('Hello!')) + '\n```\n\n');
+  sendToBotChan({
+    embeds: [
+      new MessageEmbed().setDescription('\n```\n' + (await banner('Hello!')) + '\n```\n\n')
+    ]
+  }, true);
 
   siteCheck();
 
@@ -477,7 +467,6 @@ client.once('ready', async () => {
           registerButtonHandler,
           discordAuthor: data.author,
           ignoreSquelched,
-          captureSpecs,
           channelsById,
           categoriesByName,
           toChanId,
@@ -970,7 +959,6 @@ client.once('ready', async () => {
     ircReadyHandler,
     client,
     channelsById,
-    captureSpecs,
     allowedSpeakersMentionString,
     subscribedChans,
     listenedToMutate,

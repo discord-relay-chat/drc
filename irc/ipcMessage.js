@@ -3,10 +3,24 @@
 const config = require('config');
 const Redis = require('ioredis');
 const { spawn } = require('child_process');
-const { PREFIX, resolveNameForIRC, floodProtect, scopedRedisClient, resolveNameForDiscord, runningInContainer } = require('../util');
+const { PREFIX, resolveNameForIRC, scopedRedisClient, resolveNameForDiscord, runningInContainer } = require('../util');
 const LiveNicks = require('./liveNicks');
 
 let categories = {};
+
+async function floodProtect (ops, ...args) {
+  for (const op of ops) {
+    await new Promise((resolve, reject) => {
+      setTimeout(async () => {
+        try {
+          resolve(await op(...args));
+        } catch (e) {
+          reject(e);
+        }
+      }, config.irc.floodProtectWaitMs);
+    });
+  }
+}
 
 async function updateUsersForNetworkChannelBase (
   connectedIRC, specServers, createNewChanSpec, network, channel

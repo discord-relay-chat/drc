@@ -1,7 +1,7 @@
 'use strict';
 
 const config = require('config');
-const { PREFIX, resolveNameForIRC, PrivmsgMappings } = require('../../util');
+const { PREFIX, resolveNameForIRC, PrivmsgMappings, matchNetwork, NetworkNotMatchedError } = require('../../util');
 const {
   messageIsFromAllowedSpeaker,
   senderNickFromMessage,
@@ -168,6 +168,15 @@ module.exports = async (context, data) => {
       await Promise.all([...data.content.matchAll(CHANNELS_PATTERN)].map(async ([chanMatch, channelId]) => {
         const chanObj = channelsById[channelId];
         const parentObj = channelsById[chanObj.parent];
+
+        const [, networkStub] = channel.name.split('_');
+        try {
+          network.name = matchNetwork(networkStub)?.network;
+        } catch (e) {
+          if (!(e instanceof NetworkNotMatchedError)) {
+            throw e;
+          }
+        }
 
         let replacer = '#' + await resolveNameForIRC(network.name, chanObj.name);
 

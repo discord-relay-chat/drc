@@ -1,0 +1,3 @@
+This directory is "special": any .js files within are expected to conform the the "user command interface"[1] and will be loaded automatically as such.
+
+[1] Currently: an async function with optional __drcHelp property of varying acceptable structure, see help.js here for reference. (this all needs to change so badly and i have a branch for it but alas, it's still just on that branch because it isn't complete)

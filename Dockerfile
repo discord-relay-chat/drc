@@ -1,7 +1,7 @@
 FROM node:18 as base
 WORKDIR /app/drc
 RUN apt update
-RUN apt -y install nmap
+RUN apt -y install nmap figlet
 RUN useradd -u 1001 -U -p discordrc drc
 COPY package*.json ./
 RUN npm install

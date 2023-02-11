@@ -4,14 +4,14 @@ const config = require('config');
 const Redis = require('ioredis');
 const userCommands = require('../userCommands');
 const {
-  persistMessage,
   simpleEscapeForDiscord
 } = require('../common');
 const {
-  PREFIX,
   replaceIrcEscapes,
   scopedRedisClient
 } = require('../../util');
+
+const { AvatarGenerators, createAvatarName } = require('../avatarGenerators');
 
 module.exports = async function (parsed, context) {
   const joined = parsed.data;
@@ -21,7 +21,6 @@ module.exports = async function (parsed, context) {
     sendToBotChan,
     client,
     channelsById,
-    captureSpecs,
     allowedSpeakersMentionString,
     subscribedChans,
     listenedToMutate,
@@ -79,28 +78,6 @@ module.exports = async function (parsed, context) {
               avatar = allowedSpeakersAvatars[0];
             }
 
-            const persistMsgWithAutoCapture = async (type) => {
-              const msgId = await persistMessage(PREFIX, 'mentions', e.__drcNetwork, { timestamp: new Date(), data: e });
-              console.debug('Persisted', type, msgId);
-              ++stats.messages.mentions;
-
-              if (config.user.autoCaptureOnMention) {
-                const options = {
-                  _: [e.__drcNetwork, `<#${joined.id}>`],
-                  duration: config.capture.autoCaptureWindowMins
-                };
-
-                console.debug('AUTO CAPTURING', options);
-                await userCommands('capture')({
-                  options,
-                  captureSpecs,
-                  sendToBotChan,
-                  overridePrefixMsg: `On ${type}, auto-capturing`,
-                  redis: ignoreClient
-                }, ...options._);
-              }
-            };
-
             const hiList = await userCommands('hilite')({ redis: ignoreClient }, e.__drcNetwork);
             const anmsNoBrackets = allowedSpeakersMentionString(['', '']);
 
@@ -112,7 +89,6 @@ module.exports = async function (parsed, context) {
               }
 
               e.message += ' ' + anmsNoBrackets;
-              await persistMsgWithAutoCapture('hilite');
             }
 
             const netNick = config.irc.registered[e.__drcNetwork].user.nick;
@@ -131,8 +107,6 @@ module.exports = async function (parsed, context) {
                   e.message += ` ${anmsNoBrackets}`;
                 }
               }
-
-              await persistMsgWithAutoCapture('mention');
             }
 
             const ignoreList = await userCommands('ignore')({ redis: ignoreClient }, e.__drcNetwork);
@@ -165,15 +139,18 @@ module.exports = async function (parsed, context) {
                 }
               }
 
-              const fName = [e.__orig_nick, e.__drcNetwork].map((s) => s.replaceAll(/[^\d\w._-]+/g, '')).join('_');
-
               if (!avatar) {
+                const fName = createAvatarName(e.__orig_nick, e.__drcNetwork);
                 avatar = `https://robohash.org/${fName}.png`;
+                try {
+                  avatar = await AvatarGenerators[config.app.avatarGenerator]?.(fName);
+                } catch (e) {
+                  console.error('AvatarGenerator failed', e);
+                }
               }
 
               const hooks = await msgChan.fetchWebhooks();
               let hook;
-              console.debug(fName, joined.channel, avatar, 'HOOKS??', hooks.size);
 
               if (hooks.size === 0) {
                 hook = await msgChan.createWebhook(joined.id, { avatar });
@@ -211,44 +188,6 @@ module.exports = async function (parsed, context) {
             } catch (err) {
               console.error(`Failed to post message to ${joined.channel}/${joined.id}! "${err.message}`, err.stack);
               ++stats.error;
-            }
-
-            if (captureSpecs[e.__drcNetwork]) {
-              const now = new Date();
-              const nowNum = Number(now);
-
-              if (captureSpecs[e.__drcNetwork][joined.id]) {
-                console.debug('CAP SPEC', captureSpecs[e.__drcNetwork][joined.id]);
-                const ele = captureSpecs[e.__drcNetwork][joined.id];
-                const persist = () => {
-                  ele.captured++;
-                  console.debug('PERSIST capture', joined.id, joined.channel, e.__drcNetwork);
-                  persistMessage(PREFIX, ['capture', joined.id].join(':'), e.__drcNetwork, {
-                    timestamp: now,
-                    data: e
-                  });
-                };
-
-                const expire = () => {
-                  console.log(`Expiring capture spec ${e.__drcNetwork}:${joined.id}`);
-                  delete captureSpecs[e.__drcNetwork][joined.id];
-                  sendToBotChan(`\`SYSTEM\` Expiring channel capture for <#${joined.id}> on \`${e.__drcNetwork}\` having captured ${ele.captured} messages.`);
-                };
-
-                if (ele.exp > (nowNum / 100)) {
-                  if (nowNum > ele.exp) {
-                    expire();
-                  } else {
-                    persist();
-                  }
-                } else {
-                  ele.exp--;
-                  persist();
-                  if (!ele.exp) {
-                    expire();
-                  }
-                }
-              }
             }
           }
         }

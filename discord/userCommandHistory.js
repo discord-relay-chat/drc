@@ -27,9 +27,7 @@ module.exports = {
   async query ({
     limit = QUERY_DEFAULTS.limit,
     latestFirst = QUERY_DEFAULTS.latestFirst,
-    sortAscending = QUERY_DEFAULTS.sortAscending,
-    from,
-    to
+    sortAscending = QUERY_DEFAULTS.sortAscending
   } = {}) {
     const dirMethod = latestFirst ? 'zrevrange' : 'zrange';
     return scopedRedisClient(async (client, prefix) => {

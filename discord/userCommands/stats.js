@@ -12,10 +12,29 @@ const {
   channelsCountToStr,
   channelsCountProcessed,
   fmtDuration,
-  parseRedisInfoSection,
   sizeAtPath,
   scopedRedisClient
 } = require('../../util');
+
+function parseRedisInfoSection (section) {
+  const lines = section.split(/\r?\n/g);
+
+  if (!lines[0][0] === '#') {
+    throw new Error('malformed section', lines);
+  }
+
+  const sectionName = lines[0].split(/\s+/)[1];
+  lines.shift();
+  lines.pop();
+
+  return {
+    sectionName,
+    kvPairs: lines.reduce((a, line) => ({
+      [line.split(':')[0]]: line.split(':')[1],
+      ...a
+    }), {})
+  };
+}
 
 async function f (context) {
   const promise = new Promise((resolve, reject) => {

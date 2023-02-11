@@ -69,6 +69,7 @@ const _config = {
       // options are: html, json, jsonl
       localQueryOutputFormat: 'html'
     },
+    avatarGenerator: 'robohash',
     allowedSpeakers: [],
     allowedSpeakersRoleId: null,
     // options are
@@ -150,8 +151,8 @@ const _config = {
   },
 
   figletBanners: {
-    enabled: false,
-    cacheDir: '.banners.cache',
+    enabled: true,
+    cacheDir: '/tmp/.discordrc.banners.cache',
     font: 'small'
   },
 
@@ -172,13 +173,6 @@ const _config = {
     staticDir: HTTP_STATIC_DIR,
     attachmentsDir: HTTP_ATTACHMENTS_DIR,
     rootRedirectUrl: 'https://discordrc.com'
-  },
-
-  capture: {
-    enabled: true,
-    autoCaptureWindowMins: 5,
-    defaultCaptureWindowMins: 15,
-    cleanupLoopFreqSeconds: 17
   },
 
   ipinfo: {

@@ -11,7 +11,7 @@ async function f (context, ...a) {
   await scopedRedisClient(async (rc, prefix) => {
     for (const pf of ['kickee', 'kicker', 'chans', 'reasons']) {
       const k = `${prefix}:kicks:${network}:${pf}`;
-      const vals = await rc.zrevrangebyscore(k, 'inf', 0, 'limit', 0, config.app.maxNumKicks);
+      const vals = await rc.zrevrangebyscore(k, 'inf', 0, 'limit', 0, context.options?.limit ?? config.app.maxNumKicks);
       const vs = {};
 
       for (const v of vals) {
