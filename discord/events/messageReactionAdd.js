@@ -31,7 +31,15 @@ async function isUserHere (context, data) {
   return userCommands('isUserHere')(context, ...createArgObjOnContext(context, data, null, true));
 }
 
+async function gptQuestion (context, data) {
+  console.log('CREATED', createArgObjOnContext(context, data, 'gpt'));
+  console.log('CONTENT?', data?.message?.content);
+  // return userCommands('gpt')(context, ...createArgObjOnContext(context, data, 'gpt'));
+}
+
 const allowedReactions = {
+  '%F0%9F%87%AC': gptQuestion, // "🇬"
+
   '%F0%9F%87%BC': whois, // "🇼"
   '%E2%9D%94': whois, // "❔"
   '%E2%9D%93': whois, // "❓"

@@ -10,6 +10,7 @@ const { MessageMentions: { CHANNELS_PATTERN } } = require('discord.js');
 const senderNickFromMessage = require('./lib/senderNickFromMessage');
 const { serveMessages } = require('./lib/serveMessages');
 const { isHTTPRunning } = require('../lib/isXRunning');
+const { attachSentimentToMessages, averageSentiments, transformAveragesForDigestHTTP, roundSentimentScoreOnMessages } = require('../lib/sentiments');
 
 function createArgObjOnContext (context, data, subaction, noNetworkFirstArg = false) {
   const tmplArr = [senderNickFromMessage(data?.message)];
@@ -37,7 +38,15 @@ async function clearSquelched (context, ...a) {
 async function digest (context, ...a) {
   const data = (await context.redis.lrange([context.key, 'squelch'].join(':'), 0, -1)).map(JSON.parse).reverse();
 
-  await serveMessages(context, data, { ttl: 1440 });
+  const sentiments = await attachSentimentToMessages(null, data.map(({ data }) => data), null, context.options);
+  const sentimentsAvg = averageSentiments(sentiments);
+  roundSentimentScoreOnMessages(data.map(({ data }) => data));
+  await serveMessages(context, data, {
+    ttl: 1440,
+    extra: {
+      sentiments: transformAveragesForDigestHTTP(sentimentsAvg)
+    }
+  });
 
   if (!context.options.keep) {
     clearSquelched(context);

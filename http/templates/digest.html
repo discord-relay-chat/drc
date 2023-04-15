@@ -101,6 +101,54 @@
         background-color: rgb(64 67 69);
         border-color: darken(grey,10%);
       }
+
+      .sentimentScore-10 { background-color: rgba(255, 0, 0, 0.35); }
+      .sentimentScore-9 { background-color: rgba(255, 0, 0, 0.30); }
+      .sentimentScore-8 { background-color: rgba(255, 0, 0, 0.25); }
+      .sentimentScore-7 { background-color: rgba(255, 0, 0, 0.2); }
+      .sentimentScore-6 { background-color: rgba(255, 0, 0, 0.15); }
+      .sentimentScore-5 { background-color: rgba(255, 0, 0, 0.1); }
+      .sentimentScore-4 { background-color: rgba(225, 25, 0, 0.1); }
+      .sentimentScore-3 { background-color: rgba(200, 50, 0, 0.1); }
+      .sentimentScore-2 { background-color: rgba(175, 75, 0, 0.1); }
+      .sentimentScore-1 { background-color: rgba(150, 100, 0, 0.1); }
+      .sentimentScore-0 { background-color: rgba(125, 125, 0, 0); }
+      .sentimentScore0 { background-color: rgba(125, 125, 0, 0); }
+      .sentimentScore1 { background-color: rgba(100, 150, 0, 0.1); }
+      .sentimentScore2 { background-color: rgba(75, 175, 0, 0.1); }
+      .sentimentScore3 { background-color: rgba(50, 200, 0, 0.1); }
+      .sentimentScore4 { background-color: rgba(25, 225, 0, 0.1); }
+      .sentimentScore5 { background-color: rgba(0, 250, 0, 0.1); }
+      .sentimentScore6 { background-color: rgba(0, 255, 0, 0.1); }
+      .sentimentScore7 { background-color: rgba(0, 255, 0, 0.15); }
+      .sentimentScore8 { background-color: rgba(0, 255, 0, 0.20); }
+      .sentimentScore9 { background-color: rgba(0, 255, 25, 0.20); }
+      .sentimentScore10 { background-color: rgba(0, 255, 50, 0.20); }
+      .sentimentScore11 { background-color: rgba(0, 255, 75, 0.20); }
+      .sentimentScore12 { background-color: rgba(0, 255, 100, 0.20); }
+      .sentimentScore13 { background-color: rgba(0, 255, 125, 0.20); }
+
+      .boldSentimentScore-5 { background-color: rgba(255, 0, 125, 0.5); }
+      .boldSentimentScore-4 { background-color: rgba(225, 25, 125, 0.5); }
+      .boldSentimentScore-3 { background-color: rgba(200, 50, 125, 0.5); }
+      .boldSentimentScore-2 { background-color: rgba(175, 75, 125, 0.5); }
+      .boldSentimentScore-1 { background-color: rgba(150, 100, 125, 0.3); }
+      .boldSentimentScore-0 { background-color: rgba(125, 125, 125, 0.0); }
+      .boldSentimentScore0 { background-color: rgba(125, 125, 125, 0.0); }
+      .boldSentimentScore1 { background-color: rgba(100, 150, 125, 0.3); }
+      .boldSentimentScore2 { background-color: rgba(75, 175, 125, 0.5); }
+      .boldSentimentScore3 { background-color: rgba(50, 200, 125, 0.5); }
+      .boldSentimentScore4 { background-color: rgba(25, 225, 125, 0.5); }
+      .boldSentimentScore5 { background-color: rgba(0, 250, 125, 0.5); }
+
+      tr, td{
+        padding: 5px;
+        text-align: center;
+      }
+
+      thead { 
+        background-color: rgb(64 67 69);
+      }
     </style>
   </head>
   <body>
@@ -125,9 +173,50 @@
         <span class="nickEle">&lt;<b class="nick mono">{{ data.nick }}</b>&gt;</span>
         <span class="idHnEle" style="display: none;">&lt;<b class="nick mono">{{ data.ident }}<br/>@{{ data.hostname }}</b>&gt;</span>
       </div>
-      <div class="Rtable-cell Rtable--1cols-cell" class="msg">{{ data.message }}</div>
+      <div class="Rtable-cell Rtable--1cols-cell userDisplay sentimentScore{{ data.sentiment.scoreRound }}" class="msg" onclick="toggleUserDisplay(this);">
+        <span class="nickEle">{{ data.message }}</span>
+        <span class="idHnEle" style="display: none;">score: {{ data.sentiment.score }}, comparative: {{ data.sentiment.comparative }}</span>
+      </div>
       {{ /elements }}
     </div>
+
+    {{ #extra.sentiments }}
+    <h3>Sentiment by channel</h3>
+      <table>
+        <thead>
+        <td>Channel</td>
+        <td>Score</td>
+        <td>Comparative</td>
+        <td>Msg #</td>
+        </thead>
+        {{ #perChan }}
+          <tr>
+          <td class="target mono">{{ key }}</td>
+          <td class="boldSentimentScore{{ value.scoreRound }}">{{ value.score }}</td>
+          <td class="boldSentimentScore{{ value.comparativeRound }}">{{ value.comparative }}</td>
+          <td>{{ value.count }}</td>
+          </tr>
+        {{ /perChan }}
+      </table>
+
+      <h3>Sentiment by nickname</h3>
+        <table>
+          <thead>
+          <td>Nickname</td>
+          <td>Score</td>
+          <td>Comparative</td>
+          <td>Msg #</td>
+          </thead>
+          {{ #perNick }}
+            <tr>
+            <td class="nick mono">{{ key }}</td>
+            <td class="boldSentimentScore{{ value.scoreRound }}">{{ value.score }}</td>
+            <td class="boldSentimentScore{{ value.comparativeRound }}">{{ value.comparative }}</td>
+            <td>{{ value.count }}</td>
+            </tr>
+          {{ /perNick }}
+        </table>
+    {{ /extra.sentiments }}
 
     <template id="tooltipTemplate"><span id="ident"></span><br/>@<span id="hostname"></span></template>
 

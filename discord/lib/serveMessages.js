@@ -58,18 +58,14 @@ async function serveMessages (context, data, opts = {}) {
 
   const name = nanoid();
 
-  if (!data.length) {
-    context.sendToBotChan(`No messages for \`${context.network}\` were found.`);
-    return;
-  }
-
   context.registerOneTimeHandler('http:get-req:' + name, name, async () => {
     await scopedRedisClient(async (r) => {
       await r.publish(PREFIX, JSON.stringify({
         type: 'http:get-res:' + name,
         data: {
           network: context.network,
-          elements: data
+          elements: data,
+          extra: opts.extra ?? {}
         }
       }));
     });

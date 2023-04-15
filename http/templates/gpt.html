@@ -1,5 +1,5 @@
 <html>
-  <title>OpenAI Query Results</title>
+  <title>LLM prompt response</title>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style type="text/css">
@@ -114,26 +114,44 @@
     <h3>Parameters</h3>
     <div id="info">
       <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query Duration:</div>
+        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query duration:</div>
         <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ queryTimeS }} seconds</code></div>
       </div>
+      {{#model}}
       <div class="row Rtable Rtable--collapse Rtable--2cols">
         <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Model:</div>
         <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ model }}</code></div>
       </div>
+      {{/model}}
+      {{#temperature}}
       <div class="row Rtable Rtable--collapse Rtable--2cols">
         <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Temperature:</div>
         <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ temperature }}</code></div>
       </div>
+      {{/temperature}}
+      {{#max_tokens}}
       <div class="row Rtable Rtable--collapse Rtable--2cols">
         <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Max Tokens:</div>
         <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ max_tokens }}</code></div>
       </div>
+      {{/max_tokens}}
+      {{#numTokens}}
+      <div class="row Rtable Rtable--collapse Rtable--2cols">
+        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Tokens consumed:</div>
+        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ numTokens }}</code></div>
+      </div>
+      {{/numTokens}}
+      {{#queryTimePerTokenMs}}
+      <div class="row Rtable Rtable--collapse Rtable--2cols">
+        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query duration per token:</div>
+        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ queryTimePerTokenMs }} milliseconds</code></div>
+      </div>
+      {{/queryTimePerTokenMs}}
     </div>
 
-    <h4>via the <a href="https://beta.openai.com/docs/guides/completion" target="_blank">OpenAI text completion API</a>
+    <h4>via {{{ viaHTML }}}</h4>
 
-    <br/><br/>
+    <br/>
     <hr />
     
     This document was generated at {{ captureTimestamp }} 

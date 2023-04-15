@@ -194,8 +194,27 @@ const _config = {
   openai: {
     secretKey: null,
     model: 'text-davinci-003',
-    temperature: 0.7,
-    maxTokens: 4000
+    chatModel: 'gpt-3.5-turbo',
+    temperature: 0.9,
+    maxTokens: 3700,
+    viaHTML: 'the <a href="https://beta.openai.com/docs/guides/completion" target="_blank">OpenAI text completion API</a>'
+  },
+
+  alpaca: {
+    /*
+    hosts: {
+      // will result in queries to:
+      // https://alpaca.example.com/prompt and https://alpaca-ht.example.com/prompt
+      "example.com": {
+        models: ["alpaca", "alpaca-ht"],
+        scheme: "https"
+      }
+    }
+    */
+    hosts: {},
+    waitTimeSeconds: 5,
+    viaHTML: '<a href="https://github.com/edfletcher/alpaca.http" target="_blank">alpaca.http</a> running the <a href="https://huggingface.co/Sosaka/Alpaca-native-4bit-ggml/blob/main/ggml-alpaca-7b-q4.bin" target="_blank">7 billion 4-bit weights Alpaca model</a>',
+    camelidaeFrontendAvailable: false
   },
 
   _secretKeys: SECRET_KEYS,

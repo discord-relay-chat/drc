@@ -3,13 +3,14 @@
 const { MessageEmbed } = require('discord.js');
 const { matchNetwork, searchLogs, fmtDuration, resolveNameForDiscord } = require('../../util');
 const { serveMessages } = require('../common');
+const { transformAveragesForDigestHTTP, roundSentimentScoreOnMessages } = require('../../lib/sentiments');
 
 const search = async (context, network, titleMessage = `Searching **${network}**...`) => {
   const start = new Date();
   context.sendToBotChan(titleMessage);
 
-  console.log('SEARCH opts', context.options);
-  const { totalLines, searchResults, error } = await searchLogs(network, context.options);
+  console.debug('SEARCH opts', context.options);
+  const { totalLines, searchResults, error, sentiments } = await searchLogs(network, context.options);
 
   if (error) {
     context.sendToBotChan('Search failed: \n```\n' + error + '\n```\n');
@@ -23,7 +24,7 @@ const search = async (context, network, titleMessage = `Searching **${network}**
 
   if (!foundLines) {
     context.sendToBotChan(`Found no matching lines out of **${totalLines}** total.\n` +
-    'Not expecting zero results? Try with `--everything`, `--or`, and/or a different `--type`.\n' +
+    'Not expecting zero results? Try with `--everything`, `--orKeys`, and/or a different `--type`.\n' +
     `Search completed in **${durFmtted.length ? durFmtted : 'no time'}** (${delta}).`);
   } else {
     const networkCatIds = Object.fromEntries(Object.entries(categoriesByName).filter(([k]) => k === network))[network];
@@ -49,22 +50,43 @@ const search = async (context, network, titleMessage = `Searching **${network}**
       });
 
     for (const r of resolveMeSerially) {
-      let [chan, lines, discResolved] = await r;
+      const [chan, lines, discResolved] = await r;
       const discordChannelId = networkChannels[discResolved];
       if (!discordChannelId) {
         console.warn('No channel ID! (may be expected if channel was a PM channel or was otherwise removed)',
           discordChannelId, networkChannels, cTrim(chan), chan, discResolved);
       }
-      chan = discordChannelId ? `<#${discordChannelId}>` : chan;
-      embed.addField(`${lines.length} line(s) found in`, chan);
+      let chanStr = discordChannelId ? `<#${discordChannelId}>` : chan;
+      if (sentiments && sentiments.perChan[chan]) {
+        const { score, comparative } = sentiments.perChan[chan];
+        chanStr += `\nsentiment: ${Number(comparative).toFixed(3)} (${Number(score).toFixed(1)})`;
+      }
+      embed.addField(`${lines.length} line(s) found in`, chanStr);
     }
 
     context.sendToBotChan({ embeds: [embed] }, true);
 
-    serveMessages({ network, ...context }, Object.values(searchResults).reduce((a, l) => a.concat(l), []).map((data) => ({
-      timestamp: data.__drcIrcRxTs,
-      data
-    })));
+    if (!context.options?.doNotServe) {
+      let serveData = [];
+      const onlySentiment = context.options.justSentiment || context.options.onlySentiment;
+      if (!onlySentiment) {
+        serveData = Object.values(searchResults)
+          .reduce((a, l) => a.concat(l), [])
+          .map((data) => ({
+            timestamp: data.__drcIrcRxTs,
+            data
+          }));
+      } else {
+        context.options.serve = true;
+      }
+
+      roundSentimentScoreOnMessages(serveData.map(({ data }) => data));
+      serveMessages({ network, ...context }, serveData, {
+        extra: {
+          sentiments: transformAveragesForDigestHTTP(sentiments)
+        }
+      });
+    }
   }
 };
 
@@ -75,8 +97,13 @@ async function f (context) {
   if (subCmd) {
     let subParsed;
     if (subCmd === 'digest' && subCmdArg1 && !Number.isNaN((subParsed = Number.parseInt(subCmdArg1)))) {
-      context.options = { from: `-${subParsed}m` };
-      return search(context, network, `Producing digest of last **${subParsed} minutes** of channel activity across \`${network}\`...`);
+      context.options = {
+        ...context.options,
+        from: `-${subParsed}m`,
+        doNotServe: !(context.options?.serve ?? false)
+      };
+
+      return search(context, network, `Producing digest of last **${subParsed} minutes** of activity...`);
     }
   }
 
@@ -110,7 +137,7 @@ f.__drcHelp = () => {
       ['--type', 'The message type ("notice", "privmsg", etc) to search for', true],
       ['--columns', 'A comma-separated list of columns to include', true],
       ['--from_server', 'Only include messages that originated from the server', false],
-      ['--or', 'Use `OR` as the condition between clauses; `--ored` is an allowed synonym.', false],
+      ['--orKeys', 'Comma-seperated list of the search keys (all of the above) to OR together in the query', false],
       ['--everything', 'Include all sources; default is just channels', false],
       ['--distinct', 'Apply DISTINCT to the search', false]
     ]

@@ -15,6 +15,7 @@ const { plotMpmData } = require('./discord/plotting');
 const eventHandlers = require('./discord/events');
 const registerContextMenus = require('./discord/contextMenus');
 const parsers = require('./lib/parsers');
+const { loadAliases, tryResolvingAlias } = require('./discord/lib/ucAliases');
 const UCHistory = require('./discord/userCommandHistory');
 const {
   PREFIX,
@@ -235,6 +236,9 @@ const formatForAllowedSpeakerResponse = (s, raw = false) =>
 
 let clientOnSigint = () => {};
 client.once('ready', async () => {
+  const commandAliases = await loadAliases();
+  console.log(`Loaded ${Object.keys(commandAliases).length} user command aliases`);
+
   console.log('Ready!');
 
   client.user.setStatus('idle');
@@ -364,7 +368,7 @@ client.once('ready', async () => {
 
   sendToBotChan({
     embeds: [
-      new MessageEmbed().setDescription('\n```\n' + (await banner('Hello!')) + '\n```\n\n')
+      new MessageEmbed().setDescription('\n```\n' + (await banner('Hi!')) + '\n```\n\n')
     ]
   }, true);
 
@@ -392,10 +396,17 @@ client.once('ready', async () => {
         return pipedHandler();
       }
 
-      let { command, args } = parsers.parseCommandAndArgs(trimContent, { autoPrefixCurrentCommandChar });
-      console.log(trimContent, '-> user command parsed ->', { command, args });
-      args = parsers.parseArgsForQuotes(args);
-      console.debug('args parsed for quotes', args);
+      const aliasedTCList = trimContent.slice(autoPrefixCurrentCommandChar ? 0 : 1).split(/\s+/);
+      const aliased = tryResolvingAlias(aliasedTCList[0]);
+      console.warn('USE', aliased ? [aliased, ...aliasedTCList.slice(1)].join(' ') : trimContent);
+      let { command, args } = parsers.parseCommandAndArgs(
+        aliased ? [aliased, ...aliasedTCList.slice(1)].join(' ') : trimContent,
+        {
+          // must auto-prefix if aliased
+          autoPrefixCurrentCommandChar: !!(aliased ?? autoPrefixCurrentCommandChar)
+        }
+      );
+      console.log(trimContent, '-> user command parsed ->', { command, args, aliased });
 
       const fmtedCmdStr = '`' + `${command} ${args.join(' ')}` + '`';
       const redis = new Redis(config.redis.url);
@@ -405,6 +416,9 @@ client.once('ready', async () => {
       try {
         const cmdFunc = userCommands(command);
         resolvedName = cmdFunc?.__resolvedFullCommandName ?? command;
+
+        args = parsers.parseArgsForQuotes(args);
+        console.debug('args parsed for quotes', args);
 
         // this should be removed ASAP in favor of scopedRedisClient,
         // but need to find all uses of it first...
@@ -449,7 +463,7 @@ client.once('ready', async () => {
         }
 
         if (!cmdFunc) {
-          localSender(`\`${command}\` is not a valid DRC user command. Run \`!help\` to see all available commands.`);
+          localSender(`\`${command}\` is not a valid DRC user command. Run \`${config.app.allowedSpeakersCommandPrefixCharacter}help\` to see all available commands.`);
           throw new UserCommandNotFound();
         }
 
@@ -481,7 +495,9 @@ client.once('ready', async () => {
         }
 
         const result = await cmdFunc(context, ...args);
-        console.log(`Executed user command "${command}" (${resolvedName}) with result -->\n`, result);
+        console.log(`Executed user command "${command}" (${resolvedName}) ` +
+          (aliased ? `from alias "${aliasedTCList[0]}"` : '') +
+        ' with result -->\n', result);
 
         let toBotChan;
         if (result && result.__drcFormatter) {

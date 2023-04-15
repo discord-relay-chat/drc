@@ -112,7 +112,7 @@ const Commands = {
   },
 
   async setNickRandomStyle (context) {
-    const [nick, style] = context.options._.slice(-2);
+    const [style, nick] = context.options._.slice(-2);
 
     if (!AvatarGenerators[style]) {
       return `Invalid style "${style}".`;

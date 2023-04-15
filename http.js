@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PREFIX, expiryFromOptions, scopedRedisClient } = require('./util');
+const { PREFIX, scopedRedisClient } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
 const mustache = require('mustache');
@@ -11,6 +11,7 @@ const { Readable } = require('stream');
 const { finished } = require('stream/promises');
 const { renderTemplate, templatesLoad, getTemplates } = require('./http/common');
 const mimeTypes = require('mime-types');
+const { expiryFromOptions } = require('./lib/expiry');
 
 const app = require('fastify')({
   logger: true

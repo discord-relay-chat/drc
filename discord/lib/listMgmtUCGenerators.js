@@ -7,8 +7,52 @@ const {
   simpleEscapeForDiscord
 } = require('./strings');
 
+function attachHelp (cmdFunc, commandName, additionalCommands, { overrideHelpFields = {} } = {}) {
+  const addlCommandsHelp = Object.entries(additionalCommands ?? {})
+    .filter(([k]) => k.indexOf('_') !== 0)
+    .reduce((a, [k, v]) => ({
+      [k]: {
+        text: k
+      },
+      ...a
+    }), {});
+
+  const defaultHelp = {
+    title: `Add or remove strings to the \`${commandName}\` list.`,
+    usage: 'network subcommand [string]',
+    subcommands: {
+      add: {
+        header: 'Notes',
+        text: `Adds \`string\` to the \`${commandName}\` list.`
+      },
+      remove: {
+        header: 'Notes',
+        text: `Removes \`string\` from the \`${commandName}\` list.`
+      },
+      clear: {
+        header: 'Notes',
+        text: `Removes all strings from the \`${commandName}\` list.`
+      },
+      ...addlCommandsHelp
+    }
+  };
+
+  cmdFunc.__drcHelp = () => {
+    return {
+      ...defaultHelp,
+      ...overrideHelpFields
+    };
+  };
+}
+
 // keySubstitue only applies (if set) to additionalCommands!
-function generateListManagementUCExport (commandName, additionalCommands, disallowClear = false, keySubstitute = null) {
+function generateListManagementUCExport (commandName,
+  additionalCommands,
+  disallowClear = false,
+  keySubstitute = null,
+  callOnChange = null,
+  overrideHelpFields = {}
+) {
   const f = async function (context, ...a) {
     const [netStub, cmd] = a;
 
@@ -35,10 +79,21 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
       return convertDiscordChannelsToIRCInString(a.slice(2).join(' '), context);
     };
 
+    const addRmArgs = async () => [key, await argStr()];
+
+    let onChangeWrapper = async (a) => a;
+    if (callOnChange) {
+      onChangeWrapper = async (changed) => {
+        if (changed) {
+          await callOnChange(context, ...await addRmArgs());
+        }
+      };
+    }
+
     return scopedRedisClient(async (redis) => {
       switch (cmd) {
         case 'add':
-          await redis.sadd(key, await argStr());
+          await onChangeWrapper(await redis.sadd(...await addRmArgs()));
           break;
         case 'clear':
           // this really should be a button for confirmation instead of hardcoded!
@@ -47,7 +102,7 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
           }
           break;
         case 'remove':
-          await redis.srem(key, await argStr());
+          await onChangeWrapper(await redis.srem(...await addRmArgs()));
           break;
       }
 
@@ -68,42 +123,22 @@ function generateListManagementUCExport (commandName, additionalCommands, disall
     });
   };
 
-  const addlCommandsHelp = Object.entries(additionalCommands ?? {})
-    .filter(([k]) => k.indexOf('_') !== 0)
-    .reduce((a, [k, v]) => ({
-      [k]: {
-        text: k
-      },
-      ...a
-    }), {});
-
-  f.__drcHelp = () => {
-    return {
-      title: `Add or remove strings to the \`${commandName}\` list.`,
-      usage: 'network subcommand [string]',
-      subcommands: {
-        add: {
-          header: 'Notes',
-          text: `Adds \`string\` to the \`${commandName}\` list.`
-        },
-        remove: {
-          header: 'Notes',
-          text: `Removes \`string\` from the \`${commandName}\` list.`
-        },
-        clear: {
-          header: 'Notes',
-          text: `Removes all strings from the \`${commandName}\` list.`
-        },
-        ...addlCommandsHelp
-      }
-    };
-  };
-
+  attachHelp(f, commandName, additionalCommands, { overrideHelpFields });
   return f;
 }
 
-function generatePerChanListManagementUCExport (commandName, additionalCommands, enforceChannelSpec = true) {
-  return function (context, ...a) {
+function generateListManagementUCExportOpts (commandName, {
+  additionalCommands,
+  disallowClear = false,
+  keySubstitute = null,
+  callOnChange = null,
+  overrideHelpFields = {}
+} = {}) {
+  return generateListManagementUCExport(commandName, additionalCommands, disallowClear, keySubstitute, callOnChange, overrideHelpFields);
+}
+
+function generatePerChanListManagementUCExport (commandName, additionalCommands, enforceChannelSpec = true, options = {}) {
+  const cmdFunc = function (context, ...a) {
     const [netStub, channelIdSpec] = context.options._;
     const { network } = matchNetwork(netStub);
     let channel = channelIdSpec;
@@ -122,7 +157,10 @@ function generatePerChanListManagementUCExport (commandName, additionalCommands,
       return addlCmd({ key, network, ...context }, ...a);
     }
 
-    const cmdFunctor = generateListManagementUCExport(`${commandName}_${key}`, additionalCommands);
+    const cmdFunctor = generateListManagementUCExportOpts(`${commandName}_${key}`, {
+      ...options,
+      additionalCommands
+    });
 
     context.options._[1] = context.options._[0];
     a[1] = a[0];
@@ -130,9 +168,13 @@ function generatePerChanListManagementUCExport (commandName, additionalCommands,
     a.shift();
     return cmdFunctor(context, ...a);
   };
+
+  attachHelp(cmdFunc, commandName, additionalCommands, options);
+  return cmdFunc;
 }
 
 module.exports = {
   generateListManagementUCExport,
+  generateListManagementUCExportOpts,
   generatePerChanListManagementUCExport
 };

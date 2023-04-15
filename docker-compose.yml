@@ -17,6 +17,10 @@ services:
         source: ${DRC_HTTP_TEMPLATES_PATH_HOST:?"Must define DRC_HTTP_TEMPLATES_PATH_HOST as the absolute path to http templates source on the host."}
     network_mode: "host"
     restart: "on-failure"
+    logging:
+      options:
+        max-size: "1024m"
+        max-file: "10"
 
   irc:
     build:
@@ -28,6 +32,10 @@ services:
         target: /logs
     network_mode: "host"
     restart: "on-failure"
+    logging:
+      options:
+        max-size: "1024m"
+        max-file: "10"
 
   discord:
     build:
@@ -47,6 +55,10 @@ services:
         source: ${DRC_HTTP_PATH_HOST:?"Must define DRC_HTTP_PATH_HOST as the absolute path to http on the host."}
     network_mode: "host"
     restart: "on-failure"
+    logging:
+      options:
+        max-size: "1024m"
+        max-file: "10"
 
 volumes:
   logs:

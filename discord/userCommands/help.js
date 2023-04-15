@@ -25,7 +25,8 @@ function f (context) {
       .setTitle('DiscordRC User Command Help')
       .setDescription('Those `<command>`s bulleted below with "**»**" (instead of "•") have further help available via any of these equivalent alternatives:\n• ' +
         ['help <command>', '<command> -h', '<command> --help'].map(s => '`' + ascpc + s + '`').join('\n• ') + '\n\n' +
-        'Only the shortest unique prefix of a command name is required.\n\n' +
+        'Only the shortest unique prefix of a command name is required. The exception to this rule is aliases: they will' +
+        'be checked first (regex then normal strings), must match exactly to trigger.\n\n' +
         'Multiple commands may be run _serially_ in a single invocation with `|>` or _concurrently_ with `!>`. ' +
         'These may be combined, with concurrent sections processed together as one serial section. For example:\n' +
         `\`\`\`\n${ascpc}stats |> ${ascpc}whois libera outage-bot !> ${ascpc}sys |> ${ascpc}ps\n\`\`\`\n` +
