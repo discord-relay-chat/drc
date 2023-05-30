@@ -8,5 +8,6 @@ I heard you liked IRC & Discord so I put some IRC in your Discord.
 
 ## Contributors
 
-* [EdFletcher](https://github.com/edfletcher), author & maintainer
-* [antishok](https://github.com/antishok), UX
+* [EdFletcher](https://github.com/edfletcher)
+* [antishok](https://github.com/antishok)
+* [CovertDuck](https://github.com/CovertDuck)
