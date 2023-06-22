@@ -22,7 +22,7 @@
     "fastify": "^3.29.4",
     "inquirer": "^8.2.0",
     "ioredis": "^5.3.0",
-    "irc-framework": "^4.11.0",
+    "irc-framework": "https://github.com/edfletcher/irc-framework/",
     "lodash": "^4.17.21",
     "mime-types": "^2.1.35",
     "mustache": "^4.2.0",

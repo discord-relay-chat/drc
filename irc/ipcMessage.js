@@ -203,17 +203,16 @@ module.exports = async (context, chan, msg) => {
           throw new Error(`!botClient ${serverSpec.name}`);
         }
 
-        console.log(`Joining channels on ${serverSpec.name}...`);
+        console.log(`Joining channels on ${serverSpec.name}... (isReconnect: ${isReconnect})`);
 
         const joinFuncs = [];
         chanPrefixes[serverSpec.name] = await Promise.all(serverSpec.channels.map(getChannelJoinFunc.bind(null, joinFuncs, serverSpec), []));
 
-        // XXX: pretty sure this function is never actually called on the reconnect path!
-        if (isReconnect) {
-          await Promise.all(joinFuncs.map((f) => f()));
-        } else {
-          await floodProtect(joinFuncs);
-        }
+        // isReconnect logic is not always correct, for example: start the IRC daemon first and let it fully connect to IRC, then
+        // start the discord daemon. isReconnect will be 'true' even though it is the first connection for the lifetime of either process.
+        // as a stop-gap until that logic is corrected, we must always use floodProtect() here lest we get into the aforementioned
+        // situation and flood the server with joins, getting kicked accordingly
+        await floodProtect(joinFuncs);
 
         console.log(`Joined ${joinFuncs.length} channels on ${serverSpec.name}.`);
         console.debug('chanPrefixes for', serverSpec.name, chanPrefixes[serverSpec.name]);

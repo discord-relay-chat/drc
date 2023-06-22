@@ -33,7 +33,7 @@ const logsSearch = async (network, d, embed, aliases = []) => {
   }, new Set());
 
   const uniqSearchRes = logsSearchRes.reduce((accObj, srObj) => {
-    Object.values(srObj).forEach((objList) => objList.forEach((intObj) => Object.entries(intObj).forEach(([k, v]) => accObj[k].add(v))));
+    Object.values(srObj).forEach((objList) => objList.forEach((intObj) => Object.entries(intObj).forEach(([k, v]) => accObj[k]?.add(v))));
     return accObj;
   }, {
     hostname: new Set(),

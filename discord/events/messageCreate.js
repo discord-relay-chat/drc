@@ -190,9 +190,8 @@ module.exports = async (context, data) => {
 
     if (channel.parent === config.discord.privMsgCategoryId) {
       const network /* shadowed! */ = await PrivmsgMappings.findNetworkForKey(data.channelId);
-      console.log('PM CAT', channel, data.channelId, network, await PrivmsgMappings.forNetwork(network), data.content);
+      console.log('PM CAT', channel, data.channelId, network, data.content);
       ticklePmChanExpiry(network, data.channelId);
-      console.error('PM FN?!', await PrivmsgMappings.forNetwork(network));
       return await redisClient.publish(PREFIX, JSON.stringify({
         type: 'discord:requestSay:irc',
         data: {

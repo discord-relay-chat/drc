@@ -125,7 +125,7 @@ const _config = {
     ctcpVersionOverride: null,
     ctcpVersionPrefix: 'Discord Relay Chat',
     ctcpVersionUrl: 'https://discordrc.com',
-    floodProtectWaitMs: 500,
+    floodProtectWaitMs: 150,
     quitMsgChanId: '',
     channelXformsPath: 'config/channelXforms.json',
     heartbeatFrequencyMs: 5000,
@@ -136,6 +136,10 @@ const _config = {
         "user": {
           // any options valid for the irc-framework constructor[1] are valid here
           "nick": "",
+          // highly recommended to set this to true to ensure that multi-line messages are always sent in-order
+          "serialize_writes": true,
+          // if you're connecting to a TLS port, you must still explicitly set this to true
+          "tls": true,
           "account": { // will, generally, auto-authenticate with nickserv when present. if not, use !onConnect
             "account": "nickservRegisteredName",
             "password": "" // if falsy, will be prompted for on the console
