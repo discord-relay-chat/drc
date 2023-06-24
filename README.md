@@ -1,3 +1,5 @@
+![DRC logo](https://discordrc.com/images/drc-logo-1.png "DRC logo")
+
 # Discord Relay Chat
 
 I heard you liked IRC & Discord so I put some IRC in your Discord.
@@ -7,9 +9,20 @@ I heard you liked IRC & Discord so I put some IRC in your Discord.
 [![Discord](https://shields.io/badge/chat-discord-7289da?style=for-the-badge)](https://discord.gg/dHmqx5vAw2)
 [![Libera Chat](https://shields.io/badge/chat-libera%20chat-ec62d7?style=for-the-badge)](https://web.libera.chat/?channel=#discordrc)
 
+## About DRC
+
+Discord Relay Chat is an IRC client that uses Discord for an easy-to-use, comfortable UI accessible from any machine. It allows multiple server connections while ensuring stability and moderate resource consumption.
+With DRC, you’ll not miss out on any mentions or highlights. It also gives you the possibility of alias and kick/ban tracking. You can send attachments, take notes about channels and nicks, or even play [Zork](https://en.wikipedia.org/wiki/Zork)! Thanks to [ChatGPT](https://chat.openai.com/auth/login) integration, you’ll always have someone to talk to.
+
+Visit [the project’s website](https://discordrc.com/) to discover the features and potential of this tool.
+There is still some work to do. Fortunately, it’s open source, and contributions are accepted, so hack away!
+
+![DRC UI](https://discordrc.com/images/ubuntu-disc.png "DRC UI")
+
 ## Documentation
 
-[DiscordRC.com](https://discordrc.com)
+Below you will find instructions on how to install and run the project. Additional documentation is available on [DiscordRC.com](https://discordrc.com)  
+Note: documentation is not comprehensive. The source code is the ultimate reference.
 
 ## Installation
 
