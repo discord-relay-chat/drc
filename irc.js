@@ -309,13 +309,18 @@ async function main () {
 
       if (channel) {
         channel = await resolveNameForDiscord(host, channel);
-        const chanSpecs = specServers[host].channels.filter(x => x.name === channel);
-        if (chanSpecs.length > 1) {
-          console.error(`Duplicate channel specs found for ${host}/${channel}, full list:`, chanSpecs);
+        const chanSpecs = specServers[host].channels?.filter(x => x.name === channel);
+
+        if (!chanSpecs) {
+          console.error(`No chan specs for ${host}/${channel}?!`);
         }
 
         if (chanSpecs.length > 0) {
           [chanSpec] = chanSpecs;
+        }
+
+        if (chanSpecs.length > 1) {
+          console.error(`Duplicate channel specs found for ${host}/${channel}, full list:`, chanSpecs);
         }
       }
 
