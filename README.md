@@ -1,4 +1,4 @@
-![DRC logo](https://discordrc.com/images/drc-logo-1.png "DRC logo")
+![DRC logo](https://github.com/edfletcher/discordrc.com/blob/main/static/images/drc-logo-1.png "DRC logo")
 
 # Discord Relay Chat
 
@@ -17,7 +17,7 @@ With DRC, you’ll not miss out on any mentions or highlights. It also gives you
 Visit [the project’s website](https://discordrc.com/) to discover the features and potential of this tool.
 There is still some work to do. Fortunately, it’s open source, and contributions are accepted, so hack away!
 
-![DRC UI](https://discordrc.com/images/ubuntu-disc.png "DRC UI")
+![DRC UI](https://github.com/edfletcher/discordrc.com/blob/main/static/images/ubuntu-disc.png "DRC UI")
 
 ## Documentation
 
