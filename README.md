@@ -137,3 +137,4 @@ You may set `DEBUG=1` in the environment to enable more-verbose logging from any
 - [EdFletcher](https://github.com/edfletcher)
 - [antishok](https://github.com/antishok)
 - [CovertDuck](https://github.com/CovertDuck)
+- [OlaPom](https://github.com/OlaPom)
