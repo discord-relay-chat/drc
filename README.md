@@ -90,7 +90,7 @@ The following configuration parameters must be set by you, the user for the syst
 
 ### Using private message channels
 
-If you create a category with a name that matches [this logic](https://github.com/edfletcher/drc/blob/main/discord.js#L347)\* - such as “Private Messages”, “privmsgs”, or “PMs”) - DRC will automatically create a channel in this category for each private message received (a la traditional IRC client’s “query window” feature).
+If you create a category with a name that matches [this logic](https://github.com/edfletcher/drc/blob/d4d7e8811eeb70c0fd37edf94d006744db1e61a4/discord.js#L629)\* - such as “Private Messages”, “privmsgs”, or “PMs”) - DRC will automatically create a channel in this category for each private message received (a la traditional IRC client’s “query window” feature).
 
 In order for this feature to properly expire these channels after `config.discord.privMsgChannelStalenessTimeMinutes` have elapsed, your Redis server must have `“Kx”` [keyspace notifications](https://redis.io/docs/manual/keyspace-notifications/) enabled!
 
