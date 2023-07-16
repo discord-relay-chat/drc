@@ -1,53 +1,19 @@
 'use strict';
 
-const vm = require('vm');
+const vm = require('../lib/vm');
 const config = require('config');
-const logger = require('../../logger')('discord');
 const { PREFIX, scopedRedisClient } = require('../../util');
+const { MessageEmbed } = require('discord.js');
+const { servePage } = require('../common');
 
 const RKEY = `${PREFIX}:jssaved`;
-
-const AllowedGlobals = ['Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt', 'Infinity', 'NaN', 'undefined',
-  'Boolean', 'String', 'Symbol', 'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError', 'RangeError',
-  'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer',
-  'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array',
-  'Uint8ClampedArray', 'BigUint64Array', 'BigInt64Array', 'DataView', 'Map', 'BigInt', 'Set', 'WeakMap', 'WeakSet',
-  'Proxy', 'Reflect', 'FinalizationRegistry', 'WeakRef', 'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent',
-  'escape', 'unescape', 'isFinite', 'isNaN', 'Buffer', 'atob', 'btoa', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder',
-  'clearInterval', 'clearTimeout', 'setInterval', 'setTimeout', 'queueMicrotask', 'performance', 'clearImmediate', 'setImmediate',
-  'SharedArrayBuffer', 'Atomics', 'buffer', 'constants', 'crypto', 'dgram', 'dns', 'domain', 'fs', 'http', 'http2', 'https',
-  'net', 'os', 'path', 'querystring', 'readline', 'stream', 'string_decoder', 'timers', 'tls', 'url', 'zlib', 'util']
-  .reduce((a, x) => ({ [x]: global[x], ...a }), {});
 
 async function _run (context, runStr) {
   try {
     console.log(`runStr> ${runStr}`);
-    let res = vm.runInNewContext(runStr, {
-      ...context,
-      ...AllowedGlobals,
-      logger,
-      config,
-      PREFIX,
-      common: require('../common'),
-      util: require('../../util'),
-      src: scopedRedisClient,
-      stbc: context.sendToBotChan,
-      console: {
-        debug: context.sendToBotChan,
-        log: context.sendToBotChan,
-        warn: context.sendToBotChan,
-        error: context.sendToBotChan
-      }
-    });
-
-    let wasAwaited = false;
-    if (res instanceof Promise) {
-      res = await res;
-      wasAwaited = true;
-    }
-
-    console.log(`res ${wasAwaited ? '(awaited)' : ''}>    ${res}`);
-    context.sendToBotChan('```\n' + JSON.stringify(res, null, 2) + '\n```\n');
+    const { result, wasAwaited } = await vm.runStringInContext(runStr, context);
+    console.log(`res ${wasAwaited ? '(awaited)' : ''}>    ${result}`);
+    context.sendToBotChan('```\n' + JSON.stringify(result, null, 2) + '\n```\n');
   } catch (e) {
     console.error('runInNewContext threw>', e);
     context.sendToBotChan('Compilation failed:\n\n```\n' + e.message + '\n' + e.stack + '\n```');
@@ -87,12 +53,34 @@ async function delSnippet (context, ...a) {
   return scopedRedisClient((r) => r.hdel(RKEY, name));
 }
 
+async function edit (context, ...a) {
+  const [name] = a;
+  const snippetText = await scopedRedisClient((r) => r.hget(RKEY, name));
+
+  if (!snippetText) {
+    return 'Nothing found';
+  }
+
+  const pageName = await servePage(context, {
+    snippetText: snippetText.trim(),
+    snippetTextBase64: Buffer.from(snippetText.trim(), 'utf8').toString('base64'),
+    name,
+    keyComponent: 'jssaved'
+  }, 'editor', null, true);
+  const embed = new MessageEmbed()
+    .setColor(config.app.stats.embedColors.main)
+    .setTitle(`Click here to edit "${name}"...`)
+    .setURL(`https://${config.http.fqdn}/${pageName}`);
+  await context.sendToBotChan({ embeds: [embed] }, true);
+}
+
 const subCommands = {
   exec: run,
   save: saveSnippet,
   list: listSnippets,
   run: runSnippet,
   del: delSnippet,
+  edit,
   get: async function (context, ...a) {
     const name = a.shift();
     return '```javascript\n' + await scopedRedisClient((r) => r.hget(RKEY, name)) + '\n```';
@@ -115,7 +103,8 @@ const helpText = {
   list: 'List all saved snippets',
   run: 'Run a snippet saved with "name" (first arugment)',
   del: 'Delete the snippet named "name" (first arugment)',
-  get: 'Get a saved snippet named "name" (first arugment)\'s source without executing it'
+  get: 'Get a saved snippet named "name" (first arugment)\'s source without executing it',
+  edit: 'Edit a snippet or user script'
 };
 
 f.__drcHelp = () => ({

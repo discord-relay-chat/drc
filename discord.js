@@ -310,7 +310,7 @@ client.once('ready', async () => {
   console.debug('categoriesByName', categoriesByName);
 
   if (config.irc.quitMsgChanId) {
-    const __sendToBotChan = async (s, raw = false) => {
+    const __sendToBotChan = async (s, raw = false, fromUserScript = false) => {
       if (!s || (typeof s === 'string' && !s?.length)) {
         console.error('sendToBotChan called without message!', s, raw);
         return;
@@ -338,7 +338,12 @@ client.once('ready', async () => {
         }
 
         toSend = formatForAllowedSpeakerResponse(s, raw);
-        await client.channels.cache.get(config.irc.quitMsgChanId).send(toSend);
+        let chanId = config.irc.quitMsgChanId;
+        if (fromUserScript && config.discord.userScriptOutputChannelId) {
+          chanId = config.discord.userScriptOutputChannelId;
+        }
+
+        await client.channels.cache.get(chanId).send(toSend);
       } catch (e) {
         console.error('sendToBotChan .send() threw!', e);
         console.debug(s);
@@ -350,18 +355,18 @@ client.once('ready', async () => {
       return (truncTail ? sendToBotChan(truncTail, raw) : toSend);
     };
 
-    // serialize bot-chan sends to a cadence of 1Hz, to avoid rate limits
+    // serialize bot-chan sends to a cadence of 2Hz, to avoid rate limits
     const stbcQueue = [];
     const stbcServicer = async () => {
       if (stbcQueue.length > 0) {
-        const [s, raw] = stbcQueue.shift();
-        await __sendToBotChan(s, raw);
+        const [s, raw, fUC] = stbcQueue.shift();
+        await __sendToBotChan(s, raw, fUC);
       }
 
-      setTimeout(stbcServicer, 1000);
+      setTimeout(stbcServicer, 500);
     };
 
-    sendToBotChan = async (s, raw = false) => stbcQueue.push([s, raw]);
+    sendToBotChan = async (s, raw = false, fromUserCommand = false) => stbcQueue.push([s, raw, fromUserCommand]);
 
     stbcServicer();
   }
@@ -964,7 +969,7 @@ client.once('ready', async () => {
     }
   };
 
-  mainSubClient.on('message', ipcMessageHandler.bind(null, {
+  const mainContext = {
     pendingAliveChecks,
     allowedSpeakersAvatars,
     stats,
@@ -984,7 +989,26 @@ client.once('ready', async () => {
     allowedSpeakerCommandHandler,
     isReconnect,
     setIsReconnect: (s) => (_isReconnect = s)
-  }));
+  };
+  mainSubClient.on('message', ipcMessageHandler.bind(null, mainContext));
+
+  const userScriptsSubClient = new Redis(config.redis.url);
+  await userScriptsSubClient.psubscribe('*');
+  userScriptsSubClient.on('pmessage', async (_pattern, channel, msgJson) => {
+    let msg = {
+      type: channel,
+      data: msgJson
+    };
+
+    try {
+      msg = JSON.parse(msgJson);
+    } catch (err) {
+      console.error(`Failed to parse message data as json for user script channel=${channel}, msgJson:\n${msgJson}`);
+      console.error(err);
+    }
+
+    await userCommands('scripts').runScriptsForEvent(mainContext, msg.type, msg.data, channel);
+  });
 
   try {
     redisClient.publish(PREFIX, JSON.stringify({
@@ -1096,6 +1120,8 @@ async function main () {
     process.on('exit', () => console.log('Done.'));
     setTimeout(process.exit, 2000);
   });
+
+  await userCommands.init();
 
   registerContextMenus();
   client.login(token);

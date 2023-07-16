@@ -101,10 +101,12 @@ const _config = {
       plotBackupsAndGifGenerationEnabled: false,
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
       mpmPlotTimeLimitHours: 24
-    }
+    },
+    userScriptsEnabledAtStartup: false
   },
 
   discord: {
+    userScriptOutputChannelId: '',
     privMsgChannelStalenessTimeMinutes: 720,
     privMsgChannelStalenessRemovalAlert: 0.1, // remaining of privMsgChannelStalenessTimeMinutes
     privMsgCategoryId: null,
@@ -176,7 +178,11 @@ const _config = {
     ttlSecs: 30 * 60,
     staticDir: HTTP_STATIC_DIR,
     attachmentsDir: HTTP_ATTACHMENTS_DIR,
-    rootRedirectUrl: 'https://discordrc.com'
+    rootRedirectUrl: 'https://discordrc.com',
+    editor: {
+      defaultTheme: 'vs-dark', // valid options are those in the "Theme" drop down in the editor
+      defaultFontSizePt: 14
+    }
   },
 
   ipinfo: {

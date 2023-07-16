@@ -1,6 +1,6 @@
 {
   "name": "drc",
-  "version": "0.6",
+  "version": "0.7",
   "description": "Discord Relay Chat",
   "scripts": {
     "pretest": "semistandard --fix --verbose",
@@ -19,12 +19,14 @@
     "date-fns": "^2.25.0",
     "discord-api-types": "^0.37.24",
     "discord.js": "^13.3.1",
+    "eslint": "^7.32.0",
     "fastify": "^3.29.4",
     "inquirer": "^8.2.0",
     "ioredis": "^5.3.0",
     "irc-framework": "https://github.com/edfletcher/irc-framework/",
     "lodash": "^4.17.21",
     "mime-types": "^2.1.35",
+    "monaco-editor": "^0.39.0",
     "mustache": "^4.2.0",
     "nanoid": "^3.1.31",
     "node-nlp": "^4.26.1",

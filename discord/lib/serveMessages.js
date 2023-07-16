@@ -98,7 +98,7 @@ async function serveMessages (context, data, opts = {}) {
   context.sendToBotChan({ embeds: [embed] }, true);
 }
 
-async function servePage (context, data, renderType, callback) {
+async function servePage (context, data, renderType, callback, allowPut = false) {
   if (!context || !data || !renderType) {
     throw new Error('not enough args');
   }
@@ -126,6 +126,7 @@ async function servePage (context, data, renderType, callback) {
     data: {
       name,
       renderType,
+      allowPut,
       options
     }
   });

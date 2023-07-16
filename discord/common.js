@@ -117,7 +117,11 @@ function formatKVsWithOpts (obj, opts) {
   const typeFmt = (v, k) => {
     switch (typeof v) {
       case 'object':
-        return ['...'];
+        return ['⤵️\n' + formatKVsWithOpts(v, {
+          ...opts,
+          recLevel: (opts?.recLevel ?? 0) + 1,
+          recMaxPropLen: Math.max(maxPropLen, (opts?.recMaxPropLen ?? 0))
+        }), null, true];
 
       case 'boolean':
         return [v ? ':white_check_mark:' : ':x:'];
@@ -139,8 +143,9 @@ function formatKVsWithOpts (obj, opts) {
   };
 
   const vFmt = (v, k) => {
-    const [primary, secondary] = typeFmt(v, k);
-    return `**${primary}**${secondary ? ` (_${secondary}_)` : ''}`;
+    const [primary, secondary, noFormat] = typeFmt(v, k);
+    const pFmt = noFormat ? '' : '**';
+    return `${pFmt}${primary}${pFmt}${secondary ? ` (_${secondary}_)` : ''}`;
   };
 
   const sorter = (a, b) => {
@@ -155,13 +160,18 @@ function formatKVsWithOpts (obj, opts) {
     return a[0].localeCompare(b[0]);
   };
 
-  const maxPropLen = Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1;
-  return Object.entries(obj).sort(sorter)
-    .filter(([, v]) => typeof (v) !== 'function')
-    .map(([k, v]) =>
-      `${nameBoundary}${k.padStart(maxPropLen, ' ')}${nameBoundary}` +
-      `${delim}${vFmt(v, k)}`
-    ).join('\n');
+  const maxPropLen = Math.max(
+    obj ? Object.keys(obj).reduce((a, k) => a > k.length ? a : k.length, 0) + 1 : 0,
+    (opts?.recMaxPropLen ?? 0)
+  );
+  return !obj
+    ? 'null'
+    : Object.entries(obj).sort(sorter)
+      .filter(([, v]) => typeof (v) !== 'function')
+      .map(([k, v]) =>
+      `${nameBoundary}${'→'.repeat(opts?.recLevel ?? 0)}${k.padStart(maxPropLen - (opts?.recLevel ?? 0), ' ')}${nameBoundary}` +
+      `${delim}${vFmt(v, k, maxPropLen)}`
+      ).join('\n');
 }
 
 module.exports = {

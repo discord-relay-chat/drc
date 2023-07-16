@@ -53,6 +53,7 @@ function renderTemplate (renderType, body, expiry) {
 
   if (expiry) {
     renderObj.documentExpiresAt = (new Date(expiry)).toDRCString();
+    renderObj.documentExpiresAtUnix = Math.floor(Number(new Date(expiry)) / 1000);
   }
 
   return {

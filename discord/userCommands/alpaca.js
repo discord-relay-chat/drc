@@ -81,7 +81,12 @@ async function f (context, ...a) {
           }
           context.sendToBotChan(respStr);
         }
-      })); // eslint-disable-line camelcase
+      })
+      .catch((err) => {
+        console.error('Alpaca failed: ', err);
+        context.sendToBotChan(`Alpaca request failed: ${err.message}`);
+      })
+  ); // eslint-disable-line camelcase
 
   return `🦙 Sending your prompt to ${activeEps.length} models. They may take awhile to respond: when they do, the responses will be posted here.`;
 }

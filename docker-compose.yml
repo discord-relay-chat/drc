@@ -19,7 +19,7 @@ services:
     restart: "on-failure"
     logging:
       options:
-        max-size: "1024m"
+        max-size: "512m"
         max-file: "10"
 
   irc:
@@ -34,7 +34,7 @@ services:
     restart: "on-failure"
     logging:
       options:
-        max-size: "1024m"
+        max-size: "512m"
         max-file: "10"
 
   discord:
@@ -57,7 +57,7 @@ services:
     restart: "on-failure"
     logging:
       options:
-        max-size: "1024m"
+        max-size: "512m"
         max-file: "10"
 
 volumes:

@@ -9,6 +9,7 @@ const mustache = require('mustache');
 const { nanoid } = require('nanoid');
 const { Readable } = require('stream');
 const { finished } = require('stream/promises');
+const { ESLint } = require('eslint');
 const { renderTemplate, templatesLoad, getTemplates } = require('./http/common');
 const mimeTypes = require('mime-types');
 const { expiryFromOptions } = require('./lib/expiry');
@@ -26,6 +27,20 @@ const registered = {
 };
 
 const renderCache = {};
+
+const linter = new ESLint({
+  useEslintrc: false,
+  overrideConfig: {
+    extends: ['eslint:recommended'],
+    parserOptions: {
+      sourceType: 'module',
+      ecmaVersion: 'latest'
+    },
+    env: {
+      node: true
+    }
+  }
+});
 
 process.on('SIGUSR1', () => {
   console.log('SIGUSR1 received, reloading templates');
@@ -64,6 +79,7 @@ redisListener.subscribe(PREFIX, (err) => {
 
   console.log('Connected to Redis');
 
+  const PutAllowedIds = {};
   const reqPubClient = new Redis(config.redis.url);
 
   mkdirSyncIgnoreExist(config.http.staticDir);
@@ -88,6 +104,34 @@ redisListener.subscribe(PREFIX, (err) => {
     });
   }
 
+  async function staticServe (res, p) {
+    const allowed = {
+      '.js': 'text/javascript',
+      '.css': 'text/css',
+      '.map': 'application/json'
+    };
+
+    const { ext } = path.parse(p);
+    if (!allowed[ext]) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    return res.type(allowed[ext]).send(await fs.promises.readFile(p));
+  }
+
+  app.get('/vendored/monaco/*', async (req, res) => {
+    return staticServe(res, path.join(__dirname, 'node_modules', 'monaco-editor', 'min', 'vs', req.params['*']));
+  });
+
+  app.get('/min-maps/*', async (req, res) => {
+    return staticServe(res, path.join(__dirname, 'node_modules', 'monaco-editor', 'min-maps', req.params['*']));
+  });
+
+  app.get('/js/*', async (req, res) => {
+    console.log('JS!');
+    return staticServe(res, path.join(__dirname, 'http', 'js', req.params['*']));
+  });
+
   app.get('/static/:name', async (req, res) => {
     const assetPath = path.join(config.http.staticDir, req.params.name);
     const mimeType = mimeTypes.lookup(path.parse(assetPath).ext || 'application/octet-stream');
@@ -100,18 +144,27 @@ redisListener.subscribe(PREFIX, (err) => {
     }
   });
 
-  app.get('/:id', async (req, res) => {
-    console.log(`GET /${req.params.id}`, req.params, req.query);
+  function checkForExpiry (req) {
     const handler = registered.get[req.params.id];
 
     if (!handler) {
       console.debug('Bad handler!', req.params);
-      return res.redirect(config.http.rootRedirectUrl);
+      return true;
     }
 
     if (handler.exp && Number(new Date()) > handler.exp) {
       console.debug('expiring!', req.params);
       delete registered.get[req.params.id];
+      delete PutAllowedIds[req.params.id];
+      return true;
+    }
+
+    return false;
+  }
+
+  app.get('/:id', async (req, res) => {
+    console.log(`GET /${req.params.id}`, req.params, req.query);
+    if (checkForExpiry(req)) {
       return res.redirect(config.http.rootRedirectUrl);
     }
 
@@ -123,12 +176,77 @@ redisListener.subscribe(PREFIX, (err) => {
     }
 
     try {
+      const handler = registered.get[req.params.id];
       res.type('text/html; charset=utf-8');
       res.send(await renderAndCache(handler));
     } catch (err) {
       console.error(err);
       res.redirect(config.http.rootRedirectUrl);
     }
+  });
+
+  // gets script state
+  app.get('/:id/:keyComponent/:snippetName', async (req, res) => {
+    console.log('GET /:id/:keyComponent/:snippetName', req.params, req.query);
+
+    if (checkForExpiry(req)) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    if (!PutAllowedIds[req.params.id] || !req.params.snippetName || !req.params.keyComponent) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    const { name, keyComponent } = PutAllowedIds[req.params.id];
+    if (keyComponent !== req.params.keyComponent || name !== req.params.snippetName) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    // this REALLY needs to be a proper IPC!!!!!!!
+    const RKEY = `${PREFIX}:${req.params.keyComponent}:state`;
+    console.log('HGET', RKEY, req.params.snippetName);
+    return res.type('application/json').send(
+      await scopedRedisClient((r) => r.hget(RKEY, req.params.snippetName))
+    );
+  });
+
+  // linter
+  app.patch('/:id/:keyComponent/:snippetName', async (req, res) => {
+    console.log('PATCH /:id/:keyComponent/:snippetName', req.params);
+
+    if (checkForExpiry(req)) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    if (!PutAllowedIds[req.params.id] || !req.params.snippetName || !req.params.keyComponent) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    const src = '(async function () {\n' + req.body + '\n})();';
+    const linted = await linter.lintText(src);
+    return res.send({
+      linted,
+      formatted: {
+        html: (await linter.loadFormatter('html')).format(linted),
+        json: (await linter.loadFormatter('json')).format(linted)
+      }
+    });
+  });
+
+  app.put('/:id/:keyComponent/:snippetName', async (req, res) => {
+    console.log('PUT /:id/:keyComponent/:snippetName', req.params, req.query);
+    if (checkForExpiry(req)) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    if (!PutAllowedIds[req.params.id] || !req.params.snippetName || !req.params.keyComponent) {
+      return res.redirect(config.http.rootRedirectUrl);
+    }
+
+    // this REALLY needs to be a proper IPC!!!!!!!
+    const RKEY = `${PREFIX}:${req.params.keyComponent}`;
+    await scopedRedisClient((r) => r.hset(RKEY, req.params.snippetName, Buffer.from(req.body, 'utf8').toString('base64')));
+    return res.code(204).send();
   });
 
   app.get('/', async (req, res) => {
@@ -160,6 +278,11 @@ redisListener.subscribe(PREFIX, (err) => {
               return;
             }
 
+            if (PutAllowedIds[subSubType] === true) {
+              const { name, keyComponent } = parsed.data;
+              PutAllowedIds[subSubType] = { name, keyComponent };
+            }
+
             console.log(subSubType, 'Resolving', handler.exp);
             handler.resolve(parsed.data);
           }
@@ -172,7 +295,7 @@ redisListener.subscribe(PREFIX, (err) => {
 
           const { name, options } = parsed.data;
           const exp = expiryFromOptions(options);
-          console.log('createGetEndpoint', name, options, exp);
+          console.log('createGetEndpoint', name, options, exp, parsed.data);
 
           let rr;
           const promise = new Promise((resolve, reject) => {
@@ -194,6 +317,10 @@ redisListener.subscribe(PREFIX, (err) => {
                 fs.promises.writeFile(cachePath, renderedBody))
               .then(() => console.log(`Persisted unexpiring ${cachePath}`))
               .catch((err) => console.log('renderAndCache failed', err));
+          }
+
+          if (parsed.data.allowPut) {
+            PutAllowedIds[name] = true; // clean this up on expiry of `name` (id)!
           }
         } else if (subType === 'isHTTPRunningRequest' && type === 'isXRunning') {
           const { reqId } = parsed.data;
