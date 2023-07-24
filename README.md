@@ -1,4 +1,4 @@
-![DRC logo](https://github.com/edfletcher/discordrc.com/blob/main/static/images/drc-logo-1.png "DRC logo")
+![DRC logo](https://github.com/discord-relay-chat/discordrc.com/blob/main/static/images/drc-logo-1.png "DRC logo")
 
 # Discord Relay Chat
 
