@@ -46,3 +46,8 @@ RUN apt -y install bc gnuplot colossal-cave-adventure imagemagick-6.q16
 ENV PATH=/usr/games:$PATH
 USER drc
 CMD ["node", "discord"]
+
+FROM base as prometheus
+COPY prometheus.js .
+USER drc
+CMD ["node", "prometheus"]

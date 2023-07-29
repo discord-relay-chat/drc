@@ -60,6 +60,21 @@ services:
         max-size: "512m"
         max-file: "10"
 
+  prometheus:
+    build:
+      <<: *default-build-spec
+      target: prometheus
+    volumes: 
+      - type: bind
+        source: ${DRC_LOGS_PATH_HOST:?"Must define DRC_LOGS_PATH_HOST as the absolute path to logs on the host."}
+        target: /logs
+    network_mode: "host"
+    restart: "on-failure"
+    logging:
+      options:
+        max-size: "512m"
+        max-file: "10"
+
 volumes:
   logs:
     external: true

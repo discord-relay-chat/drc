@@ -2,6 +2,7 @@
 
 const { nanoid } = require('nanoid');
 const { scopedRedisClient } = require('../util');
+const { userCommandUsageCounter } = require('./promMetrics');
 
 const QUERY_DEFAULTS = {
   limit: 5,
@@ -10,12 +11,13 @@ const QUERY_DEFAULTS = {
 };
 
 module.exports = {
-  async push (command, metadata = {}) {
+  async push (command, resolvedName, metadata = {}) {
+    userCommandUsageCounter.inc({ commandName: resolvedName });
     return scopedRedisClient(async (client, prefix) => {
       const setScoreTs = Number(new Date());
       const entryId = nanoid();
       const hashKey = `${entryId}.${setScoreTs}`;
-      const writeObj = { command, metadata, setScoreTs, entryId, hashKey };
+      const writeObj = { command, metadata, setScoreTs, entryId, hashKey, resolvedName };
       await client.hset(`${prefix}:userCommandHistory:data`, hashKey, JSON.stringify(writeObj));
       await client.zadd(`${prefix}:userCommandHistory:series`, setScoreTs, hashKey);
       return writeObj;

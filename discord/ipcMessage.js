@@ -12,6 +12,7 @@ const {
 } = require('../util');
 const { MessageEmbed } = require('discord.js');
 const numerics = require('../irc/numerics');
+const { msgRxCounter } = require('./promMetrics');
 
 const ipcMessageHandlers = require('./ipcMessages');
 console.log(`Loaded ${Object.keys(ipcMessageHandlers).length} Discord IPC message handlers: ` +
@@ -57,11 +58,11 @@ module.exports = async (context, _channel, msg) => {
   } = context;
 
   ++stats.messages.total;
+  msgRxCounter.inc();
 
   try {
     const parsed = JSON.parse(msg);
     const [type, subType, subSubType] = parsed.type.split(':');
-    ++stats.messages.total;
     stats.messages.types[type] = (stats.messages.types[type] ?? 0) + 1;
 
     if (parsed.data && typeof parsed.data === 'object') {

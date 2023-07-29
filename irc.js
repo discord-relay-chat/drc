@@ -12,7 +12,7 @@ const { PREFIX, CTCPVersion, scopedRedisClient, resolveNameForDiscord } = requir
 const LiveNicks = require('./irc/liveNicks');
 let ipcMessageHandler = require('./irc/ipcMessage');
 let genEvHandler = require('./irc/genEvHandler');
-
+const { msgRxCounter, msgRxCounterWithType, eventsCounterWithType, msgRxCounterByTarget } = require('./irc/promMetrics');
 const logger = require('./logger');
 logger('irc');
 
@@ -362,6 +362,7 @@ async function main () {
       .forEach((ev) => {
         connectedIRC.bots[host].on(ev, async (data) => {
           adjustChannelUsersOnEvent(host, ev, data);
+          eventsCounterWithType.inc({ host, event: ev });
           return genEvHandler(host, ev, data, {
             logDataToFile
           });
@@ -421,6 +422,10 @@ async function main () {
       data.__drcNetwork = host;
 
       const isNotice = data.target === spec.nick || data.type === 'notice';
+
+      msgRxCounter.inc({ host });
+      msgRxCounterWithType.inc({ host, type: data.type });
+      msgRxCounterByTarget.inc({ host, target: data.target });
 
       if (config.irc.log.channelsToFile) {
         const fName = isNotice && data.target === config.irc.registered[host].user.nick /* XXX:really need to keep LIVE track of our nick!! also add !nick DUH */ ? data.nick : data.target;

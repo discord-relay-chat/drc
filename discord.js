@@ -29,6 +29,7 @@ const {
 } = require('./util');
 
 require('./logger')('discord');
+require('./lib/promRedisExport')('discord');
 
 const INTENTS = [
   Intents.FLAGS.GUILDS,
@@ -548,7 +549,7 @@ client.once('ready', async () => {
         redis.disconnect();
 
         const chan = await getDiscordChannelById(data.channelId);
-        const { hashKey } = await UCHistory.push(trimContent, {
+        const { hashKey } = await UCHistory.push(trimContent, resolvedName, {
           zEvents,
           sentBy: data.author?.tag ?? '<system>',
           sentIn: {

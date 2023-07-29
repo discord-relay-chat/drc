@@ -8,9 +8,11 @@ const { MessageEmbed } = require('discord.js');
 const { servePage, formatKVs } = require('../common');
 const { nanoid } = require('nanoid');
 const RedisSet = require('../../lib/RedisSet');
+const { userScriptsQHWMGauge, userScriptRuntimeHistogram } = require('../promMetrics');
 
 let CallCount = 0;
 let QHighWatermark = 0;
+let QHighWatermarkClearHandle;
 let SCRIPTS_ENABLED = config.app.userScriptsEnabledAtStartup;
 let InjectedConstants;
 const RKEY = `${PREFIX}:user_scripts`;
@@ -124,6 +126,12 @@ async function _runQServicer () {
       if (RunQueue.length > QHighWatermark) {
         console.warn(`New script RunQueue high watermark: ${RunQueue.length} -- ${os.loadavg()}`);
         QHighWatermark = RunQueue.length;
+        userScriptsQHWMGauge.set(QHighWatermark);
+        clearTimeout(QHighWatermarkClearHandle);
+        QHighWatermarkClearHandle = setTimeout(() => {
+          userScriptsQHWMGauge.set(0);
+          QHighWatermark = 0;
+        }, 1 * 60 * 1000);
       }
 
       RunQueueSvcHandle = setTimeout(_runQServicer, 0);
@@ -360,6 +368,10 @@ f.runScriptsForEvent = async function (context, eventName, data, channel) {
   }
 
   for (const [scriptName, scriptBase64] of allScripts) {
+    if (Blocklist.has(scriptName)) {
+      continue;
+    }
+
     const script = Buffer.from(scriptBase64, 'base64').toString('utf8');
     const sendToBotChan = async (...a) => {
       if (a.length > 3 || a.length < 1) {
@@ -430,6 +442,8 @@ f.runScriptsForEvent = async function (context, eventName, data, channel) {
       ...metrics,
       averageMs: metrics.window.reduce((a, x) => a + x) / metrics.window.length
     };
+
+    userScriptRuntimeHistogram.observe({ scriptName }, _runtimeMs);
   }
 
   CallCount++;

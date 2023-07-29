@@ -13,6 +13,7 @@ const { ESLint } = require('eslint');
 const { renderTemplate, templatesLoad, getTemplates } = require('./http/common');
 const mimeTypes = require('mime-types');
 const { expiryFromOptions } = require('./lib/expiry');
+const { requestCounter, notFoundCounter, responseCounter } = require('./http/promMetrics');
 
 const app = require('fastify')({
   logger: true
@@ -128,7 +129,6 @@ redisListener.subscribe(PREFIX, (err) => {
   });
 
   app.get('/js/*', async (req, res) => {
-    console.log('JS!');
     return staticServe(res, path.join(__dirname, 'http', 'js', req.params['*']));
   });
 
@@ -163,7 +163,6 @@ redisListener.subscribe(PREFIX, (err) => {
   }
 
   app.get('/:id', async (req, res) => {
-    console.log(`GET /${req.params.id}`, req.params, req.query);
     if (checkForExpiry(req)) {
       return res.redirect(config.http.rootRedirectUrl);
     }
@@ -187,8 +186,6 @@ redisListener.subscribe(PREFIX, (err) => {
 
   // gets script state
   app.get('/:id/:keyComponent/:snippetName', async (req, res) => {
-    console.log('GET /:id/:keyComponent/:snippetName', req.params, req.query);
-
     if (checkForExpiry(req)) {
       return res.redirect(config.http.rootRedirectUrl);
     }
@@ -204,7 +201,6 @@ redisListener.subscribe(PREFIX, (err) => {
 
     // this REALLY needs to be a proper IPC!!!!!!!
     const RKEY = `${PREFIX}:${req.params.keyComponent}:state`;
-    console.log('HGET', RKEY, req.params.snippetName);
     return res.type('application/json').send(
       await scopedRedisClient((r) => r.hget(RKEY, req.params.snippetName))
     );
@@ -212,8 +208,6 @@ redisListener.subscribe(PREFIX, (err) => {
 
   // linter
   app.patch('/:id/:keyComponent/:snippetName', async (req, res) => {
-    console.log('PATCH /:id/:keyComponent/:snippetName', req.params);
-
     if (checkForExpiry(req)) {
       return res.redirect(config.http.rootRedirectUrl);
     }
@@ -234,7 +228,6 @@ redisListener.subscribe(PREFIX, (err) => {
   });
 
   app.put('/:id/:keyComponent/:snippetName', async (req, res) => {
-    console.log('PUT /:id/:keyComponent/:snippetName', req.params, req.query);
     if (checkForExpiry(req)) {
       return res.redirect(config.http.rootRedirectUrl);
     }
@@ -251,6 +244,33 @@ redisListener.subscribe(PREFIX, (err) => {
 
   app.get('/', async (req, res) => {
     res.redirect(config.http.rootRedirectUrl);
+  });
+
+  app.setNotFoundHandler((req, _res) => {
+    console.warn('404 Not Found', { method: req.method, path: req.url });
+    notFoundCounter.inc({ method: req.method, path: req.url });
+  });
+
+  app.addHook('onRequest', (req, _res, done) => {
+    const { method, url } = req.context.config;
+    if (!method || !url) {
+      return done();
+    }
+
+    requestCounter.inc({ method, path: url });
+    done();
+  });
+
+  app.addHook('onResponse', (req, res, done) => {
+    const { method, url } = req.context.config;
+    responseCounter.inc({ method, path: url, code: res.statusCode });
+    done();
+  });
+
+  process.on('SIGINT', () => {
+    console.log('Exiting...');
+    redisListener.disconnect();
+    app.close();
   });
 
   app.listen(config.http.port, (err, addr) => {
@@ -283,7 +303,6 @@ redisListener.subscribe(PREFIX, (err) => {
               PutAllowedIds[subSubType] = { name, keyComponent };
             }
 
-            console.log(subSubType, 'Resolving', handler.exp);
             handler.resolve(parsed.data);
           }
         }
@@ -295,7 +314,6 @@ redisListener.subscribe(PREFIX, (err) => {
 
           const { name, options } = parsed.data;
           const exp = expiryFromOptions(options);
-          console.log('createGetEndpoint', name, options, exp, parsed.data);
 
           let rr;
           const promise = new Promise((resolve, reject) => {

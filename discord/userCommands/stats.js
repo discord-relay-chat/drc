@@ -15,6 +15,7 @@ const {
   sizeAtPath,
   scopedRedisClient
 } = require('../../util');
+const { systemInfoLogSizeGauge } = require('../promMetrics');
 
 function parseRedisInfoSection (section) {
   const lines = section.split(/\r?\n/g);
@@ -184,6 +185,8 @@ async function f (context) {
     logsSizeInBytes,
     logsSizeInMB: logsSizeInBytes / 1024 / 1024
   };
+
+  systemInfoLogSizeGauge.set(stats.lastCalcs.logsSizeInMB);
 
   if (context.options.returnCalcResults) {
     return stats;

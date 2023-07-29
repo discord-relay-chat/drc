@@ -222,9 +222,15 @@ const _config = {
     }
     */
     hosts: {},
-    waitTimeSeconds: 5,
-    viaHTML: '<a href="https://github.com/edfletcher/alpaca.http" target="_blank">alpaca.http</a> running the <a href="https://huggingface.co/Sosaka/Alpaca-native-4bit-ggml/blob/main/ggml-alpaca-7b-q4.bin" target="_blank">7 billion 4-bit weights Alpaca model</a>',
-    camelidaeFrontendAvailable: false
+    waitTimeSeconds: 17,
+    camelidaeFrontendAvailable: false,
+    defaultModel: ''
+  },
+
+  prometheus: {
+    listenPort: 9903,
+    collectDefaultMetrics: true, /* includes a collection of nodejs process metrics plus drc_<processName>_uptime */
+    exportFreqSeconds: 10 /* for promRedisExport: how often to export metrics over redis to the prometheus daemon */
   },
 
   _secretKeys: SECRET_KEYS,

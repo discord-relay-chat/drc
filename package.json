@@ -32,6 +32,7 @@
     "node-nlp": "^4.26.1",
     "openai": "^3.1.0",
     "parse-duration": "^1.0.2",
+    "prom-client": "^14.2.0",
     "sentiment": "^5.0.2",
     "shodan-client": "^3.2.0",
     "sqlite3": "^5.1.1",

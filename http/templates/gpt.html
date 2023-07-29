@@ -117,12 +117,6 @@
         <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query duration:</div>
         <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ queryTimeS }} seconds</code></div>
       </div>
-      {{#model}}
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Model:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ model }}</code></div>
-      </div>
-      {{/model}}
       {{#temperature}}
       <div class="row Rtable Rtable--collapse Rtable--2cols">
         <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Temperature:</div>
@@ -149,8 +143,11 @@
       {{/queryTimePerTokenMs}}
     </div>
 
-    <h4>via {{{ viaHTML }}}</h4>
+    <br/>
 
+    via <b><a href="{{{ model.sourceURL }}}" target="_blank">{{ model.displayName }}</a></b>, specifically <code>{{ model.name }}</code>
+
+    <br/>
     <br/>
     <hr />
     
