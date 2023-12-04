@@ -39,7 +39,6 @@ module.exports = async function () {
   }
 
   const debugMessage = (msgStr) => _message(`{cyan-fg}${msgStr}{/}`, 'debug');
-  const systemMessage = (msgStr) => _message(`{yellow-fg}${msgStr}{/}`);
   const errorMessage = (msgStr) => _message(`{red-fg}{bold}${msgStr}{/}`, 'error');
 
   function curFgInsert (fStr, { ts, log } = { ts: true }) {
@@ -379,13 +378,6 @@ module.exports = async function () {
             msgTrack.totalInserted.count++;
             msgTrack.totalInserted.bytes += Buffer.byteLength(insStr, 'utf8');
           });
-        } else {
-          // systemMessage(`(${_channel}) Unhandled message of type "${type}" in channel ${data.target} on ${data.__drcNetwork}: ${JSON.stringify(data)}`);
-        }
-      } else {
-        const ignoreTypes = ['irc:join', 'irc:nick', 'irc:quit', 'irc:mode', 'irc:part'];
-        if (!ignoreTypes.includes(type)) {
-          // systemMessage(`(${_channel}) Unhandled message of type "${type}" on ${data?.__drcNetwork}: ${dataJson}`);
         }
       }
     } catch (e) {
