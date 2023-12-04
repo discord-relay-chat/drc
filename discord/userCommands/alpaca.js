@@ -36,9 +36,24 @@ async function waitForResponse (endpoint, promptId, queuePosition, model, logger
 
 async function promptAndWait (prompt, endpoint, logger, options) {
   const model = options?.model ?? config.defaultModel;
+  const mirostat = options?.mirostat ?? 0;
+  const headers = {};
+  let priority = 'NORMAL';
+
+  if (config.apiKey?.length) {
+    headers.Authorization = `Basic ${Buffer.from(`:${config.apiKey}`, 'utf8').toString('base64')}`;
+    priority = 'HIGH';
+  }
+
   const promptRes = await fetch(`${endpoint}/prompt`, { // eslint-disable-line no-undef
     method: 'POST',
-    body: JSON.stringify({ prompt, model })
+    headers,
+    body: JSON.stringify({
+      prompt,
+      model,
+      priority,
+      mirostat
+    })
   });
 
   if (!promptRes.ok) {

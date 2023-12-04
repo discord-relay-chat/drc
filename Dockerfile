@@ -47,7 +47,24 @@ ENV PATH=/usr/games:$PATH
 USER drc
 CMD ["node", "discord"]
 
-FROM base as prometheus
+FROM node:18-alpine as prometheus
+WORKDIR /app/drc
+COPY package*.json ./
+RUN npm install
+COPY *.js .
+COPY lib ./lib/
+COPY config/default.js ./config/
+COPY config/local-prod.json ./config/
+COPY config/channelXforms-prod.json ./config/
+COPY http ./http/
+COPY scripts ./scripts/
 COPY prometheus.js .
+RUN adduser -u 1001 -D drc
+RUN chown -R drc /app/drc/scripts
+ENV NODE_ENV=prod
+ENV DRC_LOG_PATH=/logs
+ENV DRC_IN_CONTAINER=1
+ENV TZ="America/Los_Angeles"
+STOPSIGNAL SIGINT
 USER drc
 CMD ["node", "prometheus"]

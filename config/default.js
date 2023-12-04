@@ -22,7 +22,8 @@ const SECRET_KEYS = [
   'redis.url',
   'shodan.apiKey',
   'ipinfo.token',
-  'openai.secretKey'
+  'openai.secretKey',
+  'alpaca.apiKey'
 ];
 
 function replace (obj, keys, replacement) {
@@ -203,7 +204,8 @@ const _config = {
 
   openai: {
     secretKey: null,
-    model: 'text-davinci-003',
+    organization: '',
+    model: 'gpt-3.5-turbo',
     chatModel: 'gpt-3.5-turbo',
     temperature: 0.9,
     maxTokens: 3700,
@@ -224,7 +226,8 @@ const _config = {
     hosts: {},
     waitTimeSeconds: 17,
     camelidaeFrontendAvailable: false,
-    defaultModel: ''
+    defaultModel: '',
+    apiKey: ''
   },
 
   prometheus: {

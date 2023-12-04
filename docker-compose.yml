@@ -72,7 +72,7 @@ services:
     restart: "on-failure"
     logging:
       options:
-        max-size: "512m"
+        max-size: "64m"
         max-file: "10"
 
 volumes:

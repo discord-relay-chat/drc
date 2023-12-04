@@ -1,15 +1,14 @@
 'use strict';
 
 const config = require('config').openai;
-const oai = require('openai');
+const OpenAI = require('openai');
+const marked = require('marked');
 const { fqUrlFromPath } = require('../../util');
 const { servePage, isHTTPRunning } = require('../common');
 
 require('../../logger')('discord');
 
-const OAIAPI = new oai.OpenAIApi(new oai.Configuration({
-  apiKey: config.secretKey
-}));
+const OAIAPI = new OpenAI({ apiKey: config.secretKey, organization: config.organization });
 
 async function f (context, ...a) {
   if (!config.secretKey) {
@@ -33,18 +32,18 @@ async function f (context, ...a) {
     context.sendToBotChan('Querying OpenAI...');
 
     if (context.options.listModels) {
-      return (await OAIAPI.listModels())?.data?.data.map(({ id }) => id);
+      return (await OAIAPI.models.list())?.data?.map(({ id }) => id);
     }
 
-    if (context.options.chat) {
-      delete dataObj.prompt;
-      dataObj.messages = [{ role: 'user', content: prompt }];
-      const res = await OAIAPI.createChatCompletion(dataObj);
-      dataObj.prompt = prompt; // createChatCompletion balks at it, but serverPage needs it
-      dataObj.response = res.data?.choices?.[0]?.message?.content ?? res.data;
-    } else {
-      const res = await OAIAPI.createCompletion(dataObj);
-      dataObj.response = res.data?.choices?.[0]?.text ?? res.data?.choices ?? res.data;
+    delete dataObj.prompt;
+    dataObj.messages = [{ role: 'user', content: prompt }];
+    const res = await OAIAPI.chat.completions.create(dataObj);
+    dataObj.prompt = prompt; // createChatCompletion balks at it, but serverPage needs it
+    dataObj.response = res.choices?.[0]?.message?.content ?? res.data;
+
+    if (res.choices?.length > 1) {
+      context.sendToBotChan('Multiple responses!');
+      context.sendToBotChan(res.choices);
     }
 
     const queryTimeS = Number((new Date() - startTime) / 1000).toFixed(1);
@@ -53,11 +52,7 @@ async function f (context, ...a) {
       const serveObj = {
         ...dataObj,
         queryTimeS,
-        response: dataObj.response
-          .replaceAll(/^\s+/g, '')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;')
-          .replaceAll('\n', '\n<br/>'),
+        response: marked.parse(dataObj.response),
         viaHTML: config.viaHTML
       };
       if (!context.options.ttl) {
