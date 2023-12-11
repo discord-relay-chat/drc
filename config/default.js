@@ -175,6 +175,7 @@ const _config = {
     enabled: false,
     port: 4242,
     proto: 'https',
+    host: "localhost",
     fqdn: os.hostname(),
     ttlSecs: 30 * 60,
     staticDir: HTTP_STATIC_DIR,
