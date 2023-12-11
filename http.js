@@ -273,7 +273,7 @@ redisListener.subscribe(PREFIX, (err) => {
     app.close();
   });
 
-  app.listen(config.http.port, (err, addr) => {
+  app.listen({host: config.http.host, port: config.http.port}, (err, addr) => {
     if (err) {
       throw err;
     }
