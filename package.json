@@ -20,6 +20,7 @@
     "discord-api-types": "^0.37.24",
     "discord.js": "^13.3.1",
     "eslint": "^7.32.0",
+    "extract-urls": "^1.4.0",
     "fastify": "^3.29.4",
     "inquirer": "^8.2.0",
     "ioredis": "^5.3.0",

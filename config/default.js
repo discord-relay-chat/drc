@@ -107,6 +107,7 @@ const _config = {
   },
 
   discord: {
+    disableUrlEmbeds: true, // wraps any URLs detected in angle-brackets (<>) before sending to Discord
     userScriptOutputChannelId: '',
     privMsgChannelStalenessTimeMinutes: 720,
     privMsgChannelStalenessRemovalAlert: 0.1, // remaining of privMsgChannelStalenessTimeMinutes
@@ -175,7 +176,7 @@ const _config = {
     enabled: false,
     port: 4242,
     proto: 'https',
-    host: "localhost",
+    host: 'localhost',
     fqdn: os.hostname(),
     ttlSecs: 30 * 60,
     staticDir: HTTP_STATIC_DIR,

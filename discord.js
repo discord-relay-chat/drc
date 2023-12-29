@@ -27,6 +27,7 @@ const {
   scopedRedisClient,
   fmtDuration
 } = require('./util');
+const { wrapUrls } = require('./lib/wrapUrls');
 
 require('./logger')('discord');
 require('./lib/promRedisExport')('discord');
@@ -335,7 +336,7 @@ client.once('ready', async () => {
         }
 
         if (!raw) {
-          s = replaceIrcEscapes(s);
+          s = wrapUrls(replaceIrcEscapes(s));
         }
 
         toSend = formatForAllowedSpeakerResponse(s, raw);
@@ -447,7 +448,7 @@ client.once('ready', async () => {
               const privMsg = '_(Only visible to you)_';
 
               if (!raw) {
-                msgFormatted = `${privMsg} ${msgFormatted}`;
+                msgFormatted = `${privMsg} ${!chan.__drcSend ? wrapUrls(msgFormatted) : msgFormatted}`;
               }
 
               await _realSender(msgFormatted, raw);

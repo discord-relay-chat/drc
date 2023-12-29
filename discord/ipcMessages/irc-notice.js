@@ -14,6 +14,7 @@ const {
   persistPmChan
 } = require('../common');
 const { MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
+const { wrapUrls } = require('../../lib/wrapUrls');
 
 module.exports = async function (parsed, context) {
   const {
@@ -150,7 +151,8 @@ module.exports = async function (parsed, context) {
       }
 
       const msChar = config.user.monospacePrivmsgs ? '`' : '';
-      const msg = msChar + isIgnored + e.message + isIgnored + msChar;
+      const msg = msChar + isIgnored + wrapUrls(e.message) + isIgnored + msChar;
+
       if (msg.length && !e.message.match(/^\s*$/g)) {
         try {
           await client.channels.cache.get(chanId)?.send(msg);

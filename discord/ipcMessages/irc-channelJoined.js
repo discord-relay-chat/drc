@@ -10,6 +10,7 @@ const {
   replaceIrcEscapes,
   scopedRedisClient
 } = require('../../util');
+const { wrapUrls } = require('../../lib/wrapUrls');
 
 const { AvatarGenerators, createAvatarName } = require('../avatarGenerators');
 
@@ -40,7 +41,7 @@ module.exports = async function (parsed, context) {
   }
 
   msgChan.__drcSend = (s) => {
-    msgChan.send(s)
+    msgChan.send(wrapUrls(s))
       .catch((err) => console.error(`send on ${joined.channel} failed! "${err.message}"`, err.stack, parsed, JSON.stringify(err)));
   };
 
@@ -167,7 +168,7 @@ module.exports = async function (parsed, context) {
                 }
               }
 
-              let content = replaceIrcEscapes(e.message).trim();
+              let content = wrapUrls(replaceIrcEscapes(e.message).trim());
 
               if (e.type === 'action') {
                 content = `_${content}_`;

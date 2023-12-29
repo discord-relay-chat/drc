@@ -3,13 +3,16 @@ const config = require('config');
 const { PREFIX } = require('../../util');
 const { formatKVs } = require('../common');
 
+function redactedConfig () {
+  return config._replace(Object.assign({}, config), config._secretKeys, '*<REDACTED>*');
+}
+
 async function userCommandConfig (context, ...a) {
   const key = PREFIX + ':userConfig';
 
   switch (a[0]) {
     case 'get':
-      return '\n\n' + formatKVs(_.get(
-        config._replace(Object.assign({}, config), config._secretKeys, '*<REDACTED>*'), a[1]));
+      return '\n\n' + formatKVs(_.get(redactedConfig(), a[1]));
 
     case 'set':
     {
@@ -31,7 +34,7 @@ async function userCommandConfig (context, ...a) {
         await context.redis.set(key, JSON.stringify(config.user));
       }
 
-      return '\n' + formatKVs(_.get(config, ppathArr.length ? ppathArr.join('.') : a[1]));
+      return '\n' + formatKVs(_.get(redactedConfig(), ppathArr.length ? ppathArr.join('.') : a[1]));
     }
 
     case 'load':
