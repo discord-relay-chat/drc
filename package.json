@@ -16,6 +16,8 @@
     "blessed": "^0.1.81",
     "chrono-node": "^2.4.1",
     "config": "^3.3.6",
+    "cron": "^3.1.6",
+    "cronstrue": "^2.47.0",
     "date-fns": "^2.25.0",
     "discord-api-types": "^0.37.24",
     "discord.js": "^13.3.1",

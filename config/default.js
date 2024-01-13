@@ -103,7 +103,8 @@ const _config = {
       mpmPlotOutputPath: path.join(HTTP_STATIC_DIR, MPM_PLOT_FILE_NAME),
       mpmPlotTimeLimitHours: 24
     },
-    userScriptsEnabledAtStartup: false
+    userScriptsEnabledAtStartup: false,
+    includeDiscordAuthorNameInIRCMessages: false // enable when using DRC as a bridge
   },
 
   discord: {

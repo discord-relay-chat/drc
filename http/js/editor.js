@@ -66,7 +66,7 @@ function clickListener () {
 
         fetch(uri, {
           method: 'PUT',
-          body
+          body: btoa(String.fromCodePoint(...(new TextEncoder().encode(body))))
         })
           .then(() => {
             setStatusText('✔️');
@@ -122,7 +122,7 @@ function drcEditorInit (n, kc, readOnly) {
     }
 
     editor = monaco.editor.create(editorEle, {
-      value: atob(sourceStrBase64),
+      value: new TextDecoder().decode(Uint8Array.from(atob(sourceStrBase64), (m) => m.codePointAt(0))),
       language: 'javascript',
       automaticLayout: true,
       minimap: {

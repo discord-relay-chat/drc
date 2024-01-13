@@ -202,6 +202,10 @@ module.exports = async (context, data) => {
       }));
     }
 
+    if (config.app.includeDiscordAuthorNameInIRCMessages) {
+      data.content = `[${data.author.username}] ${data.content}`;
+    }
+
     await redisClient.publish(PREFIX, JSON.stringify({
       type: 'irc:' + subType,
       data: {

@@ -91,9 +91,7 @@ function f (context) {
 
         if (toSend.subcommands) {
           for (const [name, { header, text }] of Object.entries(toSend.subcommands)) {
-            toSendEmbed
-              .addField('Subcommand', '`' + name + '`')
-              .addField(text && header ? header : 'Usage', text);
+            toSendEmbed.addField('⁍ `' + name + '`' + (text && header ? ` _${header}_` : ''), text);
           }
         }
 

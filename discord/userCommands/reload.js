@@ -3,8 +3,9 @@ const { scopedRedisClient } = require('../../util');
 module.exports = function (context, ...a) {
   context.sendToBotChan('Reloading user commands...');
   try {
+    const oldScriptsContext = require('../userCommands')('scripts').reloading();
     require('../userCommands').__unresolve();
-    require('../userCommands').init()
+    require('../userCommands').init(true, oldScriptsContext)
       .then(() =>
         context.sendToBotChan(`Reloaded ${Object.keys(require('../userCommands').__functions).length} user commands`)
       )

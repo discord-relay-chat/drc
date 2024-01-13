@@ -138,18 +138,18 @@ resolver.__functions = {
   }
 };
 
-resolver.init = async function () {
+resolver.init = async function (isReload = false, oldScriptsContext) {
   return Promise.all(Object.entries(resolver.__functions).map(async ([name, f]) => {
     if (f.__init) {
       try {
-        await f.__init();
+        await f.__init(isReload, oldScriptsContext);
         console.info(`userCommand "${name}" initialized`);
       } catch (e) {
         console.error(`userCommand "${name}" __init failed!`, e);
       } finally {
         // only let it run once with the (usually correct) assumption that
         // it will continue to fail if called repeatedly
-        delete f.__init();
+        delete f.__init(isReload, oldScriptsContext);
       }
     }
   }));

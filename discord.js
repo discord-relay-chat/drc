@@ -992,6 +992,8 @@ client.once('ready', async () => {
     isReconnect,
     setIsReconnect: (s) => (_isReconnect = s)
   };
+
+  userCommands('scripts').bindContextForCronRuns(mainContext);
   mainSubClient.on('message', ipcMessageHandler.bind(null, mainContext));
 
   const userScriptsSubClient = new Redis(config.redis.url);

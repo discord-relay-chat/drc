@@ -238,7 +238,7 @@ redisListener.subscribe(PREFIX, (err) => {
 
     // this REALLY needs to be a proper IPC!!!!!!!
     const RKEY = `${PREFIX}:${req.params.keyComponent}`;
-    await scopedRedisClient((r) => r.hset(RKEY, req.params.snippetName, Buffer.from(req.body, 'utf8').toString('base64')));
+    await scopedRedisClient((r) => r.hset(RKEY, req.params.snippetName, req.body));
     return res.code(204).send();
   });
 
