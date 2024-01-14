@@ -73,6 +73,7 @@ const _config = {
     avatarGenerator: 'robohash',
     allowedSpeakers: [],
     allowedSpeakersRoleId: null,
+    allowedSpeakersHighlight: true,
     // options are
     // 'replace' (replace IRC nick with Discord ASers)
     // 'bracket' (turns into: IRCNick[DiscordASers])

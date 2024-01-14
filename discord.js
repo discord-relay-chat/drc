@@ -115,6 +115,10 @@ function registerButtonHandler (buttonId, handlerFunc) {
 }
 
 const allowedSpeakersMentionString = (s = ['[', ']']) => {
+  if (!config.app.allowedSpeakersHighlight) {
+    return s;
+  }
+
   if (!config.app.allowedSpeakers.length) {
     return '';
   }
