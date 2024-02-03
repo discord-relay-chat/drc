@@ -223,7 +223,7 @@ async function _runScriptsForEvent (scheduledScriptName = null, context, eventNa
       a.push(true); // `fromUserScript`
 
       context.sendToBotChan(...a);
-      context.sendToBotChan(`### source: \`${scriptName}\``, false, true);
+      context.sendToBotChan(`(from \`${scriptName}\`, <t:${Number(+new Date() / 1000).toFixed()}:R>)`, false, true);
     };
 
     if (!InjectedConstants) {

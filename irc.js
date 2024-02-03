@@ -12,7 +12,12 @@ const { PREFIX, CTCPVersion, scopedRedisClient, resolveNameForDiscord } = requir
 const LiveNicks = require('./irc/liveNicks');
 let ipcMessageHandler = require('./irc/ipcMessage');
 let genEvHandler = require('./irc/genEvHandler');
-const { msgRxCounter, msgRxCounterWithType, eventsCounterWithType, msgRxCounterByTarget } = require('./irc/promMetrics');
+const {
+  msgRxCounter,
+  msgRxCounterWithType,
+  eventsCounterWithType,
+  msgRxCounterByTarget
+} = require('./irc/promMetrics');
 const logger = require('./logger');
 logger('irc');
 
@@ -259,10 +264,8 @@ async function main () {
     };
 
     const logDataToFile = (fileName, data, { isNotice = false, pathExtra = [], isMessage = false, isEvent = false } = {}) => {
-      console.debug(`logDataToFile(${fileName}, , { isNotice: ${isNotice}, pathExtra: ${pathExtra.join(', ')}})`);
       const chanFileDir = path.join(...[ircLogPath, host, ...pathExtra]);
       const chanFilePath = path.join(chanFileDir, fileName);
-      console.debug(`logDataToFile: ${chanFilePath}`);
 
       fs.stat(chanFileDir, async (err, _stats) => {
         try {
@@ -276,14 +279,14 @@ async function main () {
 
           if (!isEvent) {
             logDataToSqlite(chanFilePath, lData)
-              .catch((e) => console.error(chanFilePath, 'logDataToSqlite FAILED', e, lData));
-          }// else {
-          // KEEP THIS HERE UNTIL SQLITE IS FULLY TRUSTWORTHY!
-          if (isNotice) console.debug('NOTICE!! Logged', chanFilePath, lData);
-          const fh = await fs.promises.open(chanFilePath, 'a');
-          await fh.write(JSON.stringify(lData) + '\n');
-          fh.close();
-          // }
+              .catch(async (e) => {
+                // Last-ditch effort to persist *somewhere* on disk ("JSON-L" format)
+                console.error(chanFilePath, 'logDataToSqlite FAILED', e, lData);
+                const fh = await fs.promises.open(chanFilePath, 'a');
+                await fh.write(JSON.stringify(lData) + '\n');
+                fh.close();
+              });
+          }
         } catch (e) {
           if (e.code !== 'EEXIST') {
             console.error(`logDataToFile(${fileName}) failed: ${e}`);
@@ -421,7 +424,12 @@ async function main () {
       data.__drcIrcRxTs = Number(new Date());
       data.__drcNetwork = host;
 
-      const isNotice = data.target === spec.nick || data.type === 'notice';
+      if (data.type === 'notice' && data.target && !data.from_server && msgHandlers[host]?.[data.target.toLowerCase()]) {
+        console.warn(`BAD CLIENT! ${data.nick} sent 'notice' to ${data.target}/${host} when they meant 'privmsg'. Switching it for them...`, data);
+        data.type = 'privmsg';
+      }
+
+      const isNotice = data.target === spec.nick || (data.type === 'notice' && data.from_server);
 
       msgRxCounter.inc({ host });
       msgRxCounterWithType.inc({ host, type: data.type });
@@ -443,6 +451,7 @@ async function main () {
       const handler = msgHandlers[host]?.[data.target.toLowerCase()];
 
       if (!handler) {
+        // IIRC this is expected for aliveCheck bots? seriously gotta untangle that bullshit...
         return;
       }
 

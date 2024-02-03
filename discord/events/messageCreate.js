@@ -78,7 +78,7 @@ module.exports = async (context, data) => {
   console.debug('messageCreate data param', data);
 
   if (data.attachments) {
-    let urls = [...data.attachments.entries()].map(([, att]) => att.proxyURL || att.attachment);
+    let urls = [...data.attachments.entries()].map(([, att]) => att.url || att.attachment || att.proxyURL);
 
     if (config.http.enabled) {
       const failures = [];

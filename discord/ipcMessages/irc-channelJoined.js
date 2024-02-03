@@ -81,7 +81,6 @@ module.exports = async function (parsed, context) {
 
             const hiList = await userCommands('hilite')({ redis: ignoreClient }, e.__drcNetwork);
             const anmsNoBrackets = allowedSpeakersMentionString(['', '']);
-
             if (hiList && Array.isArray(hiList) && hiList.some(x => e.message.match(new RegExp(x, 'i')))) {
               if (config.user.markHilites) {
                 for (const x of hiList) {
@@ -89,7 +88,7 @@ module.exports = async function (parsed, context) {
                 }
               }
 
-              e.message += ' ' + anmsNoBrackets;
+              e.message += ' ' + allowedSpeakersMentionString(['(', ')']);
             }
 
             const netNick = config.irc.registered[e.__drcNetwork].user.nick;
