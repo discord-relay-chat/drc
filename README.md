@@ -1,4 +1,4 @@
-![DRC logo](https://discordrc.com/images/drc-logo-1.png "DRC logo")
+<img src="logo.svg" alt="DRC logo" title="DRC logo" width="250" style="margin-bottom: 2.5em;">
 
 # Discord Relay Chat
 
