@@ -1,4 +1,4 @@
-FROM node:18 as base
+FROM node:20 as base
 WORKDIR /app/drc
 RUN apt-get clean all
 RUN apt update
@@ -47,7 +47,7 @@ ENV PATH=/usr/games:$PATH
 USER drc
 CMD ["node", "discord"]
 
-FROM node:18-alpine as prometheus
+FROM node:20-alpine as prometheus
 WORKDIR /app/drc
 COPY package*.json ./
 RUN npm install
