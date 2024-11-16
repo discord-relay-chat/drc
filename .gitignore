@@ -4,3 +4,7 @@ logs
 coverage
 **/*.swp
 .banners.cache
+.certs
+config/*-prod*
+http/static
+http/attachments
