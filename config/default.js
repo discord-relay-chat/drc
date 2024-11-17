@@ -187,7 +187,9 @@ const _config = {
     editor: {
       defaultTheme: 'vs-dark', // valid options are those in the "Theme" drop down in the editor
       defaultFontSizePt: 14
-    }
+    },
+    // the root URL of a running instance of https://github.com/rpj/shrtn which will be used to shorten attachment links
+    shrtnHost: null
   },
 
   ipinfo: {

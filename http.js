@@ -48,6 +48,22 @@ process.on('SIGUSR1', () => {
   templatesLoad(true);
 });
 
+async function createShrtned (fromUrl) {
+  if (!config.http.shrtnHost) {
+    return null;
+  }
+
+  const { redirect } = await (await fetch(config.http.shrtnHost + '/add', {
+    method: 'POST',
+    body: fromUrl,
+    headers: {
+      Accept: 'application/json'
+    }
+  })).json();
+
+  return `${config.http.shrtnHost}/${redirect}`;
+}
+
 function mkdirSyncIgnoreExist (dirPath) {
   try {
     fs.mkdirSync(dirPath);
@@ -271,6 +287,7 @@ redisListener.subscribe(PREFIX, (err) => {
     console.log('Exiting...');
     redisListener.disconnect();
     app.close();
+    process.exit(0);
   });
 
   app.listen({ host: config.http.host, port: config.http.port }, (err, addr) => {
@@ -367,6 +384,8 @@ redisListener.subscribe(PREFIX, (err) => {
                   }
                 });
 
+                data.attachmentURLShort = await createShrtned(attachmentURL);
+
                 if (!fetchRes.ok) {
                   throw new Error(fetchRes.statusText);
                 }
@@ -377,8 +396,13 @@ redisListener.subscribe(PREFIX, (err) => {
                 await finished(Readable.fromWeb(fetchRes.body).pipe(outStream));
                 console.log(`Cached attachment ${newId} from source ${attachmentURL}`);
                 data.cachedURL = config.http.proto + '://' + config.http.fqdn + '/attachments/' + newId;
+
+                if (config.http.shrtnHost) {
+                  data.cachedURLShort = await createShrtned(data.cachedURL);
+                }
               } catch (e) {
                 console.error(`Fetching or persisting ${attachmentURL} failed:`, e.message);
+                console.error(e);
                 data.error = e.message;
               }
             }

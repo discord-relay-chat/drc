@@ -86,10 +86,11 @@ module.exports = async (context, data) => {
         if (cRes.error) {
           console.error(`Caching of ${cRes.attachmentURL} failed:`, cRes.error);
           failures.push(cRes);
-          return cRes.attachmentURL;
+          return cRes.attachmentURLShort ?? cRes.attachmentURL;
         }
 
-        return cRes.cachedURL;
+        const { cachedURLShort, cachedURL } = cRes;
+        return cachedURLShort ? `${cachedURLShort} (${cachedURL})` : cachedURL;
       });
 
       if (failures.length) {
