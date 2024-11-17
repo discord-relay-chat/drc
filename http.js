@@ -53,14 +53,27 @@ async function createShrtned (fromUrl) {
     return null;
   }
 
-  const { redirect } = await (await fetch(config.http.shrtnHost + '/add', {
+  const headers = {
+    Accept: 'application/json'
+  };
+
+  if (config.http.shrtnCreds?.user && config.http.shrtnCreds?.pass) {
+    const { user, pass } = config.http.shrtnCreds;
+    headers.Authorization = `Basic ${Buffer.from(`${user}:${pass}`, 'utf-8').toString('base64')}`;
+  }
+
+  const response = await fetch(config.http.shrtnHost + '/add', {
     method: 'POST',
     body: fromUrl,
-    headers: {
-      Accept: 'application/json'
-    }
-  })).json();
+    headers
+  });
 
+  if (!response.ok) {
+    console.error(`Shrtn request failed: ${response.status} "${response.statusText}"`);
+    return null;
+  }
+
+  const { redirect } = await response.json();
   return `${config.http.shrtnHost}/${redirect}`;
 }
 

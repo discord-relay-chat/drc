@@ -189,7 +189,12 @@ const _config = {
       defaultFontSizePt: 14
     },
     // the root URL of a running instance of https://github.com/rpj/shrtn which will be used to shorten attachment links
-    shrtnHost: null
+    shrtnHost: null,
+    // if the above is non-null and your shrtn is configured with authorization enabled, enter your user credentials here
+    shrtnCreds: {
+      user: null,
+      pass: null
+    }
   },
 
   ipinfo: {
