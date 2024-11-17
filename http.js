@@ -396,10 +396,7 @@ redisListener.subscribe(PREFIX, (err) => {
                 await finished(Readable.fromWeb(fetchRes.body).pipe(outStream));
                 console.log(`Cached attachment ${newId} from source ${attachmentURL}`);
                 data.cachedURL = config.http.proto + '://' + config.http.fqdn + '/attachments/' + newId;
-
-                if (config.http.shrtnHost) {
-                  data.cachedURLShort = await createShrtned(data.cachedURL);
-                }
+                data.cachedURLShort = await createShrtned(data.cachedURL);
               } catch (e) {
                 console.error(`Fetching or persisting ${attachmentURL} failed:`, e.message);
                 console.error(e);

@@ -89,8 +89,7 @@ module.exports = async (context, data) => {
           return cRes.attachmentURLShort ?? cRes.attachmentURL;
         }
 
-        const { cachedURLShort, cachedURL } = cRes;
-        return cachedURLShort ? `${cachedURLShort} (${cachedURL})` : cachedURL;
+        return cRes.cachedURLShort ?? cRes.cachedURL;
       });
 
       if (failures.length) {
