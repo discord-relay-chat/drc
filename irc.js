@@ -286,6 +286,10 @@ async function main () {
                 await fh.write(JSON.stringify(lData) + '\n');
                 fh.close();
               });
+          } else {
+            const fh = await fs.promises.open(chanFilePath, 'a');
+            await fh.write(JSON.stringify(lData) + '\n');
+            fh.close();
           }
         } catch (e) {
           if (e.code !== 'EEXIST') {
@@ -425,7 +429,7 @@ async function main () {
       data.__drcNetwork = host;
 
       if (data.type === 'notice' && data.target && !data.from_server && msgHandlers[host]?.[data.target.toLowerCase()]) {
-        console.warn(`BAD CLIENT! ${data.nick} sent 'notice' to ${data.target}/${host} when they meant 'privmsg'. Switching it for them...`, data);
+        console.debug(`BAD CLIENT! ${data.nick} sent 'notice' to ${data.target}/${host} when they meant 'privmsg'. Switching it for them...`, data);
         data.type = 'privmsg';
       }
 

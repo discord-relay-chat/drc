@@ -173,6 +173,10 @@ module.exports = async function (parsed, context) {
                 content = `_${content}_`;
               }
 
+              if (['@', '+'].includes(e?.group)) {
+                content = `:rightwards_pushing_hand:${e.group}:leftwards_pushing_hand: ${content}`;
+              }
+
               if (content.length === 0) {
                 console.error('empty message!!', content, e.message);
               } else {

@@ -63,7 +63,7 @@ module.exports = async function (host, ev, data, context) {
       data
     })));
 
-  if (config.irc.log.events?.includes(ev)) {
+  if (config.irc.log.events?.includes(ev.toLowerCase())) {
     logDataToFile(evName, data, { pathExtra: ['event'], isEvent: true });
   }
 

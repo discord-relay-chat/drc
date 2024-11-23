@@ -241,7 +241,7 @@ module.exports = async (context, _channel, msg) => {
           }
         }
       } else if (type === 'irc') {
-        if (['ban', 'say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) ||
+        if (['raw', 'ban', 'say', 'join', 'pong', 'tagmsg', 'action', 'whois', 'account'].includes(subType) ||
           (subType === 'responseSay' && !parsed.data)) {
           return;
         }

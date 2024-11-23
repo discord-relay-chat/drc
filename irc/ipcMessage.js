@@ -513,6 +513,16 @@ module.exports = async (context, chan, msg) => {
       } else {
         console.error('Bad SAY', parsed);
       }
+    } else if (parsed.type === 'irc:raw') {
+      const networkSpec = specServers[parsed.data.network.name];
+
+      if (!networkSpec) {
+        return;
+      }
+
+      const botClient = connectedIRC.bots[networkSpec.name];
+      // redis-cli -n 1 publish drc-dev '{"type":"irc:raw","data":{"network":{"name":"irc.libera.chat"},"rawList":["PRIVMSG", "@##programming", ":testing, please disregard"]}}'
+      botClient.raw(parsed.data.rawList);
     } else if (parsed.type === 'discord:channels') {
       await discordChannelsHandler(false);
     } else if (parsed.type === 'discord:startup') {

@@ -125,7 +125,8 @@ const _config = {
     log: {
       channelsToFile: true,
       events: ['kick', 'ban', 'channel info', 'topic', 'invited', 'wallops',
-        'nick', 'nick in use', 'nick invalid', 'whois', 'whowas', 'motd', 'info'],
+        'nick', 'nick in use', 'nick invalid', 'whois', 'whowas', 'motd', 'info',
+        'quit', 'part', 'join'],
       path: process.env?.DRC_LOG_PATH ? path.join(process.env.DRC_LOG_PATH, 'irc') : './logs/irc'
     },
     ctcpVersionOverride: null,
