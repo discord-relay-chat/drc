@@ -3,7 +3,7 @@
 const inq = require('inquirer');
 const config = require('./config');
 const crypto = require('crypto');
-const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
+const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton, DiscordAPIError } = require('discord.js');
 const Redis = require('ioredis');
 const yargs = require('yargs');
 const { fetch } = require('undici');
@@ -28,6 +28,7 @@ const {
   fmtDuration
 } = require('./util');
 const { wrapUrls } = require('./lib/wrapUrls');
+const chunk = require('./lib/chunk');
 
 require('./logger')('discord');
 require('./lib/promRedisExport')('discord');
@@ -446,15 +447,14 @@ client.once('ready', async () => {
           localSender = async (msg, raw = false) => {
             let msgFormatted = formatForAllowedSpeakerResponse(msg, raw);
             const chan = client.channels.cache.get(toChanId);
+            const _realSender = chan.__drcSend || chan.send.bind(chan);
+            const privMsg = '_(Only visible to you)_';
+
+            if (!raw) {
+              msgFormatted = `${privMsg} ${!chan.__drcSend ? wrapUrls(msgFormatted) : msgFormatted}`;
+            }
 
             try {
-              const _realSender = chan.__drcSend || chan.send.bind(chan);
-              const privMsg = '_(Only visible to you)_';
-
-              if (!raw) {
-                msgFormatted = `${privMsg} ${!chan.__drcSend ? wrapUrls(msgFormatted) : msgFormatted}`;
-              }
-
               await _realSender(msgFormatted, raw);
 
               if (raw) {
@@ -462,6 +462,14 @@ client.once('ready', async () => {
               }
             } catch (err) {
               try {
+                if (err instanceof DiscordAPIError) {
+                  if (err.code === 50035 && err.httpStatus === 400) {
+                    for (const chk of chunk(msgFormatted)) {
+                      await _realSender(chk, raw);
+                    }
+                    return;
+                  }
+                }
                 console.warn('send failed, falling back to bot chan', err);
                 zEvents.push('chanSendFallback');
                 return await client?.channels.cache.get(config.irc.quitMsgChanId).send(msgFormatted);
