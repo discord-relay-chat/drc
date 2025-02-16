@@ -1,4 +1,4 @@
-FROM node:20 as base
+FROM node:20 AS base
 WORKDIR /app/drc
 RUN apt-get clean all
 RUN apt update
@@ -22,13 +22,13 @@ ENV DRC_IN_CONTAINER=1
 ENV TZ="America/Los_Angeles"
 STOPSIGNAL SIGINT
 
-FROM base as http
+FROM base AS http
 COPY http.js .
 ENV DRC_HTTP_PATH=/http
 USER drc
 CMD ["node", "http"]
 
-FROM base as irc
+FROM base AS irc
 COPY irc.js .
 COPY irc ./irc/
 COPY discord ./discord/
@@ -37,7 +37,7 @@ RUN chown -R drc /app/drc/.certs/
 USER drc
 CMD ["node", "irc"]
 
-FROM base as discord
+FROM base AS discord
 COPY discord.js .
 COPY discord ./discord/
 COPY irc/numerics.js ./irc/
@@ -47,7 +47,7 @@ ENV PATH=/usr/games:$PATH
 USER drc
 CMD ["node", "discord"]
 
-FROM node:20-alpine as prometheus
+FROM node:20-alpine AS prometheus
 WORKDIR /app/drc
 COPY package*.json ./
 RUN npm install

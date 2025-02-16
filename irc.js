@@ -328,6 +328,10 @@ async function main () {
 
         if (chanSpecs.length > 1) {
           console.error(`Duplicate channel specs found for ${host}/${channel}, full list:`, chanSpecs);
+          pubClient.publish(PREFIX, JSON.stringify({
+            type: 'irc:warning:duplicateChannelSpecs',
+            data: { host, channel, chanSpecs }
+          }));
         }
       }
 

@@ -18,14 +18,29 @@ const logsSearch = async (network, d, embed, aliases = []) => {
   if (!aliases.length && d.nick) {
     aliases.push(d.nick);
   }
-  const logsSearchRes = [
-    d.ident && d.ident.length > 2 ? (await searchLogs(network, Object.assign({ ident: d.ident }, queryOptsTmpl))) : null,
-    ...(lookups.length ? (await Promise.all(lookups.filter(Boolean).map((host) => searchLogs(network, Object.assign({ host }, queryOptsTmpl))))) : []),
-    ...(aliases.length ? (await Promise.all(aliases.map((alias) => searchLogs(network, Object.assign({ nick: alias }, queryOptsTmpl))))) : [])
-  ]
-    .filter(Boolean)
-    .filter((v) => v.totalLines > 0)
-    .map((v) => v.searchResults);
+
+  const logsSearchRes = [];
+
+  if (d.ident && d.ident.length > 2) {
+    const identSearch = await searchLogs(network, Object.assign({ ident: d.ident }, queryOptsTmpl));
+    if (identSearch && identSearch.totalLines > 0) {
+      logsSearchRes.push(identSearch.searchResults);
+    }
+  }
+
+  for (const host of lookups.filter(Boolean)) {
+    const hostSearch = await searchLogs(network, Object.assign({ host }, queryOptsTmpl));
+    if (hostSearch && hostSearch.totalLines > 0) {
+      logsSearchRes.push(hostSearch.searchResults);
+    }
+  }
+
+  for (const alias of aliases) {
+    const aliasSearch = await searchLogs(network, Object.assign({ nick: alias }, queryOptsTmpl));
+    if (aliasSearch && aliasSearch.totalLines > 0) {
+      logsSearchRes.push(aliasSearch.searchResults);
+    }
+  }
 
   const seenChannels = logsSearchRes.reduce((accSet, srObj) => {
     Object.keys(srObj).forEach((chan) => accSet.add(chan));
@@ -81,8 +96,6 @@ module.exports = async function (parsed, context) {
     }
   };
 
-  await runOneTimeHandlers(`${network}_${d._orig?.nick ?? d.nick}`);
-
   // so they don't show up in the output...
   delete d.__drcNetwork;
   delete d._orig;
@@ -123,10 +136,12 @@ module.exports = async function (parsed, context) {
       embed.addField(`IP info for \`${lookupHost}\`:`, formatKVs(ipInf));
     }
 
-    const firstSeens = await userFirstSeen(network, d);
-    if (firstSeens.length) {
-      const [[chan, date]] = firstSeens;
-      embed.addField('First seen on network:', `**${date}** in **${chan}**\n`);
+    if (parsed.data?.requestData?.options.userFirstSeen) {
+      const firstSeens = await userFirstSeen(network, d);
+      if (firstSeens.length) {
+        const [[chan, date]] = firstSeens;
+        embed.addField('First seen on network:', `**${date}** in **${chan}**\n`);
+      }
     }
 
     if (parsed.data?.requestData?.options.full) {
@@ -173,10 +188,14 @@ module.exports = async function (parsed, context) {
         lookupSet = new Set([...lookupSet].filter(x => Boolean(x)));
         console.debug('lookupSet', lookupSet);
 
-        await Promise.all([...lookupSet]
-          .map(async (lookupHost) => Promise.all((await nickTracking.findUniqueIdents(network, lookupHost))
-            .filter((i) => i !== ident)
-            .map(async (uniqIdent) => addIdentToEmbed(uniqIdent, aliasesEmbed, lookupHost)))));
+        for (const lookupHost of lookupSet) {
+          const uniqueIdents = await nickTracking.findUniqueIdents(network, lookupHost);
+          for (const uniqIdent of uniqueIdents) {
+            if (uniqIdent !== ident) {
+              await addIdentToEmbed(uniqIdent, aliasesEmbed, lookupHost);
+            }
+          }
+        }
 
         const logsEmbed = new MessageEmbed()
           .setColor('#2c759c')
@@ -201,7 +220,6 @@ module.exports = async function (parsed, context) {
         return a;
       }, ''));
     }
-
     await scopedRedisClient(async (rc, pfx) => {
       const zScore = await rc.zscore(`${pfx}:kicks:${network}:kickee`, d.nick);
       if (zScore > 2) {
@@ -221,4 +239,6 @@ module.exports = async function (parsed, context) {
   for (const another of moreEmbeds) {
     await localSender(another);
   }
+
+  await runOneTimeHandlers(`${network}_${d._orig?.nick ?? d.nick}`);
 };

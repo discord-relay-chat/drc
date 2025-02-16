@@ -22,6 +22,7 @@ const AvatarGenerators = {
   multiavatar: async (fName) => `https://api.multiavatar.com/${fName}.png`,
   uiavatars: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=random&format=png`,
   uiavatars_red: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=ff0000&format=png`,
+  uiavatars_darkred: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=b30d2f&format=png`,
   random_style: RandomGenerator
 };
 

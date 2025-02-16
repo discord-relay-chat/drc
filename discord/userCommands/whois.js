@@ -43,9 +43,7 @@ async function whois (context, ...a) {
   }
 
   if (reqObj.data.options?.shodan) {
-    console.log('REG SHODAN?', `${network}_${nick}`);
     context.registerOneTimeHandler('irc:responseWhois:full', `${network}_${nick}`, async (data) => {
-      console.log('POP SHODAN!', `${network}_${nick}`, data);
       await scopedRedisClient(async (r) => r.publish(PREFIX, JSON.stringify({
         type: 'discord:shodan:host',
         data: await shodanHostLookup(data.hostname)
@@ -53,7 +51,10 @@ async function whois (context, ...a) {
     });
   }
 
-  console.debug('whois PUB', reqObj);
+  if (reqObj.data.options?.full) {
+    context.sendToBotChan(`Running FULL whois on ${nick} (${network}); this may take awhile...`);
+  }
+
   await context.publish(reqObj);
 }
 
@@ -63,6 +64,7 @@ whois.__drcHelp = () => {
     usage: '<network> <nickname>',
     options: [
       ['--full', 'Run a deep alias check as well. **Warning**: may be very resource-heavy!'],
+      ['--userFirstSeen', 'Include information on when the user was first seen on the network.'],
       ['--nmap', "If the user's hostname is a valid IP address, run `nmap` on it."]
     ]
   };
