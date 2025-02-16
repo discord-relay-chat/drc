@@ -201,7 +201,7 @@ module.exports = {
       }
     }
 
-    if (netStub && (!network && !channelName)) {
+    if (netStub && !network) {
       network = matchNetwork(netStub).network;
 
       if (chanId) {
