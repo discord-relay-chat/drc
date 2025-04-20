@@ -93,7 +93,7 @@ async function announceResult (endpoint, model, promptId, { prompt, response, el
   }
 }
 
-async function f (context, ...a) {
+async function alpaca (context, ...a) {
   const activeEps = await Promise.all(Object.values(MODEL_ENDPOINTS).map(async ({ endpoint }) => ({
     endpoint,
     models: await (await fetch(`${endpoint}/models`)).json()
@@ -160,4 +160,17 @@ async function f (context, ...a) {
   return 'The 🦙 will take awhile to respond...';
 }
 
-module.exports = f;
+alpaca.__drcHelp = () => ({
+  title: 'Generate AI text with Alpaca LLM',
+  usage: 'prompt_text',
+  notes: 'Interfaces with the Alpaca API to generate text based on the provided prompt.',
+  options: [
+    ['--listModels', 'List available models', false],
+    ['--latchOn=id', 'Connect to an existing prompt by ID', true],
+    ['--model=name', 'Specify which model to use', true],
+    ['--mirostat=n', 'Set mirostat value (0-2)', true],
+    ['--ttl=seconds', 'Set time-to-live for the response', true]
+  ]
+});
+
+module.exports = alpaca;

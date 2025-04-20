@@ -53,4 +53,10 @@ async function systemInfo (context, ...a) {
   context.sendToBotChan(embed, true);
 }
 
+systemInfo.__drcHelp = () => ({
+  title: 'Display system information',
+  usage: '',
+  notes: 'Shows detailed information about the system, including uptime, memory usage, Redis stats, and error counts.'
+});
+
 module.exports = systemInfo;

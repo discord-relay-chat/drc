@@ -23,4 +23,13 @@ async function f (context, ...a) {
   });
 }
 
+f.__drcHelp = () => ({
+  title: 'Display kick statistics for an IRC network',
+  usage: 'network',
+  notes: 'Shows statistics about kicks on the specified network, including most kicked users, most active kickers, channels with the most kicks, and common kick reasons.',
+  options: [
+    ['--limit=N', 'Limit the number of results displayed', true]
+  ]
+});
+
 module.exports = f;

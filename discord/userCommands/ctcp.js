@@ -17,4 +17,10 @@ async function f (context, ...a) {
   });
 }
 
+f.__drcHelp = () => ({
+  title: 'Send CTCP messages to IRC users',
+  usage: 'network nick type [params...]',
+  notes: 'Sends Client-To-Client Protocol (CTCP) messages to specified IRC users. Common types include VERSION, TIME, PING, and CLIENTINFO.'
+});
+
 module.exports = f;

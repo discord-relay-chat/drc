@@ -90,4 +90,10 @@ async function f (context, ...a) {
 
 f.identLookup = identLookup;
 f.findUniqueIdents = findUniqueIdents;
+f.__drcHelp = () => ({
+  title: 'Manage and track IRC nicknames',
+  usage: 'network [ident_string]',
+  notes: 'Tracks and displays information about IRC nicknames associated with a specific identity string. Shows nickname changes and history. If no ident_string is provided, lists all tracked identities for the network.'
+});
+
 module.exports = f;

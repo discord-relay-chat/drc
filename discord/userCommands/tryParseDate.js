@@ -3,7 +3,7 @@
 const { tryToParseADateOrDuration } = require('../../util');
 const { formatKVs } = require('../common');
 
-module.exports = async function (context) {
+async function tryParseDate (context) {
   try {
     console.log(context.options, context.options._[0]);
     let tryDate = tryToParseADateOrDuration(context.options._[0]);
@@ -20,3 +20,11 @@ module.exports = async function (context) {
     return `Nope! ${e}`;
   }
 };
+
+tryParseDate.__drcHelp = () => ({
+  title: 'Attempt to parse a date string',
+  usage: 'date_string',
+  notes: 'Tries to parse the provided date string and returns various date formatting methods and their results.'
+});
+
+module.exports = tryParseDate;

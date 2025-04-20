@@ -2,7 +2,7 @@ const config = require('../../config');
 const { resolveNameForIRC } = require('../../util');
 const { isNickInChan, simpleEscapeForDiscord } = require('../common');
 
-module.exports = async (context, ...a) => {
+async function isUserHere (context, ...a) {
   const message = context?.discordMessage;
   if (!message) {
     return 'No required message data FIXME';
@@ -45,3 +45,11 @@ module.exports = async (context, ...a) => {
 
   return 'Missing message data? FIXME';
 };
+
+isUserHere.__drcHelp = () => ({
+  title: 'Check if a user is present in an IRC channel',
+  usage: 'nickname',
+  notes: 'Verifies if a user with the specified nickname is currently in the IRC channel and indicates if they changed their nickname.'
+});
+
+module.exports = isUserHere;

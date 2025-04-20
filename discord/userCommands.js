@@ -74,6 +74,7 @@ resolver.__functions = {
     await context.redis.publish(PREFIX, JSON.stringify({ type: 'discord:requestPs:irc' }));
   },
 
+
   identsIgnored: generateListManagementUCExport('identsIgnored'),
 
   hilite: generateListManagementUCExport('hilite'),
@@ -93,6 +94,7 @@ resolver.__functions = {
   }),
 
   killmenow: () => process.exit(-1),
+
 
   async ping (context) {
     const [netStub] = context.options._;
@@ -154,5 +156,48 @@ resolver.init = async function (isReload = false, oldScriptsContext) {
     }
   }));
 };
+
+// Add __drcHelp to commands that don't have it
+const psHelp = () => ({
+  title: 'Show process status for IRC component',
+  usage: '',
+  notes: 'Displays process information for the IRC component of the system.'
+});
+resolver.__functions.ps.__drcHelp = psHelp;
+
+const killmenowHelp = () => ({
+  title: 'Immediately terminate the bot process',
+  usage: '',
+  notes: 'WARNING: This command will cause the bot to exit immediately with a non-zero exit code.'
+});
+resolver.__functions.killmenow.__drcHelp = killmenowHelp;
+
+const pingHelp = () => ({
+  title: 'Ping an IRC network',
+  usage: 'network',
+  notes: 'Pings the specified IRC network to check connectivity.'
+});
+resolver.__functions.ping.__drcHelp = pingHelp;
+
+const digestHelp = () => ({
+  title: 'Generate a message digest',
+  usage: 'network minutes',
+  notes: 'Creates a digest of messages from the specified network within the given time frame in minutes.'
+});
+resolver.__functions.digest.__drcHelp = digestHelp;
+
+const userFirstSeenHelp = () => ({
+  title: 'Show when a user was first seen',
+  usage: 'nickname',
+  notes: 'Displays the timestamp when a user was first seen on the current network.'
+});
+resolver.__functions.userFirstSeen.__drcHelp = userFirstSeenHelp;
+
+const userLastSeenHelp = () => ({
+  title: 'Show when a user was last seen',
+  usage: 'nickname', 
+  notes: 'Displays the timestamp when a user was last seen on the current network.'
+});
+resolver.__functions.userLastSeen.__drcHelp = userLastSeenHelp;
 
 module.exports = resolver;

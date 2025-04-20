@@ -66,7 +66,7 @@ function f (context) {
       context.sendToBotChan(toSend);
     } else {
       if (typeof toSend === 'object') {
-        if (!toSend.title || !toSend.usage) {
+        if (!toSend.title) {
           throw new Error('bad shape of help object');
         }
 

@@ -22,4 +22,10 @@ async function f (context, ...a) {
   })));
 }
 
+f.__drcHelp = () => ({
+  title: 'Send raw IRC commands to the server',
+  usage: 'network raw_command [additional_commands...]',
+  notes: 'Sends raw IRC protocol commands directly to the specified network. Use with caution as this bypasses normal command processing.'
+});
+
 module.exports = f;

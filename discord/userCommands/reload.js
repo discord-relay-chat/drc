@@ -1,6 +1,6 @@
 const { scopedRedisClient } = require('../../util');
 
-module.exports = function (context, ...a) {
+function reload (context, ...a) {
   context.sendToBotChan('Reloading user commands...');
   try {
     const oldScriptsContext = require('../userCommands')('scripts').reloading();
@@ -25,3 +25,11 @@ module.exports = function (context, ...a) {
     type: 'request'
   })));
 };
+
+reload.__drcHelp = () => ({
+  title: 'Reload user commands and IRC message handlers',
+  usage: '',
+  notes: 'Refreshes all command handlers and IRC message handlers. Useful after making code changes.'
+});
+
+module.exports = reload;

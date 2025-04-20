@@ -93,4 +93,15 @@ async function gameRunner (context, ...a) {
   return Object.entries(active).reduce((a, [k, v]) => ({ [k]: { pid: v.proc.pid, started: v.started }, ...a }), {});
 }
 
+gameRunner.__drcHelp = () => ({
+  title: 'Run text-based games in a dedicated channel',
+  usage: 'new game_name',
+  notes: 'Launches text-based games in dedicated Discord channels. Available games include: ' + WhitelistedGames.join(', '),
+  subcommands: {
+    new: {
+      text: 'Start a new game session in a dedicated channel'
+    }
+  }
+});
+
 module.exports = gameRunner;
