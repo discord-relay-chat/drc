@@ -13,6 +13,7 @@
   "dependencies": {
     "@discordjs/builders": "^1.4.0",
     "@discordjs/rest": "^1.5.0",
+    "@maxmind/geoip2-node": "^4.2.0",
     "blessed": "^0.1.81",
     "chrono-node": "^2.4.1",
     "config": "^3.3.6",

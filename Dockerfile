@@ -41,6 +41,8 @@ FROM base AS discord
 COPY discord.js .
 COPY discord ./discord/
 COPY irc/numerics.js ./irc/
+RUN mkdir data
+RUN chmod 0777 data
 # zork is packaged in a snap, which does not run in containers :(
 RUN apt -y install bc gnuplot colossal-cave-adventure imagemagick-6.q16
 ENV PATH=/usr/games:$PATH
