@@ -9,7 +9,7 @@ async function ipinfo (context) {
   }
 
   return `\nIP info for **${context.argObj._[0]}**:\n` + formatKVs(await ipInfo(context.argObj._[0]));
-};
+}
 
 ipinfo.__drcHelp = () => ({
   title: 'Retrieve information about an IP address',

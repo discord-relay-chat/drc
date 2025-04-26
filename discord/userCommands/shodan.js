@@ -15,7 +15,7 @@ async function shodan (context, ...a) {
     type: 'discord:shodan:' + (a[0] === '-info' ? 'info' : 'host'),
     data
   });
-};
+}
 
 shodan.__drcHelp = () => ({
   title: 'Perform Shodan lookups for hosts',

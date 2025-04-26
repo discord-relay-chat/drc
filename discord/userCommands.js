@@ -74,7 +74,6 @@ resolver.__functions = {
     await context.redis.publish(PREFIX, JSON.stringify({ type: 'discord:requestPs:irc' }));
   },
 
-
   identsIgnored: generateListManagementUCExport('identsIgnored'),
 
   hilite: generateListManagementUCExport('hilite'),
@@ -94,7 +93,6 @@ resolver.__functions = {
   }),
 
   killmenow: () => process.exit(-1),
-
 
   async ping (context) {
     const [netStub] = context.options._;
@@ -195,7 +193,7 @@ resolver.__functions.userFirstSeen.__drcHelp = userFirstSeenHelp;
 
 const userLastSeenHelp = () => ({
   title: 'Show when a user was last seen',
-  usage: 'nickname', 
+  usage: 'nickname',
   notes: 'Displays the timestamp when a user was last seen on the current network.'
 });
 resolver.__functions.userLastSeen.__drcHelp = userLastSeenHelp;

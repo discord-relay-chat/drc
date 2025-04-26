@@ -24,7 +24,7 @@ function reload (context, ...a) {
   scopedRedisClient(async (rc, pfx) => rc.publish(pfx + ':__c2::irc:reload', JSON.stringify({
     type: 'request'
   })));
-};
+}
 
 reload.__drcHelp = () => ({
   title: 'Reload user commands and IRC message handlers',

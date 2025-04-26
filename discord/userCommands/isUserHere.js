@@ -44,7 +44,7 @@ async function isUserHere (context, ...a) {
   }
 
   return 'Missing message data? FIXME';
-};
+}
 
 isUserHere.__drcHelp = () => ({
   title: 'Check if a user is present in an IRC channel',

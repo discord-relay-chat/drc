@@ -3,7 +3,7 @@ async function topic (context, args, ...a) {
   console.log(context);
   console.log(args);
   console.log(...a);
-};
+}
 
 topic.__drcHelp = () => ({
   title: 'Manage IRC channel topics',

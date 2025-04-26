@@ -19,7 +19,7 @@ async function tryParseDate (context) {
   } catch (e) {
     return `Nope! ${e}`;
   }
-};
+}
 
 tryParseDate.__drcHelp = () => ({
   title: 'Attempt to parse a date string',
