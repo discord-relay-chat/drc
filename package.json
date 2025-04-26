@@ -1,6 +1,6 @@
 {
   "name": "drc",
-  "version": "0.7",
+  "version": "0.8",
   "description": "Discord Relay Chat",
   "scripts": {
     "pretest": "semistandard --fix --verbose",
@@ -11,9 +11,11 @@
   "author": "Ed Fletcher, Sector T137 <https://github.com/edfletcher>",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@discordjs/builders": "^1.4.0",
     "@discordjs/rest": "^1.5.0",
     "@maxmind/geoip2-node": "^4.2.0",
+    "@multiavatar/multiavatar": "^1.0.7",
     "blessed": "^0.1.81",
     "chrono-node": "^2.4.1",
     "config": "^3.3.6",

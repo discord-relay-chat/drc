@@ -23,7 +23,8 @@ const SECRET_KEYS = [
   'shodan.apiKey',
   'ipinfo.token',
   'openai.secretKey',
-  'alpaca.apiKey'
+  'alpaca.apiKey',
+  'anthropic.secretKey'
 ];
 
 function replace (obj, keys, replacement) {
@@ -240,6 +241,15 @@ const _config = {
     camelidaeFrontendAvailable: false,
     defaultModel: '',
     apiKey: ''
+  },
+
+  anthropic: {
+    secretKey: null,
+    model: 'claude-3-7-sonnet-20250219',
+    temperature: 0.7,
+    maxTokens: 4000,
+    system: 'You are Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest.',
+    viaHTML: 'the <a href="https://docs.anthropic.com/claude/docs/introduction-to-claude" target="_blank">Anthropic Claude API</a>'
   },
 
   prometheus: {
