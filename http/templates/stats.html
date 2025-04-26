@@ -1,107 +1,233 @@
-<html>
-  <title>Stats</title>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style type="text/css">
-      body {
-        color: white;
-        background-color: #2c2c2c;
-        font-family: 'Helvetica Light', Helvetica, sans-serif;
-      }
-      table {
-        width: 320px;
-        font-family: monospace;
-      }
-      td {
-        padding: 1em;
-      }
-      .msg {
-        color: white;
-      }
-      .nick {
-        color: #55c8ff;
-      }
-      .theadrow {
-        font-family: monospace;
-        background-color: rgb(19, 19, 73);
-      }
-      th {
-        padding: 0.4em;
-      }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stats - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/templates/common.css">
+  <style type="text/css">
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+    
+    .stat-card {
+      background-color: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 40px;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 225, 0.03), transparent);
+      transform: skewX(-15deg) translateX(100%);
+      animation: shimmer 5s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { transform: skewX(-15deg) translateX(-150%); }
+      50% { transform: skewX(-15deg) translateX(150%); }
+      100% { transform: skewX(-15deg) translateX(150%); }
+    }
+    
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--accent-blue);
+    }
+    
+    .stat-value {
+      font-family: var(--font-heading);
+      font-size: 1.5rem;
+      color: var(--accent-cyan);
+      margin: 0.5rem 0;
+    }
+    
+    .load-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+    
+    .load-box {
+      background-color: var(--bg-tertiary);
+      padding: 0.75rem;
+      text-align: center;
+      border-radius: var(--border-radius);
+    }
+    
+    .load-box span {
+      font-family: var(--font-mono);
+      font-size: 1.2rem;
+      color: var(--accent-yellow);
+    }
+    
+    .banner {
+      font-family: var(--font-mono);
+      background-color: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: var(--border-radius);
+      margin: 1rem 0;
+      overflow-x: auto;
+      position: relative;
+    }
+    
+    .banner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--gradient-glow);
+    }
+    
+    .memory-meter {
+      height: 8px;
+      width: 100%;
+      background-color: var(--bg-tertiary);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      margin: 0.5rem 0 1rem 0;
+    }
+    
+    .memory-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--success), var(--accent-cyan));
+      width: calc({{ lastCalcs.memoryAvailablePercent }}%);
+      transition: width 0.5s ease;
+    }
+    
+    .channels-display {
+      background-color: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: var(--border-radius);
+      font-family: var(--font-mono);
+      white-space: pre-wrap;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+      position: relative;
+    }
+    
+    .footer::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 1px;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--accent-blue) 50%, 
+        transparent 100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="banner animated-border">
+      <pre>{{{ lastCalcs.banner }}}</pre>
+    </div>
+    
+    <div class="stats-grid">
+      <!-- Uptimes -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3>Uptimes</h3>
+        </div>
+        
+        <div>
+          <p>Discord bot</p>
+          <div class="stat-value">{{ lastCalcs.uptimeFormatted }}</div>
+        </div>
+        
+        <div>
+          <p>IRC bridge</p>
+          <div class="stat-value">{{ irc.uptime }}</div>
+        </div>
+        
+        <div>
+          <p>System</p>
+          <div class="stat-value">{{ lastCalcs.systemUptime }}</div>
+        </div>
+      </div>
       
-      a {
-        color: #32a882;
-      }
-
-      a:hover {
-        color: #55c8ff;
-      }
-    </style>
-  </head>
-  <body>
-    <pre>{{{ lastCalcs.banner }}}</pre>
-
-    <h3>Uptimes</h3>
-
-    <table>
-      <tr class="theadrow">
-        <th>Service</th>
-        <th>Uptime</th>
-      </tr>
-      <tr>
-        <td>Discord bot</td>
-        <td>{{ lastCalcs.uptimeFormatted }}</td>
-      </tr>
-      <tr>
-        <td>IRC bridge</td>
-        <td>{{ irc.uptime }}</td>
-      </tr>
-      <tr>
-        <td>System</td>
-        <td>{{ lastCalcs.systemUptime }}</td>
-      </tr>
-    </table>
+      <!-- Memory -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3>Memory</h3>
+        </div>
+        
+        <p>Memory available</p>
+        <div class="memory-meter">
+          <div class="memory-bar"></div>
+        </div>
+        <div class="stat-value">{{ lastCalcs.memoryAvailablePercent }}%</div>
+      </div>
+      
+      <!-- Load Averages -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3>Load Averages</h3>
+        </div>
+        
+        <div class="load-grid">
+          <div class="load-box">
+            <p>1 min</p>
+            <span>{{ sinceLast.loadavg.0 }}</span>
+          </div>
+          <div class="load-box">
+            <p>5 min</p>
+            <span>{{ sinceLast.loadavg.1 }}</span>
+          </div>
+          <div class="load-box">
+            <p>15 min</p>
+            <span>{{ sinceLast.loadavg.2 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
     
-    <h3>Metrics</h3>
-
-    <table>
-      <tr>
-        <td>Memory available</td>
-        <td>{{ lastCalcs.memoryAvailablePercent }}%</td>
-      </tr>
-      <tr>
-        <td colspan="2">Load averages:</td>
-      </tr>
-      <tr>
-        <td colspan="2">
-          <table>
-            <tr class="theadrow">
-              <th>1m</th>
-              <th>5m</th>
-              <th>15m</th>
-            </tr>
-            <tr>
-              {{ #sinceLast.loadavg }}
-              <td>{{ . }}</td>
-              {{ /sinceLast.loadavg }}
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    <h3>IRC</h3>
+    <!-- IRC Channels -->
+    <div class="stat-card">
+      <div class="stat-header">
+        <h3>IRC Channels</h3>
+      </div>
+      
+      <div class="channels-display">
+        <pre>{{{ lastCalcs.channelsCountsStr }}}</pre>
+      </div>
+    </div>
     
-    <pre>{{{ lastCalcs.channelsCountsStr }}}</pre>
-    
-    <br/><br/><br/>
-
-    This document was generated at {{ captureTimestamp }} 
-    by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
-    {{#documentExpiresAt}}
-    &amp;
-    will self-destruct at <b>{{ documentExpiresAt }}</b>
-    {{/documentExpiresAt}}
-    ({{ timezone }}).
-  </body>
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} 
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct at <strong>{{ documentExpiresAt }}</strong>
+      {{/documentExpiresAt}}
+      ({{ timezone }}).</p>
+    </div>
+  </div>
+</body>
 </html>

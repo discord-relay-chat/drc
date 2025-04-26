@@ -1,162 +1,225 @@
-<html>
-  <title>LLM prompt response</title>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style type="text/css">
-      @import url("https://fonts.googleapis.com/css?family=Lora:400,500,700");
-
-      body {
-        color: white;
-        background-color: #2c2c2c;
-        font-family: 'Helvetica Light', Helvetica, sans-serif;
-      }
-      .mono {
-        font-family: monospace;
-      }
-      .msg {
-        color: white;
-      }
-      .nick {
-        color: #55c8ff;
-      }
-      .target {
-        color: #32a882;
-      }
-
-      a {
-        color: #32a882;
-      }
-
-      a:hover {
-        color: #55c8ff;
-      }
-
-      blockquote {
-        border-radius: 0.2em;
-        padding: 1em;
-        font-family: Lora;
-        background: rgb(72, 83, 93);
-      }
-
-      #response {
-        background-color: rgb(92, 106, 119);
-      }
-
-      #info {
-        width: 20vw;
-        min-width: 400px;
-      }
-
-      /* https://codepen.io/davidelrizzo/pen/eJwqzp */
-      .Rtable {
-        display: flex;
-        flex-wrap: wrap;
-        padding: 0;
-        font-size: 0.8em;
-      }
-
-      .Rtable-cell {
-        box-sizing: border-box;
-        flex-grow: 1;
-        width: 100%;
-        padding: 0.8em 1.2em;
-        overflow: hidden;
-        list-style: none;
-        background: fade(slategrey,20%);
-      }
-
-      .Rtable--2cols > .Rtable-cell  { width: 50%; }
-      .Rtable--3cols > .Rtable-cell  { width: 33.33%; }
-      .Rtable--4cols > .Rtable-cell  { width: 25%; }
-      .Rtable--5cols > .Rtable-cell  { width: 20%; }
-      .Rtable--6cols > .Rtable-cell  { width: 16.6%; }
-      
-      .Rtable--1cols-cell  { width: 63.4%; }
-      .Rtable--2cols-cell  { width: 50%; }
-      .Rtable--3cols-cell  { width: 33.33%; }
-      .Rtable--4cols-cell  { width: 25%; }
-      .Rtable--5cols-cell  { width: 20%; }
-      .Rtable--6cols-cell  { width: 16.6%; }
-      .Rtable--7cols-cell  { width: 10%; }
-
-      /*https://css-tricks.com/accessible-simple-responsive-tables/#article-header-id-2 */
-
-      @media all and (max-width: 600px) {
-        .Rtable--collapse  {
-          display: block;
-        }
-        .Rtable-cell { width: 100% !important; }
-        .Rtable-cell--foot { margin-bottom: 1em; }
-      }
-
-      .Rtable-cell--head { 
-        background-color: rgb(64 67 69);
-        border-color: darken(grey,10%);
-      }
-
-      h3 {
-        border-bottom: 1px dotted white;
-        margin: 1em;
-      }
-    </style>
-  </head>
-  <body>
-    <h3>Prompt</h3>
-    <blockquote id="prompt">
-      "{{ prompt }}"
-    </blockquote>
-
-    <h3>Response</h3>
-    <blockquote id="response">
-      {{{ response }}}
-    </blockquote>
-
-    <h3>Parameters</h3>
-    <div id="info">
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query duration:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ queryTimeS }} seconds</code></div>
-      </div>
-      {{#temperature}}
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Temperature:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ temperature }}</code></div>
-      </div>
-      {{/temperature}}
-      {{#max_tokens}}
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Max Tokens:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ max_tokens }}</code></div>
-      </div>
-      {{/max_tokens}}
-      {{#numTokens}}
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Tokens consumed:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ numTokens }}</code></div>
-      </div>
-      {{/numTokens}}
-      {{#queryTimePerTokenMs}}
-      <div class="row Rtable Rtable--collapse Rtable--2cols">
-        <div class="Rtable-cell Rtable--2cols-cell" style="text-align: right;">Query duration per token:</div>
-        <div class="Rtable-cell Rtable--2cols-cell nick"><code>{{ queryTimePerTokenMs }} milliseconds</code></div>
-      </div>
-      {{/queryTimePerTokenMs}}
-    </div>
-
-    <br/>
-
-    via <b><a href="{{{ model.sourceURL }}}" target="_blank">{{ model.displayName }}</a></b>, specifically <code>{{ model.name }}</code>
-
-    <br/>
-    <br/>
-    <hr />
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GPT Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/templates/common.css">
+  <style type="text/css">
+    .response-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
     
-    This document was generated at {{ captureTimestamp }} 
-    by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
-    {{#documentExpiresAt}}
-    &amp;
-    will self-destruct at <b>{{ documentExpiresAt }}</b>
-    {{/documentExpiresAt}}
-    ({{ timezone }}).
-  </body>
+    @media (min-width: 992px) {
+      .response-container {
+        grid-template-columns: 2fr 1fr;
+      }
+    }
+    
+    .prompt-card, .response-card, .meta-card {
+      background-color: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .prompt-card::before, .response-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+    }
+    
+    .prompt-card::before {
+      background: var(--gradient-warm);
+    }
+    
+    .response-card::before {
+      background: var(--gradient-hot);
+    }
+    
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--accent-blue);
+    }
+    
+    .section-header h3 {
+      margin: 0;
+      border-bottom: none;
+    }
+    
+    .section-header::after {
+      display: none;
+    }
+    
+    .prompt-content {
+      font-family: var(--font-body);
+      background-color: var(--bg-tertiary);
+      padding: 1.5rem;
+      border-radius: var(--border-radius);
+      position: relative;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+    
+    .response-content {
+      font-family: var(--font-body);
+      line-height: 1.7;
+      background-color: rgba(255, 0, 85, 0.03);
+      padding: 1.5rem;
+      border-radius: var(--border-radius);
+      position: relative;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+    
+    .response-content code {
+      color: var(--accent-yellow);
+    }
+    
+    .param-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    
+    .param-name {
+      text-align: right;
+      color: var(--text-secondary);
+      font-family: var(--font-heading);
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+    }
+    
+    .param-value {
+      font-family: var(--font-mono);
+      color: var(--accent-pink);
+      background-color: var(--bg-tertiary);
+      padding: 0.3rem 0.6rem;
+      border-radius: var(--border-radius);
+    }
+    
+    .footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+      position: relative;
+    }
+    
+    .footer::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 1px;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--accent-blue) 50%, 
+        transparent 100%);
+    }
+    
+    .meta-info {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+    
+    .tech-info {
+      display: flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      margin-top: 1rem;
+      gap: 0.5rem;
+    }
+    
+    .tech-info code {
+      background-color: var(--bg-tertiary);
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--border-radius);
+      color: var(--accent-purple);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="response-container">
+      <div class="main-content">
+        <!-- Prompt Card -->
+        <div class="prompt-card">
+          <div class="section-header">
+            <h3>Prompt</h3>
+          </div>
+          <div class="prompt-content">{{ prompt }}</div>
+        </div>
+        
+        <!-- Response Card -->
+        <div class="response-card">
+          <div class="section-header">
+            <h3>Response</h3>
+          </div>
+          <div class="response-content">{{{ response }}}</div>
+        </div>
+      </div>
+      
+      <!-- Parameters Card -->
+      <div class="meta-card">
+        <div class="section-header">
+          <h3>Parameters</h3>
+        </div>
+        
+        <div class="param-grid">
+          <div class="param-name">Query Duration:</div>
+          <div class="param-value">{{ queryTimeS }} seconds</div>
+          
+          {{#temperature}}
+          <div class="param-name">Temperature:</div>
+          <div class="param-value">{{ temperature }}</div>
+          {{/temperature}}
+          
+          {{#max_tokens}}
+          <div class="param-name">Max Tokens:</div>
+          <div class="param-value">{{ max_tokens }}</div>
+          {{/max_tokens}}
+          
+          {{#numTokens}}
+          <div class="param-name">Tokens consumed:</div>
+          <div class="param-value">{{ numTokens }}</div>
+          {{/numTokens}}
+          
+          {{#queryTimePerTokenMs}}
+          <div class="param-name">Duration per token:</div>
+          <div class="param-value">{{ queryTimePerTokenMs }} ms</div>
+          {{/queryTimePerTokenMs}}
+        </div>
+        
+        <div class="tech-info">
+          <code>{{ model.name }}</code> via {{{ viaHTML }}}
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} 
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct at <strong>{{ documentExpiresAt }}</strong>
+      {{/documentExpiresAt}}
+      ({{ timezone }}).</p>
+    </div>
+  </div>
+</body>
 </html>

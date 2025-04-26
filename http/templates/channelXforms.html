@@ -1,113 +1,174 @@
-<html>
-  <title>Channel Transforms for {{ network }}</title>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flexboxgrid/6.3.1/flexboxgrid.min.css" type="text/css" >
-    <style type="text/css">
-      body {
-        color: white;
-        background-color: #2c2c2c;
-        padding: 1em;
-        font-family: 'Helvetica Light', Helvetica, sans-serif;
-      }
-      table {
-        width: 320px;
-        font-family: monospace;
-      }
-      td {
-        padding: 1em;
-      }
-      .msg {
-        color: white;
-      }
-      .nick {
-        color: #55c8ff;
-      }
-      .theadrow {
-        font-family: monospace;
-        background-color: rgb(19, 19, 73);
-      }
-      th {
-        padding: 0.4em;
-      }
-      #headerrow {
-        color: white;
-      }
-
-      a {
-        color: #32a882;
-      }
-
-      a:hover {
-        color: #55c8ff;
-      }
-
-      /* https://codepen.io/davidelrizzo/pen/eJwqzp */
-      .Rtable {
-        display: flex;
-        flex-wrap: wrap;
-        margin: 0 0 3em 0;
-        padding: 0;
-      }
-
-      .Rtable-cell {
-        box-sizing: border-box;
-        flex-grow: 1;
-        width: 100%;
-        padding: 0.8em 1.2em;
-        overflow: hidden;
-        list-style: none;
-        background: fade(slategrey,20%);
-      }
-
-      .Rtable--2cols > .Rtable-cell  { width: 50%; }
-      .Rtable--3cols > .Rtable-cell  { width: 33.33%; }
-      .Rtable--4cols > .Rtable-cell  { width: 25%; }
-      .Rtable--5cols > .Rtable-cell  { width: 20%; }
-      .Rtable--6cols > .Rtable-cell  { width: 16.6%; }
-
-      /*https://css-tricks.com/accessible-simple-responsive-tables/#article-header-id-2 */
-
-      @media all and (max-width: 600px) {
-        .Rtable--collapse  {
-          display: block;
-        }
-        .Rtable-cell { width: 100% !important; }
-        .Rtable-cell--foot { margin-bottom: 1em; }
-      }
-
-      .Rtable-cell--head { 
-        background-color: slategrey;
-        border-color: darken(grey,10%);
-       }
-    </style>
-  </head>
-  <body>
-    <h3>Channel transforms for <kbd>{{ network }}</kbd></h3>
-
-    <div class="container">
-      <div class="row Rtable Rtable--3cols Rtable--collapse" id="headerrow">
-        <div class="Rtable-cell Rtable-cell--head" style="text-align: right; text-decoration: underline;">Discord</div>
-        <div class="Rtable-cell Rtable-cell--head" style="text-align: center;">➵</div>
-        <div class="Rtable-cell Rtable-cell--head" style="text-decoration: underline;">IRC</div>
-      </div>
-    {{ #transforms }}
-      <div class="row Rtable Rtable--3cols Rtable--collapse">
-        <div class="Rtable-cell" style="text-align: right; vertical-align: middle;">{{ discord }}</div>
-        <div class="Rtable-cell" style="text-align: center;">➵</div>
-        <div class="Rtable-cell">
-          <input id="{{ id }}_input" class="small" type="text" value="#{{ irc }}" />
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Channel Transformations - {{ network }} - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/templates/common.css">
+  <style type="text/css">
+    .xform-container {
+      margin: 2rem 0;
+    }
+    
+    .xform-card {
+      background-color: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow-standard);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .xform-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--gradient-glow);
+    }
+    
+    .xform-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--bg-tertiary);
+    }
+    
+    .xform-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 1rem;
+      align-items: center;
+    }
+    
+    .discord-side {
+      text-align: right;
+      padding: 1rem;
+      background-color: var(--bg-tertiary);
+      border-radius: var(--border-radius);
+      font-family: var(--font-heading);
+      letter-spacing: 0.5px;
+    }
+    
+    .arrow {
+      font-size: 1.5rem;
+      color: var(--accent-cyan);
+      text-align: center;
+    }
+    
+    .irc-side {
+      padding: 1rem;
+      background-color: var(--bg-tertiary);
+      border-radius: var(--border-radius);
+    }
+    
+    .input-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    
+    .channel-input {
+      flex-grow: 1;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--accent-blue);
+      border-radius: var(--border-radius);
+      padding: 0.5rem;
+      font-family: var(--font-mono);
+      min-width: 0;
+    }
+    
+    .channel-input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 255, 225, 0.2);
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+    
+    .xform-button {
+      padding: 0.4rem 0.75rem;
+      background-color: var(--bg-secondary);
+      color: var(--accent-cyan);
+      border: 1px solid var(--accent-blue);
+      border-radius: var(--border-radius);
+      font-family: var(--font-heading);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .xform-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .xform-button:not(:disabled):hover {
+      background-color: var(--accent-blue);
+      color: var(--text-primary);
+      box-shadow: 0 0 10px rgba(0, 255, 225, 0.2);
+    }
+    
+    .footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+      position: relative;
+    }
+    
+    .footer::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 1px;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--accent-blue) 50%, 
+        transparent 100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3>Channel transforms for <code class="target">{{ network }}</code></h3>
+    
+    <div class="xform-container">
+      {{ #transforms }}
+      <div class="xform-card">
+        <div class="xform-grid">
+          <div class="discord-side">
+            {{ discord }}
+          </div>
           
-          <div class="container">
-            <span class="col-sm-1">
-              <button id="{{ id }}_button" class="tertiary" class="small" disabled>OK</button>
-            </span>
-            <span class="col-sm-1">
-              <button id="{{ id }}_reset" class="tertiary" class="small" disabled>Reset</button>
-            </span>
+          <div class="arrow">➵</div>
+          
+          <div class="irc-side">
+            <div class="input-container">
+              <input id="{{ id }}_input" class="channel-input" type="text" value="#{{ irc }}" />
+              
+              <div class="button-group">
+                <button id="{{ id }}_button" class="xform-button" disabled>OK</button>
+                <button id="{{ id }}_reset" class="xform-button" disabled>Reset</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      
       <script>
         (() => {
           const eles = ['input', 'button', 'reset'].reduce((a, id) => ({ [id]: document.getElementById(`{{ id }}_${id}`), ...a }), {});
@@ -128,17 +189,17 @@
           eles.reset.addEventListener('click', reset);
         })();
       </script>
-    {{ /transforms}}
+      {{ /transforms}}
     </div>
     
-    <hr />
-    
-    This document was generated at {{ captureTimestamp }} 
-    by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
-    {{#documentExpiresAt}}
-    &amp;
-    will self-destruct at <b>{{ documentExpiresAt }}</b>
-    {{/documentExpiresAt}}
-    ({{ timezone }}).
-  </body>
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} 
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct at <strong>{{ documentExpiresAt }}</strong>
+      {{/documentExpiresAt}}
+      ({{ timezone }}).</p>
+    </div>
+  </div>
+</body>
 </html>
