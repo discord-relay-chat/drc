@@ -182,7 +182,7 @@ const _config = {
     proto: 'https',
     host: 'localhost',
     fqdn: os.hostname(),
-    ttlSecs: 30 * 60,
+    ttlSecs: 120 * 60,
     staticDir: HTTP_STATIC_DIR,
     attachmentsDir: HTTP_ATTACHMENTS_DIR,
     rootRedirectUrl: 'https://discordrc.com',
@@ -218,8 +218,8 @@ const _config = {
   openai: {
     secretKey: null,
     organization: '',
-    model: 'gpt-3.5-turbo',
-    chatModel: 'gpt-3.5-turbo',
+    model: 'gpt-4',
+    chatModel: 'gpt-4',
     temperature: 0.9,
     maxTokens: 3700,
     viaHTML: 'the <a href="https://beta.openai.com/docs/guides/completion" target="_blank">OpenAI text completion API</a>'
@@ -250,6 +250,10 @@ const _config = {
     maxTokens: 4000,
     system: 'You are Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest.',
     viaHTML: 'the <a href="https://docs.anthropic.com/claude/docs/introduction-to-claude" target="_blank">Anthropic Claude API</a>'
+  },
+
+  genai: {
+    emojiReactionSystemPrompt: 'You are a helpful, harmless, and honest assistant to a user of an IRC network. They want to help another user with a question but do not know the answer or need clairifying information, so are asking you. Provide as much detail & references as possible to enable them to help the user. Here is the question: '
   },
 
   prometheus: {

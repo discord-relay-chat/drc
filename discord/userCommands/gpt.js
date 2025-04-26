@@ -18,9 +18,9 @@ async function f (context, ...a) {
   let error = 'Unknown error';
   try {
     const prompt = context.argObj._.join(' ');
-    const model = context.options.model ?? (context.options.chat ? config.chatModel : config.model);
-    const temperature = context.options.temperature ?? config.temperature;
-    const max_tokens = context.options.maxTokens ?? config.maxTokens; // eslint-disable-line camelcase
+    const model = context.options?.model ?? (context.options?.chat ? config.chatModel : config.model);
+    const temperature = context.options?.temperature ?? config.temperature;
+    const max_tokens = context.options?.maxTokens ?? config.maxTokens; // eslint-disable-line camelcase
     const dataObj = {
       model,
       prompt,
@@ -31,11 +31,12 @@ async function f (context, ...a) {
     const startTime = new Date();
     context.sendToBotChan('Querying OpenAI...');
 
-    if (context.options.listModels) {
+    if (context.options?.listModels) {
       return (await OAIAPI.models.list())?.data?.map(({ id }) => id);
     }
 
     delete dataObj.prompt;
+    console.log(`Prompt: ${prompt}`);
     dataObj.messages = [{ role: 'user', content: prompt }];
     const res = await OAIAPI.chat.completions.create(dataObj);
     dataObj.prompt = prompt; // createChatCompletion balks at it, but serverPage needs it
@@ -58,9 +59,7 @@ async function f (context, ...a) {
           name: model
         }
       };
-      if (!context.options.ttl) {
-        context.options.ttl = -1;
-      }
+
       const page = await servePage(context, serveObj, 'gpt');
       context.sendToBotChan(`This response is also available at ${fqUrlFromPath(page)}`);
     }

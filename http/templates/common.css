@@ -56,7 +56,6 @@ body {
     radial-gradient(circle at 90% 80%, rgba(255, 0, 85, 0.03) 0%, transparent 40%);
   color: var(--text-primary);
   font-family: var(--font-body);
-  line-height: 1.6;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -87,7 +86,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   color: var(--text-primary);
   letter-spacing: 0.5px;
-  margin-top: 1.5em;
+  margin-top: 0.5em;
   margin-bottom: 0.75em;
   position: relative;
 }
@@ -97,7 +96,7 @@ h3 {
   font-weight: 500;
   border-bottom: 1px solid var(--accent-blue);
   padding-bottom: 0.5em;
-  margin-bottom: 1em;
+  margin-bottom: 0.5em;
   display: inline-block;
 }
 

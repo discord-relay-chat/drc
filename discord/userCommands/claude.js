@@ -10,7 +10,7 @@ require('../../logger')('discord');
 
 const anthropicClient = new Anthropic({ apiKey: config.secretKey });
 
-async function f (context, ...a) {
+async function f (context) {
   if (!config.secretKey) {
     return 'You must specify your secret key in `config.anthropic.secretKey`!';
   }
@@ -18,9 +18,9 @@ async function f (context, ...a) {
   let error = 'Unknown error';
   try {
     const prompt = context.argObj._.join(' ');
-    const model = context.options.model ?? config.model;
-    const temperature = context.options.temperature ?? config.temperature;
-    const max_tokens = context.options.maxTokens ?? config.maxTokens; // eslint-disable-line camelcase
+    const model = context.options?.model ?? config.model;
+    const temperature = context.options?.temperature ?? config.temperature;
+    const max_tokens = context.options?.maxTokens ?? config.maxTokens; // eslint-disable-line camelcase
     const dataObj = {
       model,
       prompt,
@@ -31,18 +31,21 @@ async function f (context, ...a) {
     const startTime = new Date();
     context.sendToBotChan('Querying Anthropic...');
 
-    if (context.options.listModels) {
+    if (context.options?.listModels) {
       const models = await anthropicClient.models.list();
       return models?.data?.map(({ id }) => id);
     }
 
     delete dataObj.prompt;
+    const system = context.options?.system ?? config.system;
+    console.log(`Prompt: ${prompt}`);
+    console.log(`System: ${system}`);
     const res = await anthropicClient.messages.create({
       model,
       max_tokens,
       temperature,
       messages: [{ role: 'user', content: prompt }],
-      system: context.options.system ?? config.system
+      system
     });
 
     dataObj.prompt = prompt;
@@ -57,9 +60,7 @@ async function f (context, ...a) {
         response: marked.parse(dataObj.response),
         viaHTML: config.viaHTML
       };
-      if (!context.options.ttl) {
-        context.options.ttl = -1;
-      }
+
       const page = await servePage(context, serveObj, 'claude');
       context.sendToBotChan(`This response is also available at ${fqUrlFromPath(page)}`);
     }
