@@ -4,8 +4,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build/Test/Lint Commands
 - Run lint: `npm run lint` (semistandard with --fix and --verbose flags)
-- Run tests: `npm test` (Jest with --forceExit --detectOpenHandles --debug --runInBand)
-- Run single test: `npx jest path/to/test.test.js`
 
 ## Code Style Guidelines
 - **Style**: Uses 'semistandard' (Standard JS with semicolons)

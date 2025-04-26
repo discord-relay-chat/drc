@@ -3,9 +3,21 @@
 const {
   scopedRedisClient
 } = require('../util');
+const config = require('config');
+const { getApiKey } = require('../lib/multiavatar');
 
 async function DiceBearGenerator (style, fName) {
   return `https://api.dicebear.com/5.x/${style}/png?seed=${fName}`;
+}
+
+async function getMultiavatarApiKey () {
+  return getApiKey();
+}
+
+async function MultiAvatarGenerator (fName) {
+  const apiKey = await getMultiavatarApiKey();
+  const baseUrl = `${config.http.proto}://${config.http.fqdn}`;
+  return `${baseUrl}/multiavatar/${encodeURIComponent(fName)}?apiKey=${apiKey}`;
 }
 
 const AvatarGenerators = {
@@ -22,9 +34,9 @@ const AvatarGenerators = {
   uiavatars: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=random&format=png`,
   uiavatars_red: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=ff0000&format=png`,
   uiavatars_darkred: async (fName) => `https://ui-avatars.com/api/${fName}.png?name=${fName}&background=b30d2f&format=png`,
+  multiavatar: MultiAvatarGenerator,
   random_style: RandomGenerator
 };
-AvatarGenerators.multiavatar = AvatarGenerators.dicebear_shapes;
 
 const rKey = (p) => [p, 'randomAvatarStyles'].join(':');
 

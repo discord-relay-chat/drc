@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { PREFIX, scopedRedisClient } = require('./util');
 const config = require('config');
 const Redis = require('ioredis');
@@ -14,6 +15,8 @@ const { renderTemplate, templatesLoad, getTemplates } = require('./http/common')
 const mimeTypes = require('mime-types');
 const { expiryFromOptions } = require('./lib/expiry');
 const { requestCounter, notFoundCounter, responseCounter } = require('./http/promMetrics');
+const multiavatar = require('@multiavatar/multiavatar');
+const { execSync } = require('child_process');
 
 const app = require('fastify')({
   logger: true
@@ -47,6 +50,33 @@ process.on('SIGUSR1', () => {
   console.log('SIGUSR1 received, reloading templates');
   templatesLoad(true);
 });
+
+let cachedInkscapeVersion = null;
+
+function getInkscapeVersion () {
+  if (cachedInkscapeVersion !== null) {
+    return cachedInkscapeVersion;
+  }
+
+  try {
+    const output = execSync('inkscape -V', { encoding: 'utf8' });
+    const versionMatch = output.match(/Inkscape (\d+\.\d+\.\d+)/);
+    if (versionMatch && versionMatch[1]) {
+      cachedInkscapeVersion = versionMatch[1];
+    }
+  } catch (e) {
+    cachedInkscapeVersion = '0.0.0'; // Default version if not found
+    console.error('Error checking Inkscape version:', e);
+  }
+
+  return cachedInkscapeVersion;
+}
+
+function isInkscapeVersionLessThan1 () {
+  const version = getInkscapeVersion();
+  const majorVersion = parseFloat(version.split('.')[0]);
+  return majorVersion < 1;
+}
 
 async function createShrtned (fromUrl) {
   if (!config.http.shrtnHost) {
@@ -115,6 +145,9 @@ redisListener.subscribe(PREFIX, (err) => {
   mkdirSyncIgnoreExist(config.http.staticDir);
   console.log(`Using static path: ${config.http.staticDir}`);
 
+  mkdirSyncIgnoreExist(path.join(__dirname, 'data'));
+  console.log(`Using data directory: ${path.join(__dirname, 'data')}`);
+
   if (config.http.attachmentsDir) {
     const { attachmentsDir } = config.http;
     mkdirSyncIgnoreExist(attachmentsDir);
@@ -159,6 +192,10 @@ redisListener.subscribe(PREFIX, (err) => {
 
   app.get('/js/*', async (req, res) => {
     return staticServe(res, path.join(__dirname, 'http', 'js', req.params['*']));
+  });
+
+  app.get('/templates/common.css', async (req, res) => {
+    return res.type('text/css').send(await fs.promises.readFile(path.join(__dirname, 'http', 'templates', 'common.css')));
   });
 
   app.get('/static/:name', async (req, res) => {
@@ -269,6 +306,84 @@ redisListener.subscribe(PREFIX, (err) => {
     const RKEY = `${PREFIX}:${req.params.keyComponent}`;
     await scopedRedisClient((r) => r.hset(RKEY, req.params.snippetName, req.body));
     return res.code(204).send();
+  });
+
+  app.get('/multiavatar/:name', async (req, res) => {
+    const apiKey = req.query.apiKey;
+    if (!apiKey) {
+      return res.code(401).send({ error: 'API key required' });
+    }
+
+    const validKey = await scopedRedisClient((c, p) => c.get(`${p}:multiavatar:apiKey`));
+    if (apiKey !== validKey) {
+      return res.code(403).send({ error: 'Invalid API key' });
+    }
+
+    try {
+      const { name } = req.params;
+
+      // Create a hash of the name for safe caching
+      const nameHash = crypto.createHash('sha256').update(name).digest('hex');
+      const cachedPngPath = path.join(__dirname, 'data', `${nameHash}.png`);
+
+      // Check if we already have a cached version
+      try {
+        const cachedFile = await fs.promises.stat(cachedPngPath);
+        if (cachedFile.isFile()) {
+          console.log(`Using cached avatar for: ${name}`);
+          const pngBuffer = await fs.promises.readFile(cachedPngPath);
+          return res.type('image/png').send(pngBuffer);
+        }
+      } catch (err) {
+        // File doesn't exist, need to generate it
+        if (err.code !== 'ENOENT') {
+          console.error('Error checking cached file:', err);
+        }
+      }
+
+      console.log(`Generating new avatar for: ${name}`);
+      const svgCode = multiavatar(name);
+
+      // Create temporary file for the SVG
+      const tempId = nanoid();
+      const svgPath = path.join(__dirname, 'data', `${tempId}.svg`);
+
+      // Write SVG to temporary file
+      await fs.promises.writeFile(svgPath, svgCode);
+
+      // Convert SVG to PNG using Inkscape
+      await new Promise((resolve, reject) => {
+        let args = ['-w', '1024', '-h', '1024', svgPath];
+        if (isInkscapeVersionLessThan1()) {
+          args = ['-z', ...args, '-e'];
+        } else {
+          args.push('-o');
+        }
+        args.push(cachedPngPath);
+
+        const inkscape = require('child_process').spawn('inkscape', args);
+
+        inkscape.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Inkscape process exited with code ${code}`));
+          }
+        });
+
+        inkscape.on('error', reject);
+      });
+
+      // Clean up temporary SVG file
+      await fs.promises.unlink(svgPath).catch(() => {});
+
+      // Read the PNG file
+      const pngBuffer = await fs.promises.readFile(cachedPngPath);
+      return res.type('image/png').send(pngBuffer);
+    } catch (e) {
+      console.error('Error generating multiavatar:', e);
+      return res.code(500).send({ error: 'Error generating avatar' });
+    }
   });
 
   app.get('/', async (req, res) => {

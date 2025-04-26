@@ -25,6 +25,9 @@ STOPSIGNAL SIGINT
 FROM base AS http
 COPY http.js .
 ENV DRC_HTTP_PATH=/http
+RUN apt -y install inkscape
+RUN mkdir data
+RUN chmod 0777 data
 USER drc
 CMD ["node", "http"]
 
