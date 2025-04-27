@@ -218,8 +218,8 @@ const _config = {
   openai: {
     secretKey: null,
     organization: '',
-    model: 'gpt-4',
-    chatModel: 'gpt-4',
+    model: 'gpt-4o',
+    chatModel: 'gpt-4o',
     temperature: 0.9,
     maxTokens: 3700,
     viaHTML: 'the <a href="https://beta.openai.com/docs/guides/completion" target="_blank">OpenAI text completion API</a>'
