@@ -193,10 +193,14 @@ async function f (context) {
   }
 
   if (!context.options.silent && !context.options.reload) {
+    const marked = require('marked');
     const serveOpts = {
       mpmPlotFqdn: config.app.stats.getMpmPlotFqdn(),
       ...context.stats
     };
+
+    // Parse markdown in channelsCountsStr
+    serveOpts.lastCalcs.channelsCountsStr = marked.parse(serveOpts.lastCalcs.channelsCountsStr);
 
     const name = await servePage(context, serveOpts, 'stats');
 

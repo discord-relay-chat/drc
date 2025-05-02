@@ -5,40 +5,40 @@ const userCommands = require('../userCommands');
 const { messageIsFromAllowedSpeaker, createArgObjOnContext } = require('../common');
 const { makeNoteOfMessage } = require('../interactionsCommon');
 
-async function whois(context, data) {
+async function whois (context, data) {
   return userCommands('whois')(context, ...createArgObjOnContext(context, data, 'whois'));
 }
 
-async function ignoreAdd(context, data) {
+async function ignoreAdd (context, data) {
   return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'add'));
 }
 
-async function ignoreRemove(context, data) {
+async function ignoreRemove (context, data) {
   return userCommands('ignore')(context, ...createArgObjOnContext(context, data, 'remove'));
 }
 
-async function muteAdd(context, data) {
+async function muteAdd (context, data) {
   return userCommands('muted')(context, ...createArgObjOnContext(context, data, 'add'));
 }
 
-async function muteRemove(context, data) {
+async function muteRemove (context, data) {
   return userCommands('muted')(context, ...createArgObjOnContext(context, data, 'remove'));
 }
 
-async function isUserHere(context, data) {
+async function isUserHere (context, data) {
   context.discordMessage = data.message;
   context.isFromReaction = true;
   return userCommands('isUserHere')(context, ...createArgObjOnContext(context, data, null, true));
 }
 
-async function aiQuestion(aiName, context, data) {
-  return userCommands(aiName)({ 
-    ...context, 
-    options: { 
-      ...context.options, 
-      system: (context.options?.system ?? '') + config.genai.emojiReactionSystemPrompt 
-    }, 
-    argObj: { _: data.message.content.split(' ') } 
+async function aiQuestion (aiName, context, data) {
+  return userCommands(aiName)({
+    ...context,
+    options: {
+      ...context.options,
+      system: (context.options?.system ?? '') + config.genai.emojiReactionSystemPrompt
+    },
+    argObj: { _: data.message.content.split(' ') }
   });
 }
 
