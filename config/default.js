@@ -76,7 +76,7 @@ const _config = {
     liveLogsDaemons: ['discord', 'http', 'irc', 'prometheus'],
     avatarGenerator: 'robohash',
     allowedSpeakers: [],
-    allowedSpeakersRoleId: null,
+    allowedSpeakersRoleId: null, // for safety, wrap this number in quotes to make it a string
     allowedSpeakersHighlight: true,
     // options are
     // 'replace' (replace IRC nick with Discord ASers)
@@ -162,7 +162,7 @@ const _config = {
   },
 
   redis: {
-    url: ''
+    url: '' // If redis is installed locally, simply use 'redis://localhost'
   },
 
   figletBanners: {
