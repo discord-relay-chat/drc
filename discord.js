@@ -952,7 +952,7 @@ client.once('ready', async () => {
       if (Number(new Date()) - ircLastHeartbeat > (config.irc.heartbeatFrequencyMs * HB_FUDGE_FACTOR)) {
         console.error('IRC heartbeat is late!', Number(new Date()) - ircLastHeartbeat);
         if (++numLates > 3) {
-          const msg = `Looks like we lost IRC! Last hearbeat was ${Number(new Date()) - ircLastHeartbeat}ms ago (${numLates})`;
+          const msg = `Looks like we lost IRC! Last heartbeat was ${Number(new Date()) - ircLastHeartbeat}ms ago (${numLates})`;
           console.error(msg);
           sendToBotChan(msg);
           clearInterval(ircHeartbeatHandle);
