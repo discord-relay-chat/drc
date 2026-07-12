@@ -169,7 +169,7 @@ f.__drcHelp = () => {
     title: 'An interface to Claude Code Agent SDK.',
     usage: '<options> [prompt]',
     options: [
-      ['--model', 'Change model (default: claude-sonnet-4-5-20250929)', true],
+      ['--model', `Change model (default: ${config.anthropic.claudecode.model})`, true],
       ['--maxTurns', 'Set maximum number of turns', true],
       ['--permissionMode', 'Set permission mode (default, acceptEdits, bypassPermissions, plan)', true],
       ['--cwd', 'Set working directory', true],
