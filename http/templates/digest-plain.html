@@ -70,7 +70,7 @@
   <hr>
 
   {{ #elements }}
-    [<strong>{{ timestampString }}</strong>] {{ data.target }} &lt;<em>{{ data.nick }}</em>&gt;
+    <span style="font-family: monospace">[<strong>{{ timestampString }}</strong>] {{ data.target }} &lt;<em>{{ data.nick }}</em>&gt;</span>
     {{ data.message }}
     <br/>
   {{ /elements }}

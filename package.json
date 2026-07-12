@@ -11,7 +11,9 @@
   "author": "Ed Fletcher, Sector T137 <https://github.com/edfletcher>",
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.207",
+    "@anthropic-ai/claude-code": "^2.1.197",
+    "@anthropic-ai/sdk": "^0.111.0",
     "@discordjs/builders": "^1.4.0",
     "@discordjs/rest": "^1.5.0",
     "@maxmind/geoip2-node": "^4.2.0",
@@ -52,6 +54,9 @@
     "ioredis-mock": "^8.2.6",
     "jest": "^27.3.1",
     "semistandard": "^16.0.1"
+  },
+  "overrides": {
+    "zod": "^4.0.0"
   },
   "semistandard": {
     "ignore": [

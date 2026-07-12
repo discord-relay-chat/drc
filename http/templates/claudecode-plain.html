@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Code Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <h2>Prompt</h2>
+  <p>{{ prompt }}</p>
+
+  <hr>
+
+  <h3>Response ({{ model }})</h3>
+  <div>{{{ response }}}</div>
+
+  <p><strong>Response time:</strong> {{ queryTimeS }} seconds</p>
+
+  {{#numTurns}}
+  <p><strong>Turns:</strong> {{ numTurns }}</p>
+  {{/numTurns}}
+
+  {{#usage}}
+  <p><strong>Input tokens:</strong> {{ usage.inputTokens }}</p>
+  <p><strong>Output tokens:</strong> {{ usage.outputTokens }}</p>
+  {{/usage}}
+
+  {{#totalCostUsd}}
+  <p><strong>Cost:</strong> ${{ totalCostUsd }}</p>
+  {{/totalCostUsd}}
+
+  {{#permissionMode}}
+  <p><strong>Permission mode:</strong> {{ permissionMode }}</p>
+  {{/permissionMode}}
+
+  {{#sessionId}}
+  <p><strong>Session ID:</strong> {{ sessionId }}</p>
+  {{/sessionId}}
+
+  <p><strong>Via:</strong> Claude Code Agent SDK</p>
+
+  {{#hasStatusMessages}}
+  <hr>
+  <h3>Execution Log</h3>
+  <ul>
+    {{#statusMessages}}
+    <li>{{ . }}</li>
+    {{/statusMessages}}
+  </ul>
+  {{/hasStatusMessages}}
+
+  <hr>
+
+  <p><small>
+    This document was generated at {{ captureTimestamp }} ({{ timezone }})
+    by <a href="https://discordrc.com">{{ NAME }}-v{{ VERSION }}</a>
+    {{#documentExpiresAt}}
+    &amp; will self-destruct in <strong id="countdown-timer">calculating...</strong>
+    <span id="document-expires-at" style="display: none;">{{ documentExpiresAt }}</span>
+    <span id="document-expires-unix" style="display: none;">{{ documentExpiresAtUnix }}</span>
+    <script src="/js/countdownTimer.js"></script>
+    {{/documentExpiresAt}}
+  </small></p>
+  <script src="/templates/templateSwitcher.js"></script>
+</body>
+</html>

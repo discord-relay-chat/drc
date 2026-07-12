@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Code Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style type="text/css">
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #13131a;
+      --bg-tertiary: #1a1a24;
+      --bg-card: #1e1e2e;
+      --text-primary: #e8e8f0;
+      --text-secondary: #9898a8;
+      --text-muted: #6c6c7c;
+      --accent-primary: #6366f1;
+      --accent-secondary: #8b5cf6;
+      --accent-cyan: #06b6d4;
+      --accent-pink: #ec4899;
+      --accent-green: #10b981;
+      --accent-yellow: #f59e0b;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
+      --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      font-size: 16px;
+      padding: 0;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    @media (min-width: 992px) {
+      .container {
+        padding: 3rem 2rem;
+      }
+    }
+
+    .response-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
+
+    @media (min-width: 992px) {
+      .response-container {
+        flex-direction: row;
+      }
+
+      .main-content {
+        flex: 2;
+      }
+
+      .parameters-container {
+        flex: 1;
+        position: sticky;
+        top: 2rem;
+        align-self: flex-start;
+        max-height: calc(100vh - 4rem);
+        overflow-y: auto;
+      }
+    }
+
+    .prompt-card, .response-card, .meta-card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border-subtle);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+
+    .prompt-card::before, .response-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--gradient-primary);
+    }
+
+    .response-card.openai::before {
+      background: linear-gradient(90deg, #ec4899, #f472b6);
+    }
+
+    .response-card.anthropic::before {
+      background: linear-gradient(90deg, #06b6d4, #10b981);
+    }
+
+    .response-card.openrouter::before {
+      background: linear-gradient(90deg, #4b6cb7, #182848);
+    }
+
+    h2, h3, h4 {
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .section-header h3 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .prompt-content {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-tertiary);
+      padding: 1.5rem;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .response-content {
+      font-family: 'Inter', sans-serif;
+      padding: 1.5rem;
+      border-radius: 8px;
+      background: var(--bg-secondary);
+    }
+
+    .response-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .response-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .response-content code {
+      color: var(--accent-yellow);
+      background: var(--bg-tertiary);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .response-content pre {
+      background: var(--bg-tertiary);
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .param-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .param-name {
+      text-align: right;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .param-value {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-tertiary);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .param-value.openai {
+      color: var(--accent-pink);
+    }
+
+    .param-value.anthropic {
+      color: var(--accent-cyan);
+    }
+
+    .param-value.openrouter {
+      color: #4b6cb7;
+    }
+
+    .ai-model-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .model-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .model-badge.openai {
+      background: rgba(236, 72, 153, 0.15);
+      color: var(--accent-pink);
+    }
+
+    .model-badge.anthropic {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .model-badge.openrouter {
+      background: rgba(75, 108, 183, 0.15);
+      color: #4b6cb7;
+    }
+
+    .models-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .response-navigation {
+      margin-top: 1.5rem;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .nav-header {
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+      border: 1px solid var(--border-subtle);
+      transition: all 0.2s ease;
+      color: var(--text-primary);
+    }
+
+    .nav-link:hover {
+      transform: translateX(4px);
+      border-color: var(--accent-primary);
+      background: var(--bg-card);
+    }
+
+    .nav-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-primary);
+      border-radius: 50%;
+      width: 1.8em;
+      height: 1.8em;
+      font-weight: 600;
+      font-size: 0.9em;
+      color: var(--accent-primary);
+    }
+
+    .nav-model {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    .tech-info {
+      display: flex;
+      align-items: center;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 1rem;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .tech-info code {
+      background: var(--bg-tertiary);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      color: var(--accent-secondary);
+    }
+
+    .footer {
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border-subtle);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    .footer a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .status-card {
+      background-color: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+      border-radius: var(--border-radius, 8px);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard, 0 4px 6px rgba(0, 0, 0, 0.1));
+      position: relative;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .status-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-blue, #4a9eff), var(--accent-purple, #a855f7));
+    }
+
+    .status-messages {
+      font-family: var(--font-mono, 'Courier New', monospace);
+      font-size: 0.9rem;
+      max-height: 400px;
+      overflow-y: auto;
+      background-color: var(--bg-tertiary, rgba(0, 0, 0, 0.1));
+      padding: 1rem;
+      border-radius: var(--border-radius, 8px);
+    }
+
+    .status-message {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary, #888);
+    }
+
+    .status-message:last-child {
+      border-bottom: none;
+    }
+
+    .status-message::before {
+      content: '▸ ';
+      color: var(--accent-blue, #4a9eff);
+      margin-right: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="response-container">
+      <div class="main-content">
+        <div class="prompt-card">
+          <div class="section-header">
+            <h3>Prompt</h3>
+            
+          </div>
+          <div class="prompt-content">{{ prompt }}</div>
+
+          
+        </div>
+
+        <div class="models-grid">
+          
+          <div class="response-card claudecode" >
+            <div class="section-header">
+              <div class="ai-model-title">
+                <h3>Response </h3>
+                <span class="model-badge claudecode">claudecode {{#model}}({{model}}){{/model}}</span>
+              </div>
+            </div>
+            <div class="response-content claudecode">{{{ response }}}</div>
+          </div>
+          
+        </div>
+      </div>
+
+      <div class="parameters-container">
+        
+        <div class="meta-card">
+          <div class="section-header">
+            <div class="ai-model-title" style="width: 100%;">
+              <a href="#response-{{responseIndex}}" class="nav-link claudecode" style="padding: 0.5em; margin: 0;">
+                <h4 style="margin-right: 1.5em;"></h4>
+                <span class="model-badge claudecode">claudecode {{#model}}({{model}}){{/model}}</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="param-grid">
+            <div class="param-name">Response time:
+            {{#numTurns}}
+            <div class="param-name">Turns</div>
+            <div class="param-value">{{ numTurns }}</div>
+            {{/numTurns}}
+            {{#usage}}
+            <div class="param-name">Input tokens</div>
+            <div class="param-value">{{ usage.inputTokens }}</div>
+
+            <div class="param-name">Output tokens</div>
+            <div class="param-value">{{ usage.outputTokens }}</div>
+            {{/usage}}
+            {{#totalCostUsd}}
+            <div class="param-name">Cost</div>
+            <div class="param-value cost-value">${{ totalCostUsd }}</div>
+            {{/totalCostUsd}}
+            {{#permissionMode}}
+            <div class="param-name">Permission mode</div>
+            <div class="param-value">{{ permissionMode }}</div>
+            {{/permissionMode}}
+          </div>
+            <div class="param-value claudecode">{{ queryTimeS }} seconds</div>
+
+            {{#numTokens}}
+            <div class="param-name">Tokens consumed:</div>
+            <div class="param-value claudecode">{{ numTokens }}</div>
+            {{/numTokens}}
+
+            {{#queryTimePerTokenMs}}
+            <div class="param-name">Duration per token:</div>
+            <div class="param-value claudecode">{{ queryTimePerTokenMs }} ms</div>
+            {{/queryTimePerTokenMs}}
+          </div>
+
+          <div class="tech-info">
+            via <span class="badge">Claude Code Agent SDK</span>
+            {{#sessionId}}
+            <span class="badge badge-session">{{ sessionId }}</span>
+            {{/sessionId}}
+          </div>
+        </div>
+        
+      
+        <!-- Status Messages Card -->
+        {{#hasStatusMessages}}
+        <div class="status-card">
+          <div class="section-header">
+            <h3>Execution Log</h3>
+          </div>
+          <div class="status-messages">
+            {{#statusMessages}}
+            <div class="status-message">{{ . }}</div>
+            {{/statusMessages}}
+          </div>
+        </div>
+        {{/hasStatusMessages}}
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} ({{ timezone }})
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct in <strong id="countdown-timer">calculating...</strong>
+      <span id="document-expires-at" style="display: none;">{{ documentExpiresAt }}</span>
+      <span id="document-expires-unix" style="display: none;">{{ documentExpiresAtUnix }}</span>
+      <script src="/js/countdownTimer.js"></script>
+      {{/documentExpiresAt}}</p>
+    </div>
+  </div>
+  <script src="/templates/templateSwitcher.js"></script>
+</body>
+</html>

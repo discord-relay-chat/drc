@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Code Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/templates/common.css">
+  <style type="text/css">
+    .response-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
+
+    @media (min-width: 992px) {
+      .response-container {
+        grid-template-columns: 2fr 1fr;
+      }
+    }
+
+    .prompt-card, .response-card, .meta-card {
+      background-color: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .prompt-card::before, .response-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+    }
+
+    .prompt-card::before {
+      background: var(--gradient-hot);
+    }
+
+    .response-card::before {
+      background: var(--gradient-glow);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--accent-blue);
+    }
+
+    .section-header h3 {
+      margin: 0;
+      border-bottom: none;
+    }
+
+    .section-header::after {
+      display: none;
+    }
+
+    .prompt-content {
+      font-family: var(--font-body);
+      background-color: var(--bg-tertiary);
+      padding: 1.5rem;
+      border-radius: var(--border-radius);
+      position: relative;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+
+    .response-content {
+      font-family: var(--font-body);
+      background-color: rgba(0, 255, 225, 0.03);
+      padding: 1.5rem;
+      border-radius: var(--border-radius);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .response-content code {
+      color: var(--accent-yellow);
+    }
+
+    .param-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .param-name {
+      text-align: right;
+      color: var(--text-secondary);
+      font-family: var(--font-heading);
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+    }
+
+    .param-value {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+      background-color: var(--bg-tertiary);
+      padding: 0.3rem 0.6rem;
+      border-radius: var(--border-radius);
+    }
+
+    .cost-value {
+      color: var(--accent-yellow);
+    }
+
+    .meta-info {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .tech-info {
+      display: flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      margin-top: 1rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .tech-info code {
+      background-color: var(--bg-tertiary);
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--border-radius);
+      color: var(--accent-purple);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--border-radius);
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      background-color: var(--bg-tertiary);
+    }
+
+    .badge-session {
+      color: var(--accent-blue);
+    }
+
+    .badge-mode {
+      color: var(--accent-green);
+    }
+
+    .status-card {
+      background-color: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard);
+      position: relative;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .status-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+    }
+
+    .status-messages {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      max-height: 400px;
+      overflow-y: auto;
+      background-color: var(--bg-tertiary);
+      padding: 1rem;
+      border-radius: var(--border-radius);
+    }
+
+    .status-message {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+    }
+
+    .status-message:last-child {
+      border-bottom: none;
+    }
+
+    .status-message::before {
+      content: '▸ ';
+      color: var(--accent-blue);
+      margin-right: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="response-container">
+      <div class="main-content">
+        <!-- Prompt Card -->
+        <div class="prompt-card">
+          <div class="section-header">
+            <h3>Prompt</h3>
+          </div>
+          <div class="prompt-content">{{ prompt }}</div>
+        </div>
+
+        <!-- Response Card -->
+        <div class="response-card">
+          <div class="section-header">
+            <h3>Response</h3>
+          </div>
+          <div class="response-content">{{{ response }}}</div>
+        </div>
+
+        <!-- Status Messages Card -->
+        {{#hasStatusMessages}}
+        <div class="status-card">
+          <div class="section-header">
+            <h3>Execution Log</h3>
+          </div>
+          <div class="status-messages">
+            {{#statusMessages}}
+            <div class="status-message">{{ . }}</div>
+            {{/statusMessages}}
+          </div>
+        </div>
+        {{/hasStatusMessages}}
+      </div>
+
+      <!-- Parameters Card -->
+      <div class="meta-card">
+        <div class="section-header">
+          <h3>Execution Details</h3>
+        </div>
+
+        <div class="param-grid">
+          <div class="param-name">Query Duration:</div>
+          <div class="param-value">{{ queryTimeS }} seconds</div>
+
+          {{#numTurns}}
+          <div class="param-name">Turns:</div>
+          <div class="param-value">{{ numTurns }}</div>
+          {{/numTurns}}
+
+          {{#usage}}
+          <div class="param-name">Input Tokens:</div>
+          <div class="param-value">{{ usage.inputTokens }}</div>
+
+          <div class="param-name">Output Tokens:</div>
+          <div class="param-value">{{ usage.outputTokens }}</div>
+          {{/usage}}
+
+          {{#totalCostUsd}}
+          <div class="param-name">Cost:</div>
+          <div class="param-value cost-value">${{ totalCostUsd }}</div>
+          {{/totalCostUsd}}
+
+          {{#permissionMode}}
+          <div class="param-name">Permission Mode:</div>
+          <div class="param-value">{{ permissionMode }}</div>
+          {{/permissionMode}}
+        </div>
+
+        <div class="tech-info">
+          <code>{{ model }}</code>
+          <span>via</span>
+          <span class="badge badge-session">Claude Code Agent SDK</span>
+          {{#sessionId}}
+          <span class="badge badge-mode">{{ sessionId }}</span>
+          {{/sessionId}}
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} ({{ timezone }})
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct in <strong id="countdown-timer">calculating...</strong>
+      <span id="document-expires-at" style="display: none;">{{ documentExpiresAt }}</span>
+      <span id="document-expires-unix" style="display: none;">{{ documentExpiresAtUnix }}</span>
+      <script src="/js/countdownTimer.js"></script>
+      {{/documentExpiresAt}}</p>
+    </div>
+  </div>
+  <script src="/templates/templateSwitcher.js"></script>
+</body>
+</html>

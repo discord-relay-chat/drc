@@ -248,12 +248,15 @@ const _config = {
 
   anthropic: {
     secretKey: null,
-    model: 'claude-opus-4-20250514',
-    summaryModel: 'claude-3-5-haiku-latest',
+    model: 'claude-opus-4-8',
+    summaryModel: 'claude-haiku-4-5',
     temperature: 0.7,
     maxTokens: 4000,
     system: 'You are Claude, an AI assistant created by Anthropic to be helpful, harmless, and honest.',
-    viaHTML: 'the <a href="https://docs.anthropic.com/claude/docs/introduction-to-claude" target="_blank">Anthropic Claude API</a>'
+    viaHTML: 'the <a href="https://docs.anthropic.com/claude/docs/introduction-to-claude" target="_blank">Anthropic Claude API</a>',
+    claudecode: {
+      model: 'claude-opus-4-8',
+    }
   },
 
   openrouter: {
@@ -264,8 +267,13 @@ const _config = {
     defaultModels: [
       'google/gemini-2.5-pro',
       'deepseek/deepseek-chat-v3-0324',
-      'qwen/qwen3-235b-a22b:free',
-      'anthropic/claude-sonnet-4'
+      'google/gemma-3-27b-it',
+      'qwen/qwen3-30b-a3b',
+      'anthropic/claude-sonnet-5',
+      'minimax/minimax-m2',
+      'moonshotai/kimi-k2',
+      'openai/gpt-oss-120b',
+      'z-ai/glm-4.6',
     ],
     viaHTML: 'the <a href="https://openrouter.ai/docs" target="_blank">OpenRouter API</a>'
   },

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Code Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style type="text/css">
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --paper: #faf8f3;
+      --paper-dark: #f5f2ea;
+      --ink-primary: #2c2416;
+      --ink-secondary: #5a4f3f;
+      --ink-muted: #8f8577;
+      --accent: #9b6b4f;
+      --accent-light: #c89676;
+      --shadow: rgba(44, 36, 22, 0.1);
+    }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: #e8e5dd;
+      color: var(--ink-primary);
+      line-height: 1.8;
+      font-size: 16px;
+      padding: 3rem 1.5rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--paper);
+      padding: 3rem;
+      box-shadow: 0 4px 20px var(--shadow), 0 0 2px rgba(44, 36, 22, 0.05);
+      border: 1px solid rgba(44, 36, 22, 0.1);
+    }
+
+    .response-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
+
+    @media (min-width: 992px) {
+      .response-container {
+        flex-direction: row;
+      }
+
+      .main-content {
+        flex: 2;
+      }
+
+      .parameters-container {
+        flex: 1;
+        position: sticky;
+        top: 2rem;
+        align-self: flex-start;
+        max-height: calc(100vh - 4rem);
+        overflow-y: auto;
+      }
+    }
+
+    .prompt-card, .response-card, .meta-card {
+      background: var(--paper-dark);
+      border: 1px solid rgba(44, 36, 22, 0.1);
+      border-radius: 4px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 8px rgba(44, 36, 22, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .prompt-card::before, .response-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: var(--accent);
+    }
+
+    .response-card.openai::before {
+      background: linear-gradient(90deg, #d4857b, #e4a595);
+    }
+
+    .response-card.anthropic::before {
+      background: linear-gradient(90deg, #7b9d8d, #95b5a5);
+    }
+
+    .response-card.openrouter::before {
+      background: linear-gradient(90deg, #8b8b9b, #9b9bab);
+    }
+
+    .response-card {
+      transition: all 0.2s ease;
+    }
+
+    .response-card:hover {
+      box-shadow: 0 4px 16px rgba(44, 36, 22, 0.12);
+      transform: translateY(-2px);
+    }
+
+    h2, h3, h4 {
+      font-family: 'Source Serif 4', serif;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: var(--ink-primary);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--accent-light);
+    }
+
+    .section-header h3 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--accent);
+    }
+
+    .section-header h4 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--accent);
+    }
+
+    .prompt-content {
+      font-family: 'Lora', serif;
+      background: var(--paper);
+      padding: 1.5rem;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+      line-height: 1.9;
+    }
+
+    .response-content {
+      font-family: 'Lora', serif;
+      padding: 1.5rem;
+      border-radius: 4px;
+      background: var(--paper);
+      line-height: 1.9;
+    }
+
+    .response-content code {
+      color: var(--accent);
+      background: var(--paper-dark);
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', 'Crimson Pro', monospace;
+      font-size: 0.9em;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+    }
+
+    .response-content pre {
+      background: var(--paper-dark);
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+    }
+
+    .param-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .param-name {
+      text-align: right;
+      color: var(--ink-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: 'Crimson Pro', serif;
+    }
+
+    .param-value {
+      font-family: 'JetBrains Mono', 'Crimson Pro', monospace;
+      background: var(--paper);
+      padding: 0.4rem 0.8rem;
+      border-radius: 3px;
+      font-size: 0.9rem;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+      color: var(--ink-primary);
+    }
+
+    .param-value.openai {
+      color: #a65a4f;
+    }
+
+    .param-value.anthropic {
+      color: #5a8a6f;
+    }
+
+    .param-value.openrouter {
+      color: #5a5a7a;
+    }
+
+    .ai-model-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .model-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-family: 'Crimson Pro', serif;
+      border: 1px solid rgba(44, 36, 22, 0.15);
+    }
+
+    .model-badge.openai {
+      background: rgba(212, 133, 123, 0.15);
+      color: #a65a4f;
+      border-color: #d4857b;
+    }
+
+    .model-badge.anthropic {
+      background: rgba(123, 157, 141, 0.15);
+      color: #5a8a6f;
+      border-color: #7b9d8d;
+    }
+
+    .model-badge.openrouter {
+      background: rgba(139, 139, 155, 0.15);
+      color: #5a5a7a;
+      border-color: #8b8b9b;
+    }
+
+    .models-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .response-navigation {
+      margin-top: 1.5rem;
+      background: var(--paper);
+      border-radius: 4px;
+      padding: 1.5rem;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+    }
+
+    .nav-header {
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--ink-secondary);
+      font-size: 0.9rem;
+      font-family: 'Crimson Pro', serif;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      background: var(--paper-dark);
+      border-radius: 3px;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+      border: 1px solid rgba(44, 36, 22, 0.1);
+      transition: all 0.2s ease;
+      color: var(--ink-primary);
+    }
+
+    .nav-link:hover {
+      transform: translateX(4px);
+      border-color: var(--accent);
+      background: var(--paper);
+      box-shadow: 0 2px 8px rgba(44, 36, 22, 0.08);
+    }
+
+    .nav-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--paper);
+      border: 1px solid var(--accent-light);
+      border-radius: 50%;
+      width: 1.8em;
+      height: 1.8em;
+      font-weight: 600;
+      font-size: 0.9em;
+      color: var(--accent);
+      font-family: 'Crimson Pro', serif;
+    }
+
+    .nav-model {
+      font-family: 'JetBrains Mono', 'Crimson Pro', monospace;
+      font-size: 0.85rem;
+      color: var(--ink-secondary);
+      flex: 1;
+    }
+
+    .tech-info {
+      display: flex;
+      align-items: center;
+      font-family: 'JetBrains Mono', 'Crimson Pro', monospace;
+      margin-top: 1rem;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--ink-secondary);
+    }
+
+    .tech-info code {
+      background: var(--paper);
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+      color: var(--accent);
+      border: 1px solid rgba(44, 36, 22, 0.1);
+    }
+
+    .footer {
+      text-align: center;
+      padding: 2rem 1rem 0;
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--accent-light);
+      margin-top: 3rem;
+      font-family: 'Crimson Pro', serif;
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--accent);
+      transition: all 0.2s;
+    }
+
+    .footer a:hover {
+      color: var(--accent-light);
+      border-bottom-style: solid;
+    }
+
+    #countdown-timer {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1.5rem 1rem;
+      }
+
+      .container {
+        padding: 2rem 1.5rem;
+      }
+
+      .prompt-card, .response-card, .meta-card {
+        padding: 1rem;
+      }
+
+      .section-header h3 {
+        font-size: 1.25rem;
+      }
+
+      .ai-model-title {
+        font-size: 0.9rem;
+      }
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100" height="100" filter="url(%23noise)" opacity="0.03"/></svg>');
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .status-card {
+      background-color: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+      border-radius: var(--border-radius, 8px);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard, 0 4px 6px rgba(0, 0, 0, 0.1));
+      position: relative;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .status-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-blue, #4a9eff), var(--accent-purple, #a855f7));
+    }
+
+    .status-messages {
+      font-family: var(--font-mono, 'Courier New', monospace);
+      font-size: 0.9rem;
+      max-height: 400px;
+      overflow-y: auto;
+      background-color: var(--bg-tertiary, rgba(0, 0, 0, 0.1));
+      padding: 1rem;
+      border-radius: var(--border-radius, 8px);
+    }
+
+    .status-message {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary, #888);
+    }
+
+    .status-message:last-child {
+      border-bottom: none;
+    }
+
+    .status-message::before {
+      content: '▸ ';
+      color: var(--accent-blue, #4a9eff);
+      margin-right: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="response-container">
+      <div class="main-content">
+        <div class="prompt-card">
+          <div class="section-header">
+            <h3>Prompt</h3>
+            
+          </div>
+          <div class="prompt-content">{{ prompt }}</div>
+
+          
+        </div>
+
+        <div class="models-grid">
+          
+          <div class="response-card claudecode" >
+            <div class="section-header">
+              <div class="ai-model-title">
+                <h3>Response </h3>
+                <span class="model-badge claudecode">claudecode {{#model}}({{model}}){{/model}}</span>
+              </div>
+            </div>
+            <div class="response-content claudecode">{{{ response }}}</div>
+          </div>
+          
+        </div>
+      </div>
+
+      <div class="parameters-container">
+        
+        <div class="meta-card">
+          <div class="section-header">
+            <div class="ai-model-title" style="width: 100%;">
+              <a href="#response-{{responseIndex}}" class="nav-link claudecode" style="padding: 0.5em; margin: 0;">
+                <h4 style="margin-right: 1.5em;"></h4>
+                <span class="model-badge claudecode">claudecode {{#model}}({{model}}){{/model}}</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="param-grid">
+            <div class="param-name">Response time:
+            {{#numTurns}}
+            <div class="param-name">Turns</div>
+            <div class="param-value">{{ numTurns }}</div>
+            {{/numTurns}}
+            {{#usage}}
+            <div class="param-name">Input tokens</div>
+            <div class="param-value">{{ usage.inputTokens }}</div>
+
+            <div class="param-name">Output tokens</div>
+            <div class="param-value">{{ usage.outputTokens }}</div>
+            {{/usage}}
+            {{#totalCostUsd}}
+            <div class="param-name">Cost</div>
+            <div class="param-value cost-value">${{ totalCostUsd }}</div>
+            {{/totalCostUsd}}
+            {{#permissionMode}}
+            <div class="param-name">Permission mode</div>
+            <div class="param-value">{{ permissionMode }}</div>
+            {{/permissionMode}}
+          </div>
+            <div class="param-value claudecode">{{ queryTimeS }} seconds</div>
+
+            {{#numTokens}}
+            <div class="param-name">Tokens consumed:</div>
+            <div class="param-value claudecode">{{ numTokens }}</div>
+            {{/numTokens}}
+
+            {{#queryTimePerTokenMs}}
+            <div class="param-name">Duration per token:</div>
+            <div class="param-value claudecode">{{ queryTimePerTokenMs }} ms</div>
+            {{/queryTimePerTokenMs}}
+          </div>
+
+          <div class="tech-info">
+            via <span class="badge">Claude Code Agent SDK</span>
+            {{#sessionId}}
+            <span class="badge badge-session">{{ sessionId }}</span>
+            {{/sessionId}}
+          </div>
+        </div>
+        
+      
+        <!-- Status Messages Card -->
+        {{#hasStatusMessages}}
+        <div class="status-card">
+          <div class="section-header">
+            <h3>Execution Log</h3>
+          </div>
+          <div class="status-messages">
+            {{#statusMessages}}
+            <div class="status-message">{{ . }}</div>
+            {{/statusMessages}}
+          </div>
+        </div>
+        {{/hasStatusMessages}}
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>This document was generated at {{ captureTimestamp }} ({{ timezone }})
+      by <a href="https://discordrc.com" target="_blank"><code>{{ NAME }}-v{{ VERSION }}</code></a>
+      {{#documentExpiresAt}}
+      &amp; will self-destruct in <strong id="countdown-timer">calculating...</strong>
+      <span id="document-expires-at" style="display: none;">{{ documentExpiresAt }}</span>
+      <span id="document-expires-unix" style="display: none;">{{ documentExpiresAtUnix }}</span>
+      <script src="/js/countdownTimer.js"></script>
+      {{/documentExpiresAt}}</p>
+    </div>
+  </div>
+  <script src="/templates/templateSwitcher.js"></script>
+</body>
+</html>

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Code Response - DiscordRC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style type="text/css">
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Comic Sans MS", "Trebuchet MS", Verdana, sans-serif;
+      background: #c0c0c0;
+      background-image:
+        repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.05) 10px, rgba(255,255,255,.05) 20px);
+      color: #000000;
+      line-height: 1.5;
+      font-size: 14px;
+      padding: 10px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 3px ridge #808080;
+      padding: 0;
+    }
+
+    .header {
+      background: #000080;
+      background-image: linear-gradient(180deg, #0000ff 0%, #000080 100%);
+      color: #ffffff;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 3px ridge #808080;
+      position: relative;
+    }
+
+    .header::before {
+      content: '★';
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 2rem;
+      color: #ffff00;
+      animation: blink 1s infinite;
+    }
+
+    .header::after {
+      content: '★';
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 2rem;
+      color: #ffff00;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 99% { opacity: 0; }
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: bold;
+      color: #ffff00;
+      text-shadow: 2px 2px #ff00ff, 4px 4px #00ffff;
+      margin-bottom: 10px;
+      letter-spacing: 2px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #00ffff;
+      font-weight: bold;
+    }
+
+    .content-area {
+      padding: 15px;
+      background: #ffffff;
+    }
+
+    .marquee-container {
+      background: #000080;
+      padding: 5px;
+      border: 2px ridge #808080;
+      margin-bottom: 15px;
+      overflow: hidden;
+    }
+
+    .marquee-text {
+      color: #ffff00;
+      font-weight: bold;
+      white-space: nowrap;
+      animation: marquee 15s linear infinite;
+    }
+
+    @keyframes marquee {
+      from { transform: translateX(100%); }
+      to { transform: translateX(-100%); }
+    }
+
+    .counter {
+      background: #000000;
+      color: #00ff00;
+      font-family: "Courier New", monospace;
+      padding: 3px 8px;
+      border: 2px inset #808080;
+      display: inline-block;
+      margin: 0 5px;
+    }
+
+    .response-container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    @media (min-width: 992px) {
+      .response-container {
+        flex-direction: row;
+      }
+
+      .main-content {
+        flex: 2;
+      }
+
+      .parameters-container {
+        flex: 1;
+      }
+    }
+
+    .section-header {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0000ff;
+      margin: 20px 0 10px;
+      padding: 8px;
+      background: #ffff00;
+      border: 3px ridge #808080;
+      text-align: center;
+    }
+
+    .prompt-card, .response-card, .meta-card {
+      background: #f0f0f0;
+      border: 3px groove #808080;
+      margin-bottom: 15px;
+      padding: 12px;
+    }
+
+    .prompt-card {
+      background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+    }
+
+    .prompt-content {
+      font-family: "Comic Sans MS", sans-serif;
+      background: #ffffff;
+      padding: 12px;
+      border: 2px inset #808080;
+      white-space: pre-wrap;
+      color: #000000;
+    }
+
+    .response-card {
+      position: relative;
+    }
+
+    .response-card.openai {
+      border-left: 5px solid #ff00ff;
+    }
+
+    .response-card.anthropic {
+      border-left: 5px solid #00ffff;
+    }
+
+    .response-card.openrouter {
+      border-left: 5px solid #0000ff;
+    }
+
+    .ai-model-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px dashed #808080;
+    }
+
+    .ai-model-title h3, .ai-model-title h4 {
+      font-size: 18px;
+      color: #000080;
+      margin: 0;
+    }
+
+    .model-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border: 2px outset;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-family: "Courier New", monospace;
+    }
+
+    .model-badge.openai {
+      background: #ff00ff;
+      color: #ffffff;
+      border-color: #ff80ff;
+    }
+
+    .model-badge.anthropic {
+      background: #00ffff;
+      color: #000000;
+      border-color: #80ffff;
+    }
+
+    .model-badge.openrouter {
+      background: #0000ff;
+      color: #ffff00;
+      border-color: #8080ff;
+    }
+
+    .response-content {
+      font-family: "Comic Sans MS", sans-serif;
+      padding: 12px;
+      background: #ffffff;
+      border: 1px solid #c0c0c0;
+      color: #000000;
+      line-height: 1.6;
+    }
+
+    .response-content code {
+      color: #008000;
+      background: #ffff00;
+      padding: 2px 4px;
+      border: 1px solid #808080;
+      font-family: "Courier New", monospace;
+    }
+
+    .response-content pre {
+      background: #f0f0f0;
+      padding: 10px;
+      border: 2px inset #808080;
+      overflow-x: auto;
+      font-family: "Courier New", monospace;
+    }
+
+    .response-navigation {
+      margin-top: 15px;
+      background: #ffffcc;
+      border: 3px double #ff8800;
+      padding: 12px;
+    }
+
+    .nav-header {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #ff0000;
+      font-size: 14px;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      background: #c0c0c0;
+      border: 3px outset #808080;
+      padding: 8px;
+      font-size: 13px;
+      color: #000000;
+      transition: none;
+    }
+
+    .nav-link:hover {
+      border-style: inset;
+      background: #d0d0d0;
+    }
+
+    .nav-link:active {
+      background: #a0a0a0;
+    }
+
+    .nav-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffff00;
+      border: 2px outset #ff8800;
+      width: 24px;
+      height: 24px;
+      font-weight: bold;
+      font-size: 12px;
+      color: #000000;
+    }
+
+    .nav-model {
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      color: #000080;
+      flex: 1;
+    }
+
+    .meta-card {
+      background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+      border: 3px ridge #808080;
+      padding: 12px;
+      margin-bottom: 15px;
+    }
+
+    .param-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .param-name {
+      text-align: right;
+      color: #000080;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .param-value {
+      font-family: "Courier New", monospace;
+      background: #000000;
+      color: #00ff00;
+      padding: 4px 8px;
+      border: 2px inset #808080;
+      font-size: 13px;
+    }
+
+    .param-value.openai {
+      color: #ff00ff;
+    }
+
+    .param-value.anthropic {
+      color: #00ffff;
+    }
+
+    .param-value.openrouter {
+      color: #ffff00;
+    }
+
+    .tech-info {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 2px dashed #808080;
+      font-family: "Courier New", monospace;
+      font-size: 12px;
+      color: #008000;
+    }
+
+    .tech-info code {
+      background: #ffff00;
+      padding: 2px 6px;
+      border: 1px solid #808080;
+      color: #800080;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 15px;
+      background: #c0c0c0;
+      border-top: 3px ridge #808080;
+      font-size: 12px;
+      color: #000000;
+    }
+
+    .footer::before {
+      content: '════════════════════════════════════════════════════════════';
+      display: block;
+      color: #808080;
+      margin-bottom: 10px;
+      font-family: monospace;
+      font-size: 10px;
+    }
+
+    .footer a {
+      color: #0000ff;
+      text-decoration: underline;
+      font-weight: bold;
+    }
+
+    .footer a:visited {
+      color: #800080;
+    }
+
+    .footer a:hover {
+      color: #ff0000;
+    }
+
+    #countdown-timer {
+      color: #ff0000;
+      font-weight: bold;
+      background: #ffff00;
+      padding: 2px 6px;
+      border: 2px solid #ff8800;
+    }
+
+    .models-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 5px;
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .response-container {
+        flex-direction: column;
+      }
+    }
+
+    .status-card {
+      background-color: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+      border-radius: var(--border-radius, 8px);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-standard, 0 4px 6px rgba(0, 0, 0, 0.1));
+      position: relative;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .status-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-blue, #4a9eff), var(--accent-purple, #a855f7));
+    }
+
+    .status-messages {
+      font-family: var(--font-mono, 'Courier New', monospace);
+      font-size: 0.9rem;
+      max-height: 400px;
+      overflow-y: auto;
+      background-color: var(--bg-tertiary, rgba(0, 0, 0, 0.1));
+      padding: 1rem;
+      border-radius: var(--border-radius, 8px);
+    }
+
+    .status-message {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary, #888);
+    }
+
+    .status-message:last-child {
+      border-bottom: none;
+    }
+
+    .status-message::before {
+      content: '▸ ';
+      color: var(--accent-blue, #4a9eff);
+      margin-right: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>★ AI RESPONSES ★</h1>
+      <div class="subtitle">
+        
+        {{^isMultipleModels}}
+        Powered by Artificial Intelligence!
+        {{/isMultipleModels}}
+      </div>
+    </div>
+
+    <div class="content-area">
+      <div class="marquee-container">
+        <div class="marquee-text">
+          ★☆★ Welcome to the AI Response Viewer ★☆★ Powered by DiscordRC ★☆★ Now with 100% more Web 1.0! ★☆★ Chat with multiple AI models at once! ★☆★
+        </div>
+      </div>
+
+      <div class="response-container">
+        <div class="main-content">
+          <div class="prompt-card">
+            <div class="section-header">💬 YOUR PROMPT 💬</div>
+            <div class="prompt-content">{{ prompt }}</div>
+
+            
+          </div>
+
+          <div class="models-grid">
+            
+            <div class="response-card claudecode" >
+              <div class="ai-model-title">
+                <h3>Response </h3>
+                <span class="model-badge claudecode">claudecode {{#model}}({{model}}){{/model}}</span>
+              </div>
+              <div class="response-content claudecode">{{{ response }}}</div>
+            </div>
+            
+          </div>
+        </div>
+
+        <div class="parameters-container">
+          
+          <div class="meta-card">
+            <div class="ai-model-title">
+              <h4></h4>
+              <span class="model-badge claudecode">claudecode</span>
+            
+        <!-- Status Messages Card -->
+        {{#hasStatusMessages}}
+        <div class="status-card">
+          <div class="section-header">
+            <h3>Execution Log</h3>
+          </div>
+          <div class="status-messages">
+            {{#statusMessages}}
+            <div class="status-message">{{ . }}</div>
+            {{/statusMessages}}
+          </div>
+        </div>
+        {{/hasStatusMessages}}
+      </div>
+
+            <div class="param-grid">
+              <div class="param-name">Response time:
+            {{#numTurns}}
+            <div class="param-name">Turns</div>
+            <div class="param-value">{{ numTurns }}</div>
+            {{/numTurns}}
+            {{#usage}}
+            <div class="param-name">Input tokens</div>
+            <div class="param-value">{{ usage.inputTokens }}</div>
+
+            <div class="param-name">Output tokens</div>
+            <div class="param-value">{{ usage.outputTokens }}</div>
+            {{/usage}}
+            {{#totalCostUsd}}
+            <div class="param-name">Cost</div>
+            <div class="param-value cost-value">${{ totalCostUsd }}</div>
+            {{/totalCostUsd}}
+            {{#permissionMode}}
+            <div class="param-name">Permission mode</div>
+            <div class="param-value">{{ permissionMode }}</div>
+            {{/permissionMode}}
+          </div>
+              <div class="param-value claudecode">{{ queryTimeS }}s</div>
+
+              {{#numTokens}}
+              <div class="param-name">Tokens consumed:</div>
+              <div class="param-value claudecode">{{ numTokens }}</div>
+              {{/numTokens}}
+
+              {{#queryTimePerTokenMs}}
+              <div class="param-name">ms per token:</div>
+              <div class="param-value claudecode">{{ queryTimePerTokenMs }}</div>
+              {{/queryTimePerTokenMs}}
+            </div>
+
+            <div class="tech-info">
+              📡 via <span class="badge">Claude Code Agent SDK</span>
+            {{#sessionId}}
+            <span class="badge badge-session">{{ sessionId }}</span>
+            {{/sessionId}}
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p><b>Generated at {{ captureTimestamp }} ({{ timezone }})</b></p>
+      <p>Powered by <a href="https://discordrc.com">{{ NAME }}-v{{ VERSION }}</a></p>
+      {{#documentExpiresAt}}
+      <p>⏰ Expires in: <span id="countdown-timer">calculating...</span></p>
+      <span id="document-expires-at" style="display: none;">{{ documentExpiresAt }}</span>
+      <span id="document-expires-unix" style="display: none;">{{ documentExpiresAtUnix }}</span>
+      <script src="/js/countdownTimer.js"></script>
+      {{/documentExpiresAt}}
+      <p style="margin-top: 10px; font-size: 10px;">
+        <i>🌐 Best viewed with Netscape Navigator 4.0 or Internet Explorer 5.5 🌐</i>
+      </p>
+      <p style="margin-top: 5px; font-size: 10px;">
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" style="display:none;">
+        <b>This page is Y2K compliant!</b>
+      </p>
+    </div>
+  </div>
+  <script src="/templates/templateSwitcher.js"></script>
+</body>
+</html>

@@ -83,6 +83,7 @@ function validateKeyComponent (keyComponent) {
 }
 
 let cachedTemplateNames = null;
+const TEMPLATE_TYPES = ['digest', 'claudecode', 'ai'];
 function getAvailableTemplateNames () {
   if (cachedTemplateNames) {
     return cachedTemplateNames;
@@ -95,6 +96,7 @@ function getAvailableTemplateNames () {
     all: new Set(),
     baseTemplates: new Set(),
     digestVariants: new Set(),
+    claudecodeVariants: new Set(),
     aiVariants: new Set()
   };
 
@@ -106,6 +108,8 @@ function getAvailableTemplateNames () {
       cachedTemplateNames.digestVariants.add(name.substring(7));
     } else if (name.startsWith('ai-')) {
       cachedTemplateNames.aiVariants.add(name.substring(3));
+    } else if (name.startsWith('claudecode-')) {
+      cachedTemplateNames.claudecodeVariants.add(name.substring(11));
     } else {
       cachedTemplateNames.baseTemplates.add(name);
     }
@@ -133,6 +137,11 @@ function validateTemplateName (templateName) {
   if (templateName.startsWith('ai-')) {
     const variant = templateName.substring(3);
     return templates.aiVariants.has(variant);
+  }
+
+  if (templateName.startsWith('claudecode-')) {
+    const variant = templateName.substring(11);
+    return templates.claudecodeVariants.has(variant);
   }
 
   return false;
@@ -293,7 +302,7 @@ async function renderAndCache (handler, templateParam) {
     throw new Error(`Invalid renderType: ${renderType}`);
   }
 
-  if (templateParam && (renderType === 'digest' || renderType === 'ai')) {
+  if (templateParam && TEMPLATE_TYPES.includes(renderType)) {
     // Validate template parameter
     if (typeof templateParam !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(templateParam)) {
       console.warn('Invalid template parameter, using default');
@@ -307,7 +316,7 @@ async function renderAndCache (handler, templateParam) {
         }
       }
     }
-  } else if (defaultTemplate && (renderType === 'digest' || renderType === 'ai')) {
+  } else if (defaultTemplate && TEMPLATE_TYPES.includes(renderType)) {
     const candidateTemplate = `${renderType}-${defaultTemplate}`;
     if (validateTemplateName(candidateTemplate)) {
       templatesLoad();
@@ -405,15 +414,15 @@ redisListener.subscribe(PREFIX, (err) => {
   });
 
   app.get('/templates/common.css', async (req, res) => {
-    return staticServe(res, path.join(__dirname, 'http', 'templates', 'common.css'), req.params['*']);
+    return staticServe(res, path.join(__dirname, 'http', 'templates'), 'common.css');
   });
 
   app.get('/templates/ansiToHtml.js', async (req, res) => {
-    return staticServe(res, path.join(__dirname, 'http', 'templates', 'ansiToHtml.js'), req.params['*']);
+    return staticServe(res, path.join(__dirname, 'http', 'templates'), 'ansiToHtml.js');
   });
 
   app.get('/templates/templateSwitcher.js', async (req, res) => {
-    return staticServe(res, path.join(__dirname, 'http', 'templates', 'templateSwitcher.js'), req.params['*']);
+    return staticServe(res, path.join(__dirname, 'http', 'templates'), 'templateSwitcher.js');
   });
 
   app.get('/static/:name', async (req, res) => {
@@ -481,7 +490,7 @@ redisListener.subscribe(PREFIX, (err) => {
 
       // Determine effective render type
       // Priority: 1) query param template, 2) defaultTemplate, 3) renderType
-      if (req.query.template && (renderType === 'digest' || renderType === 'ai')) {
+      if (req.query.template && TEMPLATE_TYPES.includes(renderType)) {
         // Validate query parameter template name
         if (typeof req.query.template !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(req.query.template)) {
           return res.code(400).send({ error: 'Invalid template parameter' });
@@ -495,7 +504,7 @@ redisListener.subscribe(PREFIX, (err) => {
             renderType = candidateTemplate;
           }
         }
-      } else if (!req.query.template && defaultTemplate && (renderType === 'digest' || renderType === 'ai')) {
+      } else if (!req.query.template && defaultTemplate && TEMPLATE_TYPES.includes(renderType)) {
         const candidateTemplate = `${renderType}-${defaultTemplate}`;
         if (validateTemplateName(candidateTemplate)) {
           templatesLoad();
@@ -896,6 +905,7 @@ redisListener.subscribe(PREFIX, (err) => {
     return res.type('application/json').send({
       digestVariants: Array.from(templates.digestVariants).sort(),
       aiVariants: Array.from(templates.aiVariants).sort(),
+      claudecodeVariants: Array.from(templates.claudecodeVariants).sort(),
       baseTemplates: Array.from(templates.baseTemplates).sort()
     });
   });

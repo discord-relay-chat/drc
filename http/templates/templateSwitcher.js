@@ -5,7 +5,8 @@
 
   const TEMPLATE_TYPES = {
     digest: 'digestVariants',
-    ai: 'aiVariants'
+    ai: 'aiVariants',
+    claudecode: 'claudecodeVariants'
   };
 
   function getCurrentTemplateType () {
@@ -13,6 +14,8 @@
 
     if (title.includes('digest') || title.includes('message')) {
       return 'digest';
+    } else if (title.includes('claude code')) {
+      return 'claudecode';
     } else if (title.includes('ai') || title.includes('response')) {
       return 'ai';
     }
@@ -25,7 +28,7 @@
     return urlParams.get('template') || 'default';
   }
 
-  function createTemplateSwitcher (variants, currentVariant, templateType) {
+  function createTemplateSwitcher (variants, currentVariant) {
     const container = document.createElement('div');
     container.id = 'template-switcher';
     container.style.cssText = `
